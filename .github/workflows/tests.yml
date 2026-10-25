@@ -32,7 +32,7 @@ jobs:
 
   archives:
     name: Source ZIP and tar.gz
-    needs: [test, gui-smoke, benchmark]
+    needs: [test, gui-smoke, wayland-smoke, benchmark]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -60,7 +60,7 @@ jobs:
   release:
     name: GitHub release on version tag
     if: startsWith(github.ref, 'refs/tags/v') && github.event_name == 'push'
-    needs: [test, gui-smoke, benchmark, archives]
+    needs: [test, gui-smoke, wayland-smoke, benchmark, archives]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -114,6 +114,20 @@ jobs:
         run: xvfb-run -a /usr/bin/python3 scripts/gui_app_smoke.py --backend qt6
       - name: Tk full application startup
         run: xvfb-run -a /usr/bin/python3 scripts/gui_app_smoke.py --backend tk
+
+  wayland-smoke:
+    name: Native Wayland smoke (Weston)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Weston and native GTK4/Qt6 Wayland clients
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends weston python3-gi gir1.2-gtk-4.0 python3-pyqt6 qt6-wayland
+      - name: GTK4 full application on native Wayland
+        run: /usr/bin/python3 scripts/gui_wayland_smoke.py --backend gtk4
+      - name: Qt6 full application on native Wayland
+        run: /usr/bin/python3 scripts/gui_wayland_smoke.py --backend qt6
 
   benchmark:
     name: Synthetic scan benchmark
