@@ -83,7 +83,7 @@ ForegroundNormal=30,30,46
         self.assertEqual(t._rgb('#FABC87'), (250,188,135))
 
     def test_cli_only_still_available(self):
-        self.assertEqual(audit.VERSION, "1.7.0-rc1")
+        self.assertEqual(audit.VERSION, "1.7.0-rc2")
         self.assertTrue(callable(audit.main))
 
     def test_optional_qt_dependency_helpful(self):
