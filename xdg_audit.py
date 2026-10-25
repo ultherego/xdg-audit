@@ -22,7 +22,7 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
-VERSION = "1.7.0-rc1"
+VERSION = "1.7.0-rc2"
 SCOPES = ("config", "data", "state", "cache", "flatpak", "dotfiles")
 # These entries are generic OS/session infrastructure or particularly sensitive data.
 # The protection is intentional even when a matching executable is not found.
@@ -994,11 +994,14 @@ def commit_quarantine(chosen: list[Item], roots: dict[str, Path], home: Path,
     # Write intent first; interrupted runs remain recoverable.
     run.mkdir(parents=True, mode=0o700, exist_ok=False)
     manifest = run / "manifest.json"
+    # Bind future restores to the entry actually moved into quarantine.
+    # Older journals lack an identity field and retain their legacy behavior.
     plan = [{"source": str(it.path), "destination": str(run / it.scope / it.path.name),
              "scope": it.scope, "state": it.state, "size_bytes_before": it.bytes,
+             "identity": list(it.identity),
              "reasons": it.reasons, "move_status": "planned"} for it in chosen]
     payload = {"version": VERSION, "created": stamp, "items": plan,
-               "format": "intent-journal-v2"}
+               "format": "intent-journal-v3"}
     _write_manifest_atomic(manifest, payload)
     _sync_directory(run.parent)
     for it in chosen:
@@ -1111,6 +1114,9 @@ def restore_quarantine_run(home: Path, roots: dict[str, Path], run_id: str, emit
     rows = payload.get("items", [])
     if not isinstance(rows, list):
         raise ValueError("Invalid manifest")
+    # V3 journals bind restore to the original inode/device/file type.
+    # Legacy manifests predate identity tracking; maintain restore support.
+    identity_required = payload.get('format') == 'intent-journal-v3'
     count = 0
     skipped = 0
     for row in rows:
@@ -1124,6 +1130,16 @@ def restore_quarantine_run(home: Path, roots: dict[str, Path], run_id: str, emit
         src = Path(str(row.get("source", "")))
         dest = Path(str(row.get("destination", "")))
         root = roots[scope]
+        expected_identity = None
+        if identity_required:
+            raw_identity = row.get('identity')
+            if (not isinstance(raw_identity, list) or len(raw_identity) != 3
+                    or any(type(value) is not int or value < 0 for value in raw_identity)
+                    or raw_identity[2] not in (stat.S_IFREG, stat.S_IFDIR)):
+                skipped += 1
+                emit(f"SKIPPED missing/invalid quarantine identity: {src}")
+                continue
+            expected_identity = tuple(raw_identity)
         if (src.parent != root or dest.parent != run / scope or dest.name != src.name
                 or src == home or src == root or dest.is_symlink() or root.is_symlink()
                 or not (dest.is_dir() or dest.is_file()) or src.exists() or src.is_symlink()
@@ -1135,7 +1151,7 @@ def restore_quarantine_run(home: Path, roots: dict[str, Path], run_id: str, emit
         try:
             row['move_status'] = 'restoring'
             _write_manifest_atomic(manifest, payload)
-            _safe_rename_noreplace(dest, src)
+            _safe_rename_noreplace(dest, src, expected_identity)
             _sync_directory(dest.parent)
             _sync_directory(src.parent)
             count += 1
