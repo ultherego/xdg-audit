@@ -3,7 +3,7 @@
 GTK controls inherit real GTK theme and portal/desktop appearance. Local CSS uses only colors provided by the active GTK theme; no hardcoded palette. No modules are needed to run the CLI.
 """
 from __future__ import annotations
-from xdg_i18n import translate, translate_ui_text, entries_count, selected_count
+from xdg_i18n import translate, translate_ui_text, entries_count, selected_count, format_message
 
 import json
 import threading
@@ -34,6 +34,9 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
     _language = getattr(args, 'saved_prefs', {}).get('language', 'pl')
     def tr(value):
         return translate(value, _language)
+
+    def tf(template, **values):
+        return format_message(template, _language, **values)
     import gi
     gtk_version = '4.0' if backend == 'gtk4' else '3.0'
     gi.require_version('Gtk',gtk_version)
@@ -396,7 +399,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
             note.set_wrap(True);note.set_max_width_chars(38)
             self.inspector_note=note
             append(inspector,note)
-            self.open_location_button = Gtk.Button(label='Otwórz lokalizację / Open location')
+            self.open_location_button = Gtk.Button(label=tr('Otwórz lokalizację'))
             self.open_location_button.set_sensitive(False)
             self.open_location_button.connect('clicked', self.open_selected_location)
             append(inspector,self.open_location_button)
@@ -555,7 +558,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                         'language':language_choice.get_active_id()})
                     save_prefs(home,new,engine.xdg_roots(home))
                 except (OSError,ValueError) as exc:
-                    error.set_text('Błąd: '+str(exc));return
+                    error.set_text(tf('Błąd: {error}',error=exc));return
                 from xdg_prefs import scan_inputs_changed
                 needs_scan=scan_inputs_changed(previous_prefs,new)
                 self.prefs=new
@@ -611,6 +614,8 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
             self.export_button.set_label(tr('Eksport JSON…'))
             self.compare_button.set_label(tr('Porównaj raport…'))
             self.move_button.set_label(tr('Przenieś do kwarantanny…'))
+            if hasattr(self, 'open_location_button'):
+                self.open_location_button.set_label(tr('Otwórz lokalizację'))
             self.inspector_heading.set_markup('<span weight="bold" size="large">'+
                          GLib.markup_escape_text(tr('Szczegóły wyboru'))+'</span>')
             self.inspector_note.set_text(tr('CANDIDATE to sugestia, nie dowód. REVIEW i UNKNOWN wymagają dodatkowej zgody.'))
@@ -1027,7 +1032,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
             txt=label(description)
             txt.set_wrap(True);txt.set_selectable(True)
             append(outer,txt)
-            entry=Gtk.Entry();entry.set_placeholder_text('Wpisz '+need)
+            entry=Gtk.Entry();entry.set_placeholder_text(tf('Wpisz {token}', token=need))
             append(outer,entry)
             actions=Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL,spacing=9)
             append(outer,actions)
@@ -1037,7 +1042,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
             confirm=Gtk.Button(label=tr('Potwierdź'))
             def accept(*_):
                 if entry.get_text()!=need:
-                    self.status.set_text(f'Nieprawidłowe potwierdzenie. Wpisz {need}.')
+                    self.status.set_text(tf('Nieprawidłowe potwierdzenie. Wpisz {token}.', token=need))
                     return
                 dialog.destroy()
                 callback()
@@ -1050,29 +1055,29 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
             if self.busy:return
             selected=[it for it in self.items if str(it.path) in self.checked and self._eligible(it)]
             if not selected:
-                self.status.set_text('Zaznacz pozycje checkboxami, aby wykonać kwarantannę.');return
+                self.status.set_text(tr('Zaznacz pozycje checkboxami, aby wykonać kwarantannę.'));return
             uncertain=[x for x in selected if x.state!='CANDIDATE']
             details='\n'.join(f'{it.state} {engine.human(it.bytes)} {it.path}' for it in selected[:14])
-            if len(selected)>14:details+=f'\n…oraz {len(selected)-14} kolejnych.'
-            description=f'Plan: {len(selected)} pozycji, {engine.human(sum(x.bytes for x in selected))}.\n'+details+'\n\nDane zostaną PRZENIESIONE, nie usunięte.'
+            if len(selected)>14:details+='\n'+tf('…oraz {count} kolejnych.',count=len(selected)-14)
+            description=(tf('Plan: {count}, {size}.',count=entries_count(len(selected),_language), size=engine.human(sum(x.bytes for x in selected)))+'\n'+details+'\n\n'+tr('Dane zostaną PRZENIESIONE, nie usunięte.'))
             def commit():
                 output=[]
                 try:
                     result=engine.commit_quarantine(selected,self.roots,home,allow_uncertain=bool(uncertain),emit=output.append,extra_aliases=aliases,keep_names=args.keep)
-                    self.status.set_text(f"Kwarantanna: {result['run_id']}, przeniesiono {len(result['moved'])} pozycji.")
+                    self.status.set_text(tf('Kwarantanna: {run_id}, przeniesiono {count}.',run_id=result['run_id'],count=entries_count(len(result['moved']),_language)))
                     self.start_scan()
-                except (ValueError,OSError,SystemExit) as exc:self.status.set_text('Błąd przenoszenia: '+str(exc))
-            def confirm_move():self.prompt('Ostateczne potwierdzenie',description+'\nZamknij powiązane aplikacje.', 'MOVE', commit)
+                except (ValueError,OSError,SystemExit) as exc:self.status.set_text(tf('Błąd przenoszenia: {error}',error=exc))
+            def confirm_move():self.prompt(tr('Ostateczne potwierdzenie'),description+'\n'+tr('Zamknij powiązane aplikacje.'), 'MOVE', commit)
             if uncertain:
-                self.prompt('Niepewne pozycje',f'UWAGA: {len(uncertain)} REVIEW/UNKNOWN może należeć do używanych programów.',
+                self.prompt(tr('Niepewne pozycje'),tf('UWAGA: {count} pozycji REVIEW/UNKNOWN może należeć do używanych programów.',count=len(uncertain)),
                             'UNCERTAIN',confirm_move)
             else:confirm_move()
 
         def compare_report_gui(self,*_):
             if not self.scan_complete:return
             from xdg_history import summary
-            chooser=Gtk.FileChooserNative.new('Wybierz wcześniejszy raport / Choose a report',
-                        self.win, Gtk.FileChooserAction.OPEN, 'Otwórz / Open', 'Anuluj / Cancel')
+            chooser=Gtk.FileChooserNative.new(tr('Wybierz wcześniejszy raport'),
+                        self.win, Gtk.FileChooserAction.OPEN, tr('Otwórz'), tr('Anuluj'))
             def chosen(dlg,response):
                 if response != Gtk.ResponseType.ACCEPT:
                     dlg.destroy();return
@@ -1082,8 +1087,8 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                     differences=engine.compare_report(self.items,Path(source),list(engine.SCOPES))
                     message=summary(differences,_language)
                 except (OSError,SystemExit,ValueError) as exc:
-                    self.status.set_text('Błąd porównania / Comparison failed: '+str(exc));return
-                result_window=Gtk.Window(title='Porównanie raportów / Report comparison',
+                    self.status.set_text(tf('Błąd porównania: {error}',error=exc));return
+                result_window=Gtk.Window(title=tr('Porównanie raportów'),
                                         transient_for=self.win,modal=True)
                 result_window.set_default_size(720,480)
                 body=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=10)
@@ -1110,21 +1115,21 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                       'stats':self.stats,'entries':[x.json() for x in self.items]}
                 try:
                     if target.exists():
-                        self.status.set_text('Raport już istnieje — nie nadpisuję: '+str(target));return
+                        self.status.set_text(tf('Raport już istnieje — nie nadpisuję: {path}',path=target));return
                     with target.open('x',encoding='utf-8') as f:json.dump(data,f,indent=2,ensure_ascii=False)
-                    self.status.set_text('Zapisano: '+str(target))
-                except OSError as exc:self.status.set_text('Błąd raportu: '+str(exc))
-            self.prompt('Eksport JSON',f'Zapisać raport do {target}?\nIstniejący plik nie zostanie nadpisany.', 'EXPORT', write)
+                    self.status.set_text(tf('Zapisano: {path}',path=target))
+                except OSError as exc:self.status.set_text(tf('Błąd raportu: {error}',error=exc))
+            self.prompt(tr('Eksport JSON'),tf('Zapisać raport do {path}?',path=target)+'\n'+tr('Istniejący plik nie zostanie nadpisany.'), 'EXPORT', write)
 
         def quarantine_preview(self,run):
-            dialog=Gtk.Window(title='Zawartość kwarantanny',transient_for=self.win,modal=True)
+            dialog=Gtk.Window(title=tr('Zawartość kwarantanny'),transient_for=self.win,modal=True)
             dialog.set_default_size(650,450)
             body=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=12)
             for side in ('top','bottom','start','end'):
                 getattr(body,'set_margin_'+side)(15)
-            append(body,label(f"Operacja: {run['run_id']} · {run['moved']} przeniesionych"))
+            append(body,label(tf('Operacja: {run_id} · {count} przeniesionych',run_id=run['run_id'],count=run['moved'])))
             preview=Gtk.ScrolledWindow();preview.set_vexpand(True)
-            text=label('\n'.join(str(i.get('source','?')) for i in run['items']) or '(pusty manifest)')
+            text=label('\n'.join(str(i.get('source','?')) for i in run['items']) or tr('(pusty manifest)'))
             text.set_wrap(True);text.set_selectable(True)
             set_child(preview,text)
             append(body,preview,True)
@@ -1139,7 +1144,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
             for run in engine.quarantine_runs(home,engine.xdg_roots(home)):
                 row=Gtk.ListBoxRow()
                 box=Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL,spacing=12)
-                append(box,label(f"{run['run_id']}   |   {run['moved']} przeniesionych / {len(run['items'])} w manifest"),True)
+                append(box,label(run['run_id']+'   |   '+tf('{count} przeniesionych / {total} w manifest',count=run['moved'],total=len(run['items']))),True)
                 preview=Gtk.Button(label=tr('Podgląd'))
                 preview.connect('clicked',lambda _,r=run:self.quarantine_preview(r))
                 append(box,preview)
@@ -1154,10 +1159,10 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
             def do_restore():
                 try:
                     result=engine.restore_quarantine_run(home,engine.xdg_roots(home),run_id)
-                    self.status.set_text(f"Przywrócono {result['restored']}, pominięto {result['skipped']}.")
+                    self.status.set_text(tf('Przywrócono {restored}, pominięto {skipped}.',restored=result['restored'],skipped=result['skipped']))
                     self.start_scan()
-                except (ValueError,OSError,KeyError) as exc:self.status.set_text('Błąd przywracania: '+str(exc))
-            self.prompt('Przywracanie',f'Przywrócić operację {run_id}?\nIstniejące pliki nie zostaną nadpisane.','RESTORE',do_restore)
+                except (ValueError,OSError,KeyError) as exc:self.status.set_text(tf('Błąd przywracania: {error}',error=exc))
+            self.prompt(tr('Przywracanie'),tf('Przywrócić operację {run_id}?',run_id=run_id)+'\n'+tr('Istniejące pliki nie zostaną nadpisane.'),'RESTORE',do_restore)
 
     app=Gtk.Application(application_id='io.github.xdgaudit')
     holder=[]
