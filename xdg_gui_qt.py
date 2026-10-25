@@ -1,6 +1,6 @@
 """Optional small Qt6 GUI for xdg-audit. No GUI deps are imported by the CLI."""
 from __future__ import annotations
-from xdg_i18n import translate, translate_ui_text, entries_count, selected_count
+from xdg_i18n import translate, translate_ui_text, entries_count, selected_count, format_message
 
 import json
 import os
@@ -28,6 +28,9 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
     _language = getattr(args, 'saved_prefs', {}).get('language', 'pl')
     def tr(value):
         return translate(value, _language)
+
+    def tf(template, **values):
+        return format_message(template, _language, **values)
     if os.environ.get("QT_QPA_PLATFORM") == "offscreen":
         # Allow explicit offscreen testing, but do not set it for real users.
         pass
@@ -176,7 +179,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
             hero.addLayout(titles,1)
             self.theme_label = QtWidgets.QLabel(tr('Wykrywanie motywu…'))
             self.theme_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-            self.theme_label.setToolTip('Środowisko i motyw wykrywane automatycznie, bez instalowania bibliotek.')
+            self.theme_label.setToolTip(tr('Środowisko i motyw wykrywane automatycznie, bez instalowania bibliotek.'))
             hero.addWidget(self.theme_label)
             layout.addLayout(hero)
 
@@ -208,7 +211,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
                 self.metric_values[state]=count
                 self.metric_buttons[state]=frame
                 self.metric_captions[state]=caption
-                frame.setToolTip('Pokaż tylko pozycje: '+state)
+                frame.setToolTip(tf('Pokaż tylko pozycje: {state}',state=state))
                 frame.clicked.connect(lambda _checked=False, st=state:self.filter_metric(st))
                 for widget in (count,caption): widget.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents,True)
                 cards.addWidget(frame,1)
@@ -245,7 +248,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
             self.settings_button=settings_button
             settings_button.clicked.connect(self.open_settings)
             toolbar.addWidget(settings_button)
-            self.refresh_button=QtWidgets.QPushButton('↻  Skanuj ponownie')
+            self.refresh_button=QtWidgets.QPushButton('↻  '+tr('Skanuj ponownie'))
             self.refresh_button.clicked.connect(self.scan_async)
             toolbar.addWidget(self.refresh_button)
             self.cancel_button=QtWidgets.QPushButton('Anuluj skan')
@@ -333,11 +336,11 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
             self.details.setReadOnly(True)
             self.details.setPlaceholderText(tr('Wybierz pozycję z listy, aby sprawdzić przesłanki klasyfikacji.'))
             inspector_layout.addWidget(self.details,1)
-            note=QtWidgets.QLabel('CANDIDATE to sugestia, nie dowód.\nREVIEW i UNKNOWN wymagają dodatkowej zgody.')
+            note=QtWidgets.QLabel(tr('CANDIDATE to sugestia, nie dowód.\nREVIEW i UNKNOWN wymagają dodatkowej zgody.'))
             note.setWordWrap(True)
             self.inspector_note=note
             inspector_layout.addWidget(note)
-            self.open_location_button = QtWidgets.QPushButton('Otwórz lokalizację / Open location')
+            self.open_location_button = QtWidgets.QPushButton(tr('Otwórz lokalizację'))
             self.open_location_button.setEnabled(False)
             self.open_location_button.clicked.connect(self.open_selected_location)
             inspector_layout.addWidget(self.open_location_button)
@@ -367,7 +370,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
             qrefresh=QtWidgets.QPushButton(tr('Odśwież historię'))
             qrefresh.clicked.connect(self.refresh_quarantine)
             qb.addWidget(qrefresh)
-            qrestore=QtWidgets.QPushButton('Przywróć wybraną…')
+            qrestore=QtWidgets.QPushButton(tr('Przywróć wybraną…'))
             qrestore.clicked.connect(self.restore_dialog)
             qb.addWidget(qrestore)
             qlayout.addLayout(qb)
@@ -397,10 +400,10 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
             self.move_button=QtWidgets.QPushButton(tr('Przenieś do kwarantanny…'))
             self.move_button.clicked.connect(self.move_selected)
             self.move_button.setEnabled(False)
-            self.move_button.setToolTip('Wymaga zaznaczenia i wpisania MOVE; dane pozostają do przywrócenia.')
+            self.move_button.setToolTip(tr('Wymaga zaznaczenia i wpisania MOVE; dane pozostają do przywrócenia.'))
             actions.addWidget(self.move_button)
             layout.addLayout(actions)
-            self.statusBar().showMessage('Audyt tylko do odczytu · przeniesienie wymaga MOVE · bez trwałego kasowania')
+            self.statusBar().showMessage(tr('Audyt tylko do odczytu · przeniesienie wymaga MOVE · bez trwałego kasowania'))
 
         def update_metric_borders(self):
             for state,button in self.metric_buttons.items():
@@ -458,22 +461,22 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
             run_id=entry.data(0,Role)
             run=next((r for r in engine.quarantine_runs(home,engine.xdg_roots(home)) if r['run_id']==run_id),None)
             if run:
-                QtWidgets.QMessageBox.information(self,'Zawartość kwarantanny',
-                    '\n'.join(x.get('source','?') for x in run['items'][:45]) or '(brak danych)')
+                QtWidgets.QMessageBox.information(self,tr('Zawartość kwarantanny'),
+                    '\n'.join(x.get('source','?') for x in run['items'][:45]) or tr('(brak danych)'))
 
         def compare_report_gui(self):
             if not self.scan_complete:return
             from xdg_history import summary
             path, _filter = QtWidgets.QFileDialog.getOpenFileName(self,
-                'Wybierz wcześniejszy raport' if _language=='pl' else 'Choose an earlier report',
+                tr('Wybierz wcześniejszy raport'),
                 str(home), 'JSON (*.json)')
             if not path:return
             try:
                 differences = engine.compare_report(self.items, Path(path), list(engine.SCOPES))
                 content=summary(differences, _language)
             except (OSError, SystemExit, ValueError) as exc:
-                QtWidgets.QMessageBox.warning(self, 'Comparison failed', str(exc));return
-            dialog=QtWidgets.QDialog(self);dialog.setWindowTitle('Porównanie raportów / Report comparison')
+                QtWidgets.QMessageBox.warning(self, tr('Błąd porównania'), str(exc));return
+            dialog=QtWidgets.QDialog(self);dialog.setWindowTitle(tr('Porównanie raportów'))
             dialog.resize(750,500)
             box=QtWidgets.QVBoxLayout(dialog)
             view=QtWidgets.QPlainTextEdit(content);view.setReadOnly(True)
@@ -484,7 +487,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
 
         def export_json(self):
             from xdg_history import suggested_export_path
-            file_name, _ = QtWidgets.QFileDialog.getSaveFileName(self, 'Eksport raportu',
+            file_name, _ = QtWidgets.QFileDialog.getSaveFileName(self, tr('Eksport raportu'),
                               str(suggested_export_path(home)), 'JSON (*.json)')
             if not file_name:
                 return
@@ -493,45 +496,45 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
                     json.dump({'version': engine.VERSION, 'scopes': list(engine.SCOPES),
                                'stats': self.stats, 'entries': [it.json() for it in self.items]},
                               file, indent=2, ensure_ascii=False)
-                self.statusBar().showMessage(f'Zapisano: {file_name}')
+                self.statusBar().showMessage(tf('Zapisano: {path}',path=file_name))
             except OSError as exc:
-                QtWidgets.QMessageBox.warning(self, 'Błąd zapisu',
-                     f'{exc}\nIstniejące pliki nie są nadpisywane.')
+                QtWidgets.QMessageBox.warning(self, tr('Błąd zapisu'),
+                     f'{exc}\n'+tr('Istniejące pliki nie są nadpisywane.'))
 
         def restore_dialog(self):
             runs = engine.quarantine_runs(home, engine.xdg_roots(home))
             if not runs:
-                QtWidgets.QMessageBox.information(self, tr('Kwarantanna'), 'Nie znaleziono operacji.')
+                QtWidgets.QMessageBox.information(self, tr('Kwarantanna'), tr('Nie znaleziono operacji.'))
                 return
             chosen_row = self.qtree.currentItem() if self.content_stack.currentIndex() == 1 else None
-            labels = [f"{x['run_id']}  ({x['moved']} przeniesionych / {len(x['items'])} zapisanych)" for x in runs]
+            labels = [x['run_id']+'  ('+tf('{count} przeniesionych / {total} zapisanych',count=x['moved'],total=len(x['items']))+')' for x in runs]
             if chosen_row:
                 label=next((key for key,run in zip(labels,runs) if run['run_id']==chosen_row.data(0,Role)),labels[0])
                 ok=True
             else:
                 label,ok=QtWidgets.QInputDialog.getItem(self,tr('Kwarantanna'),
-                    'Wybierz operację do przywrócenia:',labels,0,False)
+                    tr('Wybierz operację do przywrócenia:'),labels,0,False)
             if not ok:
                 return
             selected = runs[labels.index(label)]
             details = '\n'.join(f"{x.get('move_status', '?')}: {x.get('source', '?')}" for x in selected['items'][:22])
-            if QtWidgets.QMessageBox.question(self, 'Plan przywracania',
-                     f"Operacja {selected['run_id']}\n\n{details}\n\nIstniejące pliki NIE zostaną nadpisane. Kontynuować?",
+            if QtWidgets.QMessageBox.question(self, tr('Plan przywracania'),
+                     tf('Operacja {run_id}',run_id=selected['run_id'])+'\n\n'+details+'\n\n'+tr('Istniejące pliki NIE zostaną nadpisane. Kontynuować?'),
                      QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No,
                      QtWidgets.QMessageBox.StandardButton.No) != QtWidgets.QMessageBox.StandardButton.Yes:
                 return
-            answer, confirmed = QtWidgets.QInputDialog.getText(self, 'Potwierdzenie', 'Wpisz RESTORE:')
+            answer, confirmed = QtWidgets.QInputDialog.getText(self, tr('Potwierdzenie'), tr('Wpisz RESTORE:'))
             if not confirmed or answer != 'RESTORE':
                 return
             output = []
             try:
                 result = engine.restore_quarantine_run(home, engine.xdg_roots(home),
                            selected['run_id'], emit=output.append)
-                QtWidgets.QMessageBox.information(self, 'Przywracanie',
-                   f"Przywrócono: {result['restored']}\nPominięto: {result['skipped']}\n" + '\n'.join(output[-8:]))
+                QtWidgets.QMessageBox.information(self, tr('Przywracanie'),
+                   tf('Przywrócono: {count}',count=result['restored'])+'\n'+tf('Pominięto: {count}',count=result['skipped']))
                 self.scan_async()
             except (ValueError, OSError, KeyError) as exc:
-                QtWidgets.QMessageBox.critical(self, 'Błąd przywracania', str(exc))
+                QtWidgets.QMessageBox.critical(self, tr('Błąd przywracania'), str(exc))
 
         def open_settings(self):
             from xdg_prefs import (defaults, load, save, validate, parse_alias_lines,
@@ -582,7 +585,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
                                     'aliases':parse_alias_lines(alias.toPlainText())})
                     save(home, new, engine.xdg_roots(home))
                 except (OSError, ValueError) as exc:
-                    info.setText('Błąd: '+str(exc)); return
+                    info.setText(tf('Błąd: {error}',error=exc)); return
                 from xdg_prefs import scan_inputs_changed
                 needs_scan=scan_inputs_changed(current,new)
                 self.prefs = new
@@ -599,8 +602,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
                 if needs_scan:
                     self.scan_async()
                 else:
-                    self.statusBar().showMessage('Settings saved. Scan results preserved.' if new['language']=='en'
-                                               else 'Ustawienia zapisane. Wyniki audytu zachowane.')
+                    self.statusBar().showMessage(tr('Ustawienia zapisane. Wyniki audytu zachowane.'))
             buttons.accepted.connect(commit)
             dialog.exec()
 
@@ -627,6 +629,10 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
             self.cancel_button.setText('Cancel scan' if language=='en' else 'Anuluj skan')
             self.settings_button.setText(tr('⚙ Ustawienia'))
             self.audit_heading.setText(tr('Wyniki audytu'))
+            self.theme_label.setToolTip(tr('Środowisko i motyw wykrywane automatycznie, bez instalowania bibliotek.'))
+            self.move_button.setToolTip(tr('Wymaga zaznaczenia i wpisania MOVE; dane pozostają do przywrócenia.'))
+            for state, button in self.metric_buttons.items():
+                button.setToolTip(tf('Pokaż tylko pozycje: {state}',state=state))
             self.status_heading.setText(tr('Status'))
             self.search_box.setPlaceholderText(tr('Szukaj nazwy, lokalizacji lub uzasadnienia…'))
             self.scan_progress.setFormat(tr('Skanowanie…'))
@@ -698,16 +704,16 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
         def cancel_scan(self):
             if self.worker is not None:
                 self.worker.cancel_event.set()
-                self.statusBar().showMessage('Anulowanie skanu po bieżącym etapie…')
+                self.statusBar().showMessage(tr('Anulowanie skanu po bieżącym etapie…'))
 
         def scan_cancelled(self):
             self.scan_complete=False
             self.checked.clear()
             self.move_button.setEnabled(False)
-            self.statusBar().showMessage('Skan anulowany. Częściowe wyniki nie służą do przenoszenia plików.')
+            self.statusBar().showMessage(tr('Skan anulowany. Częściowe wyniki nie służą do przenoszenia plików.'))
 
         def scan_phase(self, name):
-            self.scan_progress.setFormat('Skanowanie: ' + name)
+            self.scan_progress.setFormat(tf('Skanowanie: {stage}',stage=tr(name)))
             self.statusBar().showMessage(('Scanning: ' if _language=='en' else 'Skanowanie: ') + tr(name))
 
         def scan_batch(self, kind, batch, done, total):
@@ -740,8 +746,8 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
 
         def scan_error(self, message):
             self.scan_complete=False
-            self.statusBar().showMessage("Błąd skanowania")
-            QtWidgets.QMessageBox.critical(self, "Błąd skanowania", message)
+            self.statusBar().showMessage(tr('Błąd skanowania'))
+            QtWidgets.QMessageBox.critical(self, tr('Błąd skanowania'), message)
 
         def display_items(self):
             query = self.search_box.text().strip().casefold()
@@ -819,7 +825,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
         def open_quarantine(self):
             root = engine.quarantine_dir(home, engine.xdg_roots(home))
             if not root.is_dir():
-                QtWidgets.QMessageBox.information(self, tr('Kwarantanna'), 'Brak operacji kwarantanny.')
+                QtWidgets.QMessageBox.information(self, tr('Kwarantanna'), tr('Brak operacji kwarantanny.'))
                 return
             QtGui.QDesktopServices.openUrl(QtCore.QUrl.fromLocalFile(str(root)))
 
@@ -831,27 +837,26 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
             chosen = [it for it in selected_items if (it.state == "CANDIDATE" or
                       (self.allow_uncertain_box.isChecked() and it.state in {"REVIEW", "UNKNOWN"})) and not it.protected]
             if not chosen:
-                QtWidgets.QMessageBox.information(self, "Brak wyboru", "Nie zaznaczono pozycji dostępnych do kwarantanny.")
+                QtWidgets.QMessageBox.information(self, tr('Brak wyboru'), tr('Nie zaznaczono pozycji dostępnych do kwarantanny.'))
                 return
             uncertain = [it for it in chosen if it.state in {"REVIEW", "UNKNOWN"}]
             details = "\n".join(f"{it.state:10} {engine.human(it.bytes):>9}  {it.path}" for it in chosen[:30])
             if len(chosen) > 30:
-                details += f"\n... i {len(chosen)-30} kolejnych"
+                details += '\n'+tf('... i {count} kolejnych',count=len(chosen)-30)
             total = engine.human(sum(it.bytes for it in chosen))
-            message = (f"Przenieść {len(chosen)} pozycji ({total}) do kwarantanny?\n"
-                       "Żadne pliki nie zostaną trwale usunięte.\n\n" + details)
-            if QtWidgets.QMessageBox.question(self, "Plan kwarantanny", message,
+            message = tf('Przenieść {count} ({size}) do kwarantanny?',count=entries_count(len(chosen),_language),size=total)+'\n'+tr('Żadne pliki nie zostaną trwale usunięte.')+'\n\n'+details
+            if QtWidgets.QMessageBox.question(self, tr('Plan kwarantanny'), message,
                    QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No,
                    QtWidgets.QMessageBox.StandardButton.No) != QtWidgets.QMessageBox.StandardButton.Yes:
                 return
             if uncertain:
-                answer, ok = QtWidgets.QInputDialog.getText(self, "Niepewne pozycje",
-                    f"Wybierasz {len(uncertain)} pozycji REVIEW/UNKNOWN.\n"
-                    "Nie ustalono, czy są niepotrzebne. Wpisz UNCERTAIN:")
+                answer, ok = QtWidgets.QInputDialog.getText(self, tr('Niepewne pozycje'),
+                    tf('Wybierasz {count} REVIEW/UNKNOWN.',count=len(uncertain))+'\n'+
+                    tr('Nie ustalono, czy są niepotrzebne. Wpisz UNCERTAIN:'))
                 if not ok or answer != "UNCERTAIN":
                     return
-            answer, ok = QtWidgets.QInputDialog.getText(self, "Ostateczne potwierdzenie",
-                      "Zamknij powiązane aplikacje. Aby zatwierdzić przeniesienie wpisz MOVE:")
+            answer, ok = QtWidgets.QInputDialog.getText(self, tr('Ostateczne potwierdzenie'),
+                      tr('Zamknij powiązane aplikacje. Aby zatwierdzić przeniesienie wpisz MOVE:'))
             if not ok or answer != "MOVE":
                 return
             output = []
@@ -859,9 +864,9 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
                 result = engine.commit_quarantine(chosen, self.roots, home,
                         allow_uncertain=bool(uncertain), emit=output.append, extra_aliases=aliases,keep_names=args.keep)
                 text = "\n".join(output[-12:])
-                QtWidgets.QMessageBox.information(self, "Kwarantanna", f"Run ID: {result['run_id']}\n\n{text}")
+                QtWidgets.QMessageBox.information(self, tr('Kwarantanna'), tf('Run ID: {run_id}',run_id=result['run_id'])+'\n'+tf('Przeniesiono {moved}/{total}.',moved=len(result['moved']),total=len(chosen)))
             except Exception as exc:
-                QtWidgets.QMessageBox.critical(self, "Błąd", f"Nie udało się przeprowadzić operacji:\n{exc}")
+                QtWidgets.QMessageBox.critical(self, tr('Błąd'), tf('Nie udało się przeprowadzić operacji:\n{error}',error=exc))
             self.scan_async()
 
         def apply_system_theme(self, force=False):
@@ -928,7 +933,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
 
         def closeEvent(self, event):
             if self.thread is not None and self.thread.isRunning():
-                QtWidgets.QMessageBox.information(self, "Skanowanie", "Skanowanie jeszcze trwa. Zamknij okno po zakończeniu.")
+                QtWidgets.QMessageBox.information(self, tr('Skanowanie'), tr('Skanowanie jeszcze trwa. Zamknij okno po zakończeniu.'))
                 event.ignore()
                 return
             event.accept()
