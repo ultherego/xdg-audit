@@ -4,7 +4,7 @@ Ttk is themed; KDE/GNOME palettes are applied when discoverable. Tk on Linux
 needs DISPLAY (X11 or XWayland). It does not reproduce arbitrary GTK CSS.
 """
 from __future__ import annotations
-from xdg_i18n import translate, translate_ui_text, entries_count, selected_count
+from xdg_i18n import translate, translate_ui_text, entries_count, selected_count, format_message
 
 import json
 import queue
@@ -26,6 +26,9 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
     _language = getattr(args, 'saved_prefs', {}).get('language', 'pl')
     def tr(value):
         return translate(value, _language)
+
+    def tf(template, **values):
+        return format_message(template, _language, **values)
     try:
         import tkinter as tk
         from tkinter import ttk, messagebox, simpledialog, filedialog
@@ -182,7 +185,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
             ttk.Label(toolbar,text=tr('Wyniki audytu'),style='Section.TLabel').pack(side='left')
             ttk.Label(toolbar,textvariable=self.visible_count,style='Muted.TLabel').pack(side='left',padx=(12,20))
             ttk.Button(toolbar,text=tr('⚙ Ustawienia'),command=self.open_settings).pack(side='right',padx=(8,0))
-            self.scan_button=ttk.Button(toolbar,text='↻  Skanuj ponownie',command=self.start_scan)
+            self.scan_button=ttk.Button(toolbar,text='↻  '+tr('Skanuj ponownie'),command=self.start_scan)
             self.scan_button.pack(side='right')
             self.cancel_button=ttk.Button(toolbar,text='Anuluj skan',command=self.cancel_scan_action)
             self.cancel_button.pack(side='right',padx=(0,8))
@@ -232,19 +235,19 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                 self.views[scope]=tree
             quarantine_tab=ttk.Frame(self.tabs,padding=10)
             self.tabs.add(quarantine_tab,text=tr('Kwarantanna'))
-            ttk.Label(quarantine_tab,text='Historia bezpiecznych przeniesień',
+            ttk.Label(quarantine_tab,text=tr('Historia bezpiecznych przeniesień'),
                       style='Section.TLabel').pack(anchor='w',pady=(0,3))
-            ttk.Label(quarantine_tab,text='Przywracanie nigdy nie nadpisuje istniejących plików.',
+            ttk.Label(quarantine_tab,text=tr('Przywracanie nigdy nie nadpisuje istniejących plików.'),
                       style='Muted.TLabel').pack(anchor='w',pady=(0,10))
             self.qtree=ttk.Treeview(quarantine_tab,columns=('run','entries','moved'),show='headings',selectmode='browse')
-            for name,title,width in [('run','Identyfikator operacji',280),('entries','W manifestie',135),('moved','Przeniesione',135)]:
+            for name,title,width in [('run',tr('Identyfikator operacji'),280),('entries',tr('W manifestie'),135),('moved',tr('Przeniesione'),135)]:
                 self.qtree.heading(name,text=title);self.qtree.column(name,width=width)
             self.qtree.pack(fill='both',expand=True)
             qbuttons=ttk.Frame(quarantine_tab)
             qbuttons.pack(fill='x',pady=(10,0))
-            ttk.Button(qbuttons,text='Odśwież listę',command=self._refresh_quarantine).pack(side='left')
-            ttk.Button(qbuttons,text='Pokaż zawartość',command=self.quarantine_details).pack(side='left',padx=8)
-            ttk.Button(qbuttons,text='Przywróć operację…',command=self.restore).pack(side='right')
+            ttk.Button(qbuttons,text=tr('Odśwież listę'),command=self._refresh_quarantine).pack(side='left')
+            ttk.Button(qbuttons,text=tr('Pokaż zawartość'),command=self.quarantine_details).pack(side='left',padx=8)
+            ttk.Button(qbuttons,text=tr('Przywróć operację…'),command=self.restore).pack(side='right')
             idx=next((i for i,(_,scope) in enumerate(SCOPE_LABELS) if scope==args.scope),0)
             self.tabs.select(idx)
             self.tabs.bind('<<NotebookTabChanged>>',self._on_tab_changed)
@@ -259,7 +262,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                                  highlightthickness=1,highlightbackground=c['line'])
             self.details.pack(fill='both',expand=True)
             self.details.configure(state='disabled')
-            self.open_location_button=ttk.Button(inspector,text='Otwórz lokalizację / Open location',command=self.open_selected_location)
+            self.open_location_button=ttk.Button(inspector,text=tr('Otwórz lokalizację'),command=self.open_selected_location)
             self.open_location_button.pack(anchor='w',pady=(6,4))
             self.open_location_button.state(['disabled'])
             self.previewed_item=None
@@ -283,7 +286,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
             statusbar=ttk.Frame(container)
             statusbar.pack(fill='x',pady=(10,0))
             ttk.Label(statusbar,textvariable=self.status,style='Muted.TLabel').pack(side='left')
-            ttk.Label(statusbar,text='Tylko przenoszenie · wymaga MOVE · możliwe przywrócenie',
+            ttk.Label(statusbar,text=tr('Tylko przenoszenie · wymaga MOVE · możliwe przywrócenie'),
                       style='Muted.TLabel').pack(side='right')
 
             # Reserve the action bar first. The resizable table must not push
@@ -402,7 +405,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
             ttk.Label(frame,text=tr('Alias — katalog=wzorzec')).pack(anchor='w',pady=(10,0))
             alias=tk.Text(frame,height=5)
             alias.pack(fill='x');alias.insert('1.0',format_aliases(current['aliases']))
-            feedback=tk.StringVar(value=warning or 'Zapis dopiero po kliknięciu Zapisz.')
+            feedback=tk.StringVar(value=warning or tr('Zapis dopiero po kliknięciu Zapisz.'))
             ttk.Label(frame,textvariable=feedback,wraplength=530).pack(fill='x',pady=(10,6))
             actions=ttk.Frame(frame);actions.pack(fill='x')
             ttk.Button(actions,text=tr('Anuluj'),command=dialog.destroy).pack(side='right')
@@ -414,7 +417,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                          'aliases':parse_alias_lines(alias.get('1.0','end'))})
                     save(home,new,engine.xdg_roots(home))
                 except (OSError,ValueError) as exc:
-                    feedback.set('Błąd: '+str(exc));return
+                    feedback.set(tf('Błąd: {error}',error=exc));return
                 from xdg_prefs import scan_inputs_changed
                 needs_scan=scan_inputs_changed(current,new)
                 self.prefs=new
@@ -463,6 +466,9 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                 for name,title in [('name','Nazwa'),('status','Status'),
                                    ('size','Rozmiar'),('path','Lokalizacja')]:
                     tree.heading(name,text=tr(title))
+            for name,title in [('run','Identyfikator operacji'), ('entries','W manifestie'), ('moved','Przeniesione')]:
+                self.qtree.heading(name,text=tr(title))
+            self.scan_button.configure(text='↻  '+tr('Skanuj ponownie'))
             # Language-only switch updates existing controls. Preserve cached
             # rows, active sort/scroll position, selection and filesystem data.
             self.visible_count.set(entries_count(sum(1 for _ in self._visible(self.active_scope)), _language)
@@ -545,8 +551,8 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                         self.move_button.state(['disabled'])
                         self.status.set(result)
                     else:
-                        self.status.set('Błąd skanowania')
-                        messagebox.showerror('Błąd skanowania',result,parent=root)
+                        self.status.set(tr('Błąd skanowania'))
+                        messagebox.showerror(tr('Błąd skanowania'),result,parent=root)
             except queue.Empty:
                 pass
             root.after(90,self.poll)
@@ -604,35 +610,35 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
             if not chosen:return
             uncertain = [it for it in chosen if it.state != 'CANDIDATE']
             lines = '\n'.join(f'{it.state}  {engine.human(it.bytes)}  {it.path}' for it in chosen[:20])
-            if len(chosen)>20: lines += f'\n… oraz {len(chosen)-20} innych'
+            if len(chosen)>20: lines += '\n'+tf('… oraz {count} innych',count=len(chosen)-20)
             total = engine.human(sum(it.bytes for it in chosen))
-            if not messagebox.askyesno('Plan kwarantanny',f'Przenieść {len(chosen)} pozycji ({total})?\n\n{lines}\n\nDane nie zostaną trwale usunięte.',parent=root):
+            if not messagebox.askyesno(tr('Plan kwarantanny'),tf('Przenieść {count} ({size})?',count=entries_count(len(chosen),_language),size=total)+'\n\n'+lines+'\n\n'+tr('Dane nie zostaną trwale usunięte.'),parent=root):
                 return
             if uncertain:
-                msg = f'{len(uncertain)} pozycji ma status REVIEW/UNKNOWN. Wpisz UNCERTAIN:'
-                if simpledialog.askstring('Niepewne dane',msg,parent=root)!='UNCERTAIN':return
-            if simpledialog.askstring('Potwierdzenie','Zamknij powiązane aplikacje. Wpisz MOVE, aby przenieść:',parent=root)!='MOVE':return
+                msg = tf('{count} pozycji ma status REVIEW/UNKNOWN. Wpisz UNCERTAIN:',count=len(uncertain))
+                if simpledialog.askstring(tr('Niepewne dane'),msg,parent=root)!='UNCERTAIN':return
+            if simpledialog.askstring(tr('Potwierdzenie'),tr('Zamknij powiązane aplikacje. Wpisz MOVE, aby przenieść:'),parent=root)!='MOVE':return
             notes=[]
             try:
                 result=engine.commit_quarantine(chosen,self.roots,home,allow_uncertain=bool(uncertain),emit=notes.append,extra_aliases=aliases,keep_names=args.keep)
-                messagebox.showinfo(tr('Kwarantanna'),f"Operacja {result['run_id']}\nPrzeniesiono {len(result['moved'])}/{len(chosen)} pozycji.\n"+'\n'.join(notes[-7:]),parent=root)
+                messagebox.showinfo(tr('Kwarantanna'),tf('Operacja {run_id}',run_id=result['run_id'])+'\n'+tf('Przeniesiono {moved}/{total}.',moved=len(result['moved']),total=len(chosen)),parent=root)
             except (ValueError, OSError, SystemExit) as exc:
-                messagebox.showerror('Błąd',str(exc),parent=root)
+                messagebox.showerror(tr('Błąd'),str(exc),parent=root)
             self.start_scan()
 
         def compare_report_gui(self):
             if not self.scan_complete:return
             from tkinter import filedialog
             from xdg_history import summary
-            path=filedialog.askopenfilename(parent=root,title='Compare report / Porównaj raport',
+            path=filedialog.askopenfilename(parent=root,title=tr('Wybierz wcześniejszy raport'),
                                             filetypes=[('JSON','*.json')])
             if not path:return
             try:
                 diffs=engine.compare_report(self.items,Path(path),list(engine.SCOPES))
                 content=summary(diffs,_language)
             except (OSError,SystemExit,ValueError) as exc:
-                messagebox.showerror('Comparison failed',str(exc),parent=root);return
-            dialog=tk.Toplevel(root);dialog.title('Porównanie raportów / Report comparison')
+                messagebox.showerror(tr('Błąd porównania'),str(exc),parent=root);return
+            dialog=tk.Toplevel(root);dialog.title(tr('Porównanie raportów'))
             dialog.geometry('720x490')
             textbox=tk.Text(dialog,wrap='word')
             textbox.pack(fill='both',expand=True,padx=12,pady=12)
@@ -647,8 +653,8 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
             try:
                 with Path(file).open('x',encoding='utf-8') as stream:
                     json.dump(data,stream,ensure_ascii=False,indent=2)
-                self.status.set(f'Wyeksportowano raport: {file}')
-            except OSError as exc:messagebox.showerror('Błąd zapisu',str(exc),parent=root)
+                self.status.set(tf('Wyeksportowano raport: {path}',path=file))
+            except OSError as exc:messagebox.showerror(tr('Błąd zapisu'),str(exc),parent=root)
 
         def _refresh_quarantine(self):
             self.qtree.delete(*self.qtree.get_children(''))
@@ -661,23 +667,23 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
             match=next((x for x in engine.quarantine_runs(home,engine.xdg_roots(home)) if x['run_id']==row[0]),None)
             if not match:return
             text='\n'.join(f"{it.get('move_status','?')}: {it.get('source','?')}" for it in match['items'])
-            self._set_details(text or '(pusty manifest)')
+            self._set_details(text or tr('(pusty manifest)'))
 
         def restore(self):
             row=self.qtree.selection()
             if not row:return
             run_id=row[0]
-            if not messagebox.askyesno('Przywracanie',f'Przywrócić dane z operacji {run_id}?\nIstniejące pliki nie zostaną nadpisane.',parent=root):return
-            if simpledialog.askstring('Potwierdzenie','Wpisz RESTORE:',parent=root)!='RESTORE':return
+            if not messagebox.askyesno(tr('Przywracanie'),tf('Przywrócić dane z operacji {run_id}?',run_id=run_id)+'\n'+tr('Istniejące pliki nie zostaną nadpisane.'),parent=root):return
+            if simpledialog.askstring(tr('Potwierdzenie'),tr('Wpisz RESTORE:'),parent=root)!='RESTORE':return
             notes=[]
             try:
                 result=engine.restore_quarantine_run(home,engine.xdg_roots(home),run_id,emit=notes.append)
-                messagebox.showinfo('Przywracanie',f"Przywrócono: {result['restored']}\nPominięto: {result['skipped']}\n"+'\n'.join(notes[-6:]),parent=root)
-            except (ValueError,OSError,KeyError) as exc:messagebox.showerror('Błąd',str(exc),parent=root)
+                messagebox.showinfo(tr('Przywracanie'),tf('Przywrócono: {count}',count=result['restored'])+'\n'+tf('Pominięto: {count}',count=result['skipped']),parent=root)
+            except (ValueError,OSError,KeyError) as exc:messagebox.showerror(tr('Błąd'),str(exc),parent=root)
             self.start_scan()
 
         def close(self):
-            if self.busy and not messagebox.askyesno('Skanowanie','Skanowanie trwa. Zamknąć okno?',parent=root):return
+            if self.busy and not messagebox.askyesno(tr('Skanowanie'),tr('Skanowanie trwa. Zamknąć okno?'),parent=root):return
             root.destroy()
 
     Window()

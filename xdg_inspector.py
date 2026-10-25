@@ -1,5 +1,6 @@
 """Pure presentation helpers shared by GTK, Qt and Tk; no GUI dependencies."""
 from __future__ import annotations
+from xdg_i18n import localize_evidence
 from collections import Counter
 from typing import Any, Iterable
 
@@ -22,7 +23,7 @@ def details_text(items: Iterable[Any], human, focused: Any = None, language: str
             reasons = '\n'.join('• ' + str(reason) for reason in it.reasons) or '• No evidence available.'
             return (f'{it.path.name}\n\nStatus: {it.state}\nSize: {human(it.bytes)}\n'
                     f'Scope: {it.scope}\nPath: {it.path}\n\nEvidence:\n{reasons}')
-        reasons = '\n'.join('• ' + str(reason) for reason in it.reasons) or '• Nie ustalono przesłanek.'
+        reasons = '\n'.join('• ' + localize_evidence(str(reason),language) for reason in it.reasons) or '• Nie ustalono przesłanek.'
         return (f'{it.path.name}\n\nStatus: {it.state}\nRozmiar: {human(it.bytes)}\n'
                 f'Zakres: {it.scope}\nŚcieżka: {it.path}\n\nPrzesłanki:\n{reasons}')
     total = sum(max(0, it.bytes) for it in selected)

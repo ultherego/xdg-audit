@@ -1,5 +1,6 @@
 """Pure report comparison formatting, independent from all GUI frameworks."""
 from __future__ import annotations
+from xdg_i18n import localize_evidence
 from datetime import datetime
 from pathlib import Path
 
@@ -16,6 +17,6 @@ def summary(changes: list[dict], lang: str = 'pl') -> str:
     details = []
     for change in changes:
         details.append(f"{change['old_state']} → {change['new_state']}  {change['path']}")
-        details += [f'  - {r}' for r in change.get('old_reasons',[]) if r not in change.get('new_reasons',[])]
-        details += [f'  + {r}' for r in change.get('new_reasons',[]) if r not in change.get('old_reasons',[])]
+        details += [f'  - {localize_evidence(r,lang)}' for r in change.get('old_reasons',[]) if r not in change.get('new_reasons',[])]
+        details += [f'  + {localize_evidence(r,lang)}' for r in change.get('new_reasons',[]) if r not in change.get('old_reasons',[])]
     return header + '\n\n' + '\n'.join(details)
