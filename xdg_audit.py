@@ -22,7 +22,7 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
-VERSION = "1.7.0-dev"
+VERSION = "1.7.0-rc1"
 SCOPES = ("config", "data", "state", "cache", "flatpak", "dotfiles")
 # These entries are generic OS/session infrastructure or particularly sensitive data.
 # The protection is intentional even when a matching executable is not found.
@@ -30,7 +30,7 @@ PROTECTED = {
     "config": {"autostart", "systemd", "dconf", "gtk-3.0", "gtk-4.0", "pulse", "pipewire",
                "user-dirs.dirs", "user-dirs.locale", "mimeapps.list", "xdg-desktop-portal",
                "xdg-terminals.list", "menus", "fish", "niri", "dms", "DankMaterialShell",
-               "psd", "mozilla", "chromium", "google-chrome", "vivaldi", "BraveSoftware", "xdg-audit",
+               "psd", "mozilla", "chromium", "google-chrome", "vivaldi", "BraveSoftware", "xdg-audit", ".claude", ".codex", ".continue", ".copilot", ".vscode",
                # Access tokens, desktop/account integration and session configuration.
                "anthropic", "gh", "goa-1.0", "cachyos", "cachyos-hello.json",
                # User-generated game saves, VM metadata, mod managers and manual backups.
@@ -38,7 +38,9 @@ PROTECTED = {
                "chromium-backup", "google-chrome-backup", "vivaldi-backup", "chromium-back-ovfs",
                "google-chrome-back-ovfs", "vivaldi-back-ovfs", "ssh", "gnupg", "keyring", "keyrings"},
     "data": {"keyrings", "gnupg", "Trash", "applications", "icons", "fonts", "mime", "dbus-1",
-             "flatpak", "systemd", "xdg-audit-quarantine", "Steam", "steam", "containers"},
+             "flatpak", "systemd", "xdg-audit-quarantine", "Steam", "steam", "containers",
+             "Larian Studios", "Euro Truck Simulator 2", "Baldur's Gate - Enhanced Edition",
+             "umu", "gtk-4.0", "desktop-directories", "wayland-sessions", "xsessions"},
     "state": {"systemd", "wireplumber", "xdg-audit"},
     "cache": {"mesa_shader_cache", "fontconfig", "thumbnails", "paru", "yay", "go-build"},
     "flatpak": set(),
@@ -46,7 +48,8 @@ PROTECTED = {
                  ".profile", ".bashrc", ".zshrc", ".bash_profile", ".gitconfig", ".Xauthority",
                  ".ICEauthority", ".lesshst", ".password-store", ".rustup", ".cargo",
                  ".docker", ".kube", ".aws", ".vagrant.d", ".npm", ".nvm", ".steam",
-                 ".steampath", ".steampid"},
+                 ".steampath", ".steampid", ".claude", ".codex", ".continue",
+                 ".copilot", ".vscode", ".icons", ".themes"},
 }
 # Case-insensitive backup/PSD names must never be removed automatically.
 BACKUP_RE = re.compile(r"(?:backup|back-ovfs|crashrecovery|\.bak(?:\W|$)|snapshot)", re.I)
@@ -75,6 +78,14 @@ ALIASES = {
     "ghostty": ["ghostty", "ghostty-git", "ghostty-bin"],
     "7daystodie": ["7daystodie", "7-days-to-die"],
     "com.sigma-file-manager.app": ["sigma-file-manager-bin"],
+    "kdeconnect.smsstaterc": ["kdeconnect"],
+    "kdeconnect.daemon": ["kdeconnect"],
+    "gitkrakencli": ["gitkraken-cli", "gitkraken"],
+    "zen": ["zen-browser", "zen-browser-bin"],
+    "stormshield": ["stormshield-ssl-vpn-client", "stormshield-vpn"],
+    "tracker3": ["tracker3", "localsearch"],
+    "gstreamer-1.0": ["gstreamer", "gst-plugins-base"],
+    "pip": ["python-pip"],
 }
 
 
@@ -87,6 +98,8 @@ APP_PACKAGE_PATTERNS = {
     "opera": ("opera*",),
     "microsoftedge": ("microsoft-edge*",),
     "googlechrome": ("google-chrome*",),
+    "kdeconnectsmsstaterc": ("kdeconnect*",),
+    "kdeconnectdaemon": ("kdeconnect*",),
     "discord": ("discord*", "vesktop*"),
     "betterdiscord": ("discord*", "vesktop*"),
     "vencord": ("discord*", "vesktop*"),
@@ -447,18 +460,25 @@ class Item:
         signals = []
         for reason in self.reasons:
             normalized = reason.lower()
-            if normalized.startswith('installed pacman package:'):
-                source, strength = 'pacman', 'strong'
-            elif normalized.startswith('installed flatpak:'):
-                source, strength = 'flatpak', 'strong'
-            elif normalized.startswith('removed in pacman.log:'):
-                source, strength = 'pacman_history', 'historical'
-            elif normalized.startswith('desktop entry'):
-                source, strength = 'desktop', 'weak'
-            elif normalized.startswith('mentioned in user session'):
-                source, strength = 'session_reference', 'weak'
-            else:
-                source, strength = 'heuristic', 'unknown'
+            evidence_types = (
+                ('installed pacman package:', 'pacman', 'strong'),
+                ('installed flatpak:', 'flatpak', 'strong'),
+                ('installed snap:', 'snap', 'strong'),
+                ('appimage found:', 'appimage', 'medium'),
+                ('executable on path:', 'executable', 'medium'),
+                ('running executable:', 'process', 'medium'),
+                ('user systemd unit:', 'systemd_user', 'medium'),
+                ('desktop entry', 'desktop', 'weak'),
+                ('auxiliary installed package', 'pacman_helper', 'weak'),
+                ('removed in pacman.log:', 'pacman_history', 'historical'),
+                ('historical removed package:', 'pacman_history', 'historical'),
+                ('mentioned in user session', 'session_reference', 'weak'),
+                ('protected:', 'protection_policy', 'policy'),
+                ('user allowlist', 'user_allowlist', 'policy'),
+            )
+            source, strength = next(((source, strength)
+                for prefix, source, strength in evidence_types
+                if normalized.startswith(prefix)), ('heuristic', 'unknown'))
             signals.append({'source': source, 'strength': strength, 'detail': reason})
         return {'schema_version': 2, 'scope': self.scope, 'path': str(self.path),
                 'state': self.state, 'size_bytes': self.bytes,
@@ -867,7 +887,8 @@ def _safe_rename_noreplace(source: Path, destination: Path,
                            expected_identity: tuple[int, int, int] | None = None) -> None:
     """Linux-only anchored, no-overwrite rename for sensitive user files.
 
-    Parent directories are opened using O_DIRECTORY | O_NOFOLLOW. The atomic
+    Every ancestor is opened with O_NOFOLLOW relative to its already-checked
+    parent (not only the final parent directory). The atomic
     renameat2 RENAME_NOREPLACE prevents clobbering a destination introduced
     between validation and the move. An inode postcheck rejects late swaps.
     """
@@ -882,9 +903,25 @@ def _safe_rename_noreplace(source: Path, destination: Path,
     func.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_uint]
     func.restype = ctypes.c_int
     flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
-    src_fd = os.open(source.parent, flags)
+    def checked_parent_fd(path: Path) -> int:
+        # O_NOFOLLOW on an absolute path alone does not reject symlink ancestors.
+        if not path.is_absolute() or path.name in ('', '.', '..'):
+            raise ValueError('Rename requires an absolute, normal filename')
+        fd = os.open('/', flags)
+        try:
+            for component in path.parent.parts[1:]:
+                if component in ('', '.', '..'):
+                    raise ValueError('Unsafe path component')
+                nxt = os.open(component, flags, dir_fd=fd)
+                os.close(fd)
+                fd = nxt
+            return fd
+        except BaseException:
+            os.close(fd)
+            raise
+    src_fd = checked_parent_fd(source)
     try:
-        dst_fd = os.open(destination.parent, flags)
+        dst_fd = checked_parent_fd(destination)
         try:
             before = os.stat(source.name, dir_fd=src_fd, follow_symlinks=False)
             identity = (before.st_dev, before.st_ino, stat.S_IFMT(before.st_mode))
@@ -1003,7 +1040,7 @@ def commit_quarantine(chosen: list[Item], roots: dict[str, Path], home: Path,
             row['move_status'] = 'moved'
             _write_manifest_atomic(manifest, payload)
             emit(f"MOVED {source} -> {destination}")
-        except OSError as exc:
+        except (OSError, ValueError) as exc:
             emit(f"ERROR moving {source}: {exc}")
     emit(f"Moved {len(moved)}/{len(chosen)} entries to quarantine.")
     emit(f"Restore with: python3 {Path(__file__).name} --restore {stamp}")
@@ -1105,7 +1142,7 @@ def restore_quarantine_run(home: Path, roots: dict[str, Path], run_id: str, emit
             row['move_status'] = 'restored'
             _write_manifest_atomic(manifest, payload)
             emit(f"RESTORED {src}")
-        except OSError as exc:
+        except (OSError, ValueError) as exc:
             skipped += 1
             emit(f"ERROR restoring {src}: {exc}")
     return {"restored": count, "skipped": skipped, "run_id": run_id}

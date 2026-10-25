@@ -98,7 +98,7 @@ Scopes: `all`, `config`, `data`, `state`, `cache`, `flatpak`, `dotfiles`.
 
 ## Development status
 
-**v1.7.0-dev — development preview.** Automated tests cover Python 3.10–3.14 and build source ZIP/tar.gz archives in [GitHub Actions](https://github.com/ultherego/xdg-audit/actions). GTK4/Niri and Qt6/KDE still need broader real-session integration testing before a stable release.
+**v1.7.0-rc1 — development preview.** Automated tests cover Python 3.10–3.14 and build source ZIP/tar.gz archives in [GitHub Actions](https://github.com/ultherego/xdg-audit/actions). GTK4/Niri and Qt6/KDE still need broader real-session integration testing before a stable release.
 
 ```sh
 python3 -m unittest discover -s tests -v
