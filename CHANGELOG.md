@@ -2,6 +2,10 @@
 
 ## 1.7.0-rc2 (unreleased)
 
+- Complete Polish/English translations across GTK, Qt6 and Tk confirmation dialogs, quarantine and restore, report export and status messages.
+- Translate known classification evidence for display in the inspector and report comparison; keep original evidence untouched in JSON and the core engine.
+- Add tests for translation catalog coverage, message placeholders, confirmation tokens, path preservation and language switching.
+
 - Quarantine journal v3 records source file identity (device, inode, type) before moving an entry.
 - Restore fails closed if a v3 entry was replaced or its identity is missing/corrupt.
 - Older v1/v2 manifests remain restorable under their original no-overwrite safeguards.
