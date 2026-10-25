@@ -1,0 +1,940 @@
+"""Optional small Qt6 GUI for xdg-audit. No GUI deps are imported by the CLI."""
+from __future__ import annotations
+from xdg_i18n import translate, translate_ui_text, entries_count, selected_count
+
+import json
+import os
+from pathlib import Path
+from typing import Any
+
+from xdg_theme import Appearance, detect_appearance
+from xdg_inspector import details_text, open_item_location
+
+
+def import_qt():
+    try:
+        from PySide6 import QtCore, QtGui, QtWidgets
+        return QtCore, QtGui, QtWidgets, QtCore.Signal
+    except ImportError:
+        try:
+            from PyQt6 import QtCore, QtGui, QtWidgets
+            return QtCore, QtGui, QtWidgets, QtCore.pyqtSignal
+        except ImportError as exc:
+            raise RuntimeError("Qt6 Python bindings are unavailable; checking other existing GUI backends") from exc
+
+
+def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]], runtime=None, backend="qt6") -> int:
+
+    _language = getattr(args, 'saved_prefs', {}).get('language', 'pl')
+    def tr(value):
+        return translate(value, _language)
+    if os.environ.get("QT_QPA_PLATFORM") == "offscreen":
+        # Allow explicit offscreen testing, but do not set it for real users.
+        pass
+    QtCore, QtGui, QtWidgets, Signal = import_qt()
+    Qt = QtCore.Qt
+    Slot = QtCore.Slot if hasattr(QtCore, "Slot") else QtCore.pyqtSlot
+    Role = Qt.ItemDataRole.UserRole
+
+    class AuditModel(QtCore.QAbstractTableModel):
+        HEADERS = ('Wybór', 'Nazwa', 'Status', 'Rozmiar', 'Lokalizacja')
+        def __init__(self, window):
+            super().__init__(window)
+            self.window = window
+            self.rows = []
+        def rowCount(self, parent=QtCore.QModelIndex()):
+            return 0 if parent.isValid() else len(self.rows)
+        def columnCount(self, parent=QtCore.QModelIndex()):
+            return 0 if parent.isValid() else 5
+        def headerData(self, section, orientation, role=Qt.ItemDataRole.DisplayRole):
+            if role == Qt.ItemDataRole.DisplayRole and orientation == Qt.Orientation.Horizontal:
+                return tr(self.HEADERS[section])
+            return None
+        def data(self, index, role=Qt.ItemDataRole.DisplayRole):
+            if not index.isValid() or index.row() >= len(self.rows):
+                return None
+            it = self.rows[index.row()]
+            if role == Role:
+                return str(it.path)
+            if role == Qt.ItemDataRole.UserRole + 1:
+                return it.bytes if index.column() == 3 else it.path.name.casefold()
+            if role == Qt.ItemDataRole.CheckStateRole and index.column() == 0:
+                if self.window.is_eligible(it):
+                    return (Qt.CheckState.Checked if str(it.path) in self.window.checked
+                            else Qt.CheckState.Unchecked)
+            if role == Qt.ItemDataRole.DisplayRole:
+                return ('', it.path.name, it.state, engine.human(it.bytes), str(it.path.parent))[index.column()]
+            return None
+        def flags(self, index):
+            if not index.isValid():
+                return Qt.ItemFlag.NoItemFlags
+            flags = Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable
+            if index.column() == 0 and self.window.is_eligible(self.rows[index.row()]):
+                flags |= Qt.ItemFlag.ItemIsUserCheckable
+            return flags
+        def setData(self, index, value, role=Qt.ItemDataRole.EditRole):
+            if (role != Qt.ItemDataRole.CheckStateRole or not index.isValid()
+                    or index.column() != 0 or not self.window.is_eligible(self.rows[index.row()])):
+                return False
+            path = str(self.rows[index.row()].path)
+            if value == Qt.CheckState.Checked.value or value == Qt.CheckState.Checked:
+                self.window.checked.add(path)
+            else:
+                self.window.checked.discard(path)
+            self.dataChanged.emit(index, index, [Qt.ItemDataRole.CheckStateRole])
+            self.window.update_selection_status(reveal=True)
+            return True
+        def set_rows(self, rows):
+            self.beginResetModel()
+            self.rows = list(rows)
+            self.endResetModel()
+
+    class AuditProxy(QtCore.QSortFilterProxyModel):
+        def lessThan(self, left, right):
+            if left.column() == 3:
+                return int(left.data(Qt.ItemDataRole.UserRole + 1) or 0) < int(right.data(Qt.ItemDataRole.UserRole + 1) or 0)
+            return str(left.data(Qt.ItemDataRole.DisplayRole) or '').casefold() < str(right.data(Qt.ItemDataRole.DisplayRole) or '').casefold()
+
+    class Scanner(QtCore.QObject):
+        cancelled = Signal()
+        finished = Signal(object, object, object)
+        failed = Signal(str)
+        batch = Signal(str, object, int, int)
+        phase = Signal(str)
+
+        def __init__(self, scopes, quick):
+            super().__init__()
+            import threading
+            self.cancel_event = threading.Event()
+            self.scopes, self.quick = scopes, quick
+
+        @Slot()
+        def run(self):
+            try:
+                result = engine.scan(home, self.scopes, {engine.normalize(x) for x in args.keep},
+                                     aliases, self.quick,
+                                     progress=self.phase.emit,
+                                     on_batch=lambda kind, batch, done, total: self.batch.emit(kind, batch, done, total),
+                                     cancelled=self.cancel_event.is_set)
+                self.finished.emit(*result)
+            except engine.ScanCancelled:
+                self.cancelled.emit()
+            except Exception as exc:
+                self.failed.emit(f"{type(exc).__name__}: {exc}")
+
+    class MainWindow(QtWidgets.QMainWindow):
+        def __init__(self):
+            super().__init__()
+            self.setWindowTitle('xdg-audit · Audit' if _language=='en' else 'xdg-audit · Audyt konfiguracji')
+            self.setWindowIcon(QtGui.QIcon(str(Path(__file__).with_name('assets') / 'xdg-audit.png')))
+            self.prefs = dict(getattr(args, 'saved_prefs', {}))
+            self.resize(1350, 840)
+            self.setMinimumSize(1040, 665)
+            self.items = []
+            self.checked = set()
+            self.scan_complete=False
+            self.roots = {}
+            self.stats = {}
+            self.thread = None
+            self.worker = None
+            self.scheme_info: Appearance | None = None
+            self.original_palette = QtGui.QPalette(QtWidgets.QApplication.palette())
+            self._build()
+            self.apply_system_theme(force=True)
+            self.refresh_theme_timer = QtCore.QTimer(self)
+            self.refresh_theme_timer.timeout.connect(self.apply_system_theme)
+            self.refresh_theme_timer.start(15000)
+            self.scan_async()
+
+        def _build(self):
+            app_root = QtWidgets.QWidget()
+            self.setCentralWidget(app_root)
+            layout = QtWidgets.QVBoxLayout(app_root)
+            layout.setContentsMargins(22, 18, 22, 14)
+            layout.setSpacing(13)
+
+            # Header and short environment subtitle; native palette stays intact.
+            hero = QtWidgets.QHBoxLayout()
+            titles = QtWidgets.QVBoxLayout()
+            titles.setSpacing(2)
+            heading = QtWidgets.QLabel('xdg-audit')
+            font = heading.font()
+            font.setPointSize(max(17, font.pointSize() + 8))
+            font.setBold(True)
+            heading.setFont(font)
+            titles.addWidget(heading)
+            subtitle = QtWidgets.QLabel(tr('Audyt i bezpieczne porządki w katalogach użytkownika'))
+            self.subtitle=subtitle
+            titles.addWidget(subtitle)
+            app_icon = QtWidgets.QLabel()
+            icon_pixmap = QtGui.QPixmap(str(Path(__file__).with_name('assets') / 'xdg-audit-128.png'))
+            if not icon_pixmap.isNull():
+                app_icon.setPixmap(icon_pixmap.scaled(68, 68,
+                    Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+                app_icon.setFixedSize(68, 68)
+                hero.addWidget(app_icon)
+            hero.addLayout(titles,1)
+            self.theme_label = QtWidgets.QLabel(tr('Wykrywanie motywu…'))
+            self.theme_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            self.theme_label.setToolTip('Środowisko i motyw wykrywane automatycznie, bez instalowania bibliotek.')
+            hero.addWidget(self.theme_label)
+            layout.addLayout(hero)
+
+            # Clickable metric cards filter table by state.
+            cards = QtWidgets.QHBoxLayout()
+            cards.setSpacing(10)
+            self.metric_values = {}
+            self.metric_buttons = {}
+            self.metric_captions = {}
+            metric_labels = [('CANDIDATE',tr('Kandydaci')),('REVIEW',tr('Do sprawdzenia')),
+                             ('UNKNOWN',tr('Nieznane')),('ACTIVE',tr('Aktywne')),('PROTECTED',tr('Chronione'))]
+            for state, label in metric_labels:
+                frame = QtWidgets.QPushButton()
+                frame.setObjectName('metricCard')
+                frame.setStyleSheet('''
+                    QPushButton#metricCard {border: 1px solid palette(mid); border-radius: 10px; background: palette(base); text-align: left;}
+                    QPushButton#metricCard:hover {border: 1px solid palette(highlight); background: palette(alternate-base);}
+                    QPushButton#metricCard:focus {border: 2px solid palette(highlight);}
+                    ''')
+                box = QtWidgets.QVBoxLayout(frame)
+                box.setContentsMargins(14,10,14,10)
+                box.setSpacing(3)
+                count=QtWidgets.QLabel('0')
+                countfont=count.font();countfont.setPointSize(countfont.pointSize()+10);countfont.setBold(True)
+                count.setFont(countfont)
+                caption=QtWidgets.QLabel(label)
+                box.addWidget(count)
+                box.addWidget(caption)
+                self.metric_values[state]=count
+                self.metric_buttons[state]=frame
+                self.metric_captions[state]=caption
+                frame.setToolTip('Pokaż tylko pozycje: '+state)
+                frame.clicked.connect(lambda _checked=False, st=state:self.filter_metric(st))
+                for widget in (count,caption): widget.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents,True)
+                cards.addWidget(frame,1)
+            layout.addLayout(cards)
+
+            scopes = [tr('Wszystko'),tr('Konfiguracja'),tr('Dane'),tr('Stan'),'Cache',tr('Flatpak'),tr('Dotfiles'),tr('Kwarantanna')]
+            self.scope_tabs = QtWidgets.QTabBar()
+            self.scope_tabs.setExpanding(False)
+            self.scope_tabs.setDrawBase(False)
+            self.scope_values = ['all','config','data','state','cache','flatpak','dotfiles']
+            for title in scopes: self.scope_tabs.addTab(title)
+            self.scope_tabs.setCurrentIndex(self.scope_values.index(args.scope))
+            self.scope_tabs.currentChanged.connect(self.scope_tab_changed)
+            layout.addWidget(self.scope_tabs)
+
+            # Scope is a filter of one scan, not a fresh filesystem traversal.
+            self.scope_combo = QtWidgets.QComboBox()
+            for title,value in [(tr('Wszystko'),'all'),('~/.config','config'),
+                         ('~/.local/share','data'),('~/.local/state','state'),('~/.cache','cache'),
+                         (tr('Flatpak'),'flatpak'),(tr('Dotfiles'),'dotfiles')]:
+                self.scope_combo.addItem(title,value)
+            self.scope_combo.setCurrentIndex(self.scope_combo.findData(args.scope))
+            self.scope_combo.hide()
+
+            toolbar = QtWidgets.QHBoxLayout()
+            title = QtWidgets.QLabel(tr('Wyniki audytu'))
+            tf=title.font();tf.setBold(True);tf.setPointSize(tf.pointSize()+2);title.setFont(tf)
+            self.audit_heading=title
+            toolbar.addWidget(title)
+            self.visible_count=QtWidgets.QLabel(entries_count(0,_language))
+            toolbar.addWidget(self.visible_count)
+            toolbar.addStretch(1)
+            settings_button=QtWidgets.QPushButton(tr('⚙ Ustawienia'))
+            self.settings_button=settings_button
+            settings_button.clicked.connect(self.open_settings)
+            toolbar.addWidget(settings_button)
+            self.refresh_button=QtWidgets.QPushButton('↻  Skanuj ponownie')
+            self.refresh_button.clicked.connect(self.scan_async)
+            toolbar.addWidget(self.refresh_button)
+            self.cancel_button=QtWidgets.QPushButton('Anuluj skan')
+            self.cancel_button.setVisible(False)
+            self.cancel_button.clicked.connect(self.cancel_scan)
+            toolbar.addWidget(self.cancel_button)
+            layout.addLayout(toolbar)
+            self.scan_progress=QtWidgets.QProgressBar()
+            self.scan_progress.setRange(0,0)
+            self.scan_progress.setTextVisible(True)
+            self.scan_progress.setFormat(tr('Skanowanie…'))
+            self.scan_progress.hide()
+            layout.addWidget(self.scan_progress)
+
+            controls=QtWidgets.QHBoxLayout()
+            self.search_box=QtWidgets.QLineEdit()
+            self.search_box.setPlaceholderText(tr('Szukaj nazwy, lokalizacji lub uzasadnienia…'))
+            self.search_box.setClearButtonEnabled(True)
+            self.search_box.textChanged.connect(self.refresh_table)
+            controls.addWidget(self.search_box,1)
+            self.status_heading=QtWidgets.QLabel(tr('Status'))
+            controls.addWidget(self.status_heading)
+            self.status_filter=QtWidgets.QComboBox()
+            self.status_filter.addItems(['ALL','CANDIDATE','REVIEW','UNKNOWN','ACTIVE','PROTECTED'])
+            self.status_filter.currentTextChanged.connect(lambda *_:(self.update_metric_borders(),self.refresh_table()))
+            controls.addWidget(self.status_filter)
+            self.show_all=QtWidgets.QCheckBox(tr('Aktywne / chronione'))
+            self.show_all.setChecked(args.all)
+            self.show_all.toggled.connect(self.refresh_table)
+            controls.addWidget(self.show_all)
+            self.quick=QtWidgets.QCheckBox(tr('Szybki skan'))
+            self.quick.setChecked(args.quick)
+            self.quick.toggled.connect(self.scan_async)
+            controls.addWidget(self.quick)
+            layout.addLayout(controls)
+
+            self.content_stack=QtWidgets.QStackedWidget()
+            results=QtWidgets.QWidget()
+            results_layout=QtWidgets.QVBoxLayout(results)
+            results_layout.setContentsMargins(0,0,0,0)
+            splitter=QtWidgets.QSplitter(Qt.Orientation.Horizontal)
+            self.table=QtWidgets.QTableView()
+            self.audit_model=AuditModel(self)
+            self.proxy_model=AuditProxy(self)
+            self.proxy_model.setSourceModel(self.audit_model)
+            self.table.setModel(self.proxy_model)
+            self.table.setSortingEnabled(True)
+            self.table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectionBehavior.SelectRows)
+            self.table.setEditTriggers(QtWidgets.QAbstractItemView.EditTrigger.NoEditTriggers)
+            self.table.setAlternatingRowColors(True)
+            self.table.setShowGrid(False)
+            self.table.setWordWrap(False)
+            self.table.verticalHeader().setVisible(False)
+            self.table.verticalHeader().setDefaultSectionSize(33)
+            header = self.table.horizontalHeader()
+            header.setStretchLastSection(False)
+            # Match the viewport width: name/location expand, other columns stay compact.
+            for col in (0, 2, 3):
+                header.setSectionResizeMode(col, QtWidgets.QHeaderView.ResizeMode.Interactive)
+            for col in (1, 4):
+                header.setSectionResizeMode(col, QtWidgets.QHeaderView.ResizeMode.Stretch)
+            for col,size in enumerate((55,185,112,95,250)):self.table.setColumnWidth(col,size)
+            self.table.selectionModel().currentRowChanged.connect(lambda *_: self.update_details())
+            splitter.addWidget(self.table)
+
+            inspection=QtWidgets.QWidget()
+            self.inspection=inspection
+            self.splitter=splitter
+            inspector_layout=QtWidgets.QVBoxLayout(inspection)
+            inspector_layout.setContentsMargins(14,6,4,6)
+            inspector_layout.setSpacing(9)
+            inspect_top=QtWidgets.QHBoxLayout()
+            inspect_title=QtWidgets.QLabel(tr('Szczegóły wyboru'))
+            inspect_font=inspect_title.font();inspect_font.setBold(True);inspect_font.setPointSize(inspect_font.pointSize()+2)
+            inspect_title.setFont(inspect_font)
+            self.inspector_heading=inspect_title
+            inspect_top.addWidget(inspect_title,1)
+            close_inspect=QtWidgets.QPushButton('✕')
+            close_inspect.setToolTip(tr('Zamknij szczegóły'))
+            close_inspect.setFixedWidth(36)
+            close_inspect.clicked.connect(self.hide_inspector)
+            inspect_top.addWidget(close_inspect)
+            inspector_layout.addLayout(inspect_top)
+            self.details=QtWidgets.QPlainTextEdit()
+            self.details.setReadOnly(True)
+            self.details.setPlaceholderText(tr('Wybierz pozycję z listy, aby sprawdzić przesłanki klasyfikacji.'))
+            inspector_layout.addWidget(self.details,1)
+            note=QtWidgets.QLabel('CANDIDATE to sugestia, nie dowód.\nREVIEW i UNKNOWN wymagają dodatkowej zgody.')
+            note.setWordWrap(True)
+            self.inspector_note=note
+            inspector_layout.addWidget(note)
+            self.open_location_button = QtWidgets.QPushButton('Otwórz lokalizację / Open location')
+            self.open_location_button.setEnabled(False)
+            self.open_location_button.clicked.connect(self.open_selected_location)
+            inspector_layout.addWidget(self.open_location_button)
+            self.previewed_item = None
+            splitter.addWidget(inspection)
+            splitter.setStretchFactor(0,4)
+            splitter.setStretchFactor(1,1)
+            splitter.setSizes([845,320])
+            inspection.hide()  # Full-width table until an item is clicked or checked.
+            results_layout.addWidget(splitter)
+            self.content_stack.addWidget(results)
+
+            qpage=QtWidgets.QWidget()
+            qlayout=QtWidgets.QVBoxLayout(qpage)
+            qlayout.setContentsMargins(0,0,0,0)
+            qlayout.addWidget(QtWidgets.QLabel(tr('Historia przeniesień do kwarantanny')))
+            self.qtree=QtWidgets.QTreeWidget()
+            self.qtree.setHeaderLabels(['Identyfikator operacji','W manifestie','Przeniesione'])
+            self.qtree.setAlternatingRowColors(True)
+            self.qtree.header().setStretchLastSection(True)
+            qlayout.addWidget(self.qtree,1)
+            qb=QtWidgets.QHBoxLayout()
+            self.qpreview=QtWidgets.QPushButton(tr('Pokaż zawartość…'))
+            self.qpreview.clicked.connect(self.quarantine_preview)
+            qb.addWidget(self.qpreview)
+            qb.addStretch(1)
+            qrefresh=QtWidgets.QPushButton(tr('Odśwież historię'))
+            qrefresh.clicked.connect(self.refresh_quarantine)
+            qb.addWidget(qrefresh)
+            qrestore=QtWidgets.QPushButton('Przywróć wybraną…')
+            qrestore.clicked.connect(self.restore_dialog)
+            qb.addWidget(qrestore)
+            qlayout.addLayout(qb)
+            self.content_stack.addWidget(qpage)
+            layout.addWidget(self.content_stack,1)
+
+            actions=QtWidgets.QHBoxLayout()
+            self.select_candidates_button=QtWidgets.QPushButton(tr('Zaznacz kandydatów'))
+            self.select_candidates_button.clicked.connect(self.select_candidates)
+            actions.addWidget(self.select_candidates_button)
+            self.clear_button=QtWidgets.QPushButton(tr('Odznacz'))
+            self.clear_button.clicked.connect(self.clear_selection)
+            actions.addWidget(self.clear_button)
+            self.allow_uncertain_box=QtWidgets.QCheckBox(tr('Zezwól na REVIEW / UNKNOWN'))
+            self.allow_uncertain_box.toggled.connect(self.refresh_table)
+            actions.addWidget(self.allow_uncertain_box)
+            actions.addStretch(1)
+            self.summary=QtWidgets.QLabel(selected_count(0,_language))
+            actions.addWidget(self.summary)
+            self.export_button=QtWidgets.QPushButton(tr('Eksport JSON…'))
+            self.export_button.clicked.connect(self.export_json)
+            actions.addWidget(self.export_button)
+            comparison=QtWidgets.QPushButton('Porównaj raport…' if _language=='pl' else 'Compare report…')
+            self.compare_button=comparison
+            comparison.clicked.connect(self.compare_report_gui)
+            actions.addWidget(comparison)
+            self.move_button=QtWidgets.QPushButton(tr('Przenieś do kwarantanny…'))
+            self.move_button.clicked.connect(self.move_selected)
+            self.move_button.setEnabled(False)
+            self.move_button.setToolTip('Wymaga zaznaczenia i wpisania MOVE; dane pozostają do przywrócenia.')
+            actions.addWidget(self.move_button)
+            layout.addLayout(actions)
+            self.statusBar().showMessage('Audyt tylko do odczytu · przeniesienie wymaga MOVE · bez trwałego kasowania')
+
+        def update_metric_borders(self):
+            for state,button in self.metric_buttons.items():
+                active=(state==self.status_filter.currentText())
+                button.setStyleSheet('''
+                    QPushButton#metricCard {
+                        border: %s solid palette(%s);
+                        border-radius: 10px;
+                        background: palette(base);
+                        text-align: left;
+                    }
+                    QPushButton#metricCard:hover {
+                        border: 1px solid palette(highlight);
+                        background: palette(alternate-base);
+                    }
+                    QPushButton#metricCard:focus {border: 2px solid palette(highlight);}
+                    ''' % ('2px' if active else '1px',
+                             'highlight' if active else 'mid'))
+
+        def filter_metric(self,state):
+            if state in {'ACTIVE','PROTECTED'}:
+                self.show_all.setChecked(True)
+            self.status_filter.setCurrentText(state)
+
+        def scope_tab_changed(self,index):
+            self.hide_inspector()
+            if index >= len(self.scope_values):
+                self.content_stack.setCurrentIndex(1)
+                self.refresh_quarantine()
+                self.move_button.setVisible(False)
+                self.select_candidates_button.setVisible(False)
+                self.clear_button.setVisible(False)
+                self.allow_uncertain_box.setVisible(False)
+                return
+            self.content_stack.setCurrentIndex(0)
+            self.move_button.setVisible(True)
+            self.select_candidates_button.setVisible(True)
+            self.clear_button.setVisible(True)
+            self.allow_uncertain_box.setVisible(True)
+            self.scope_combo.blockSignals(True)
+            self.scope_combo.setCurrentIndex(self.scope_combo.findData(self.scope_values[index]))
+            self.scope_combo.blockSignals(False)
+            self.refresh_table()
+
+        def refresh_quarantine(self):
+            self.qtree.clear()
+            for entry in engine.quarantine_runs(home,engine.xdg_roots(home)):
+                record=QtWidgets.QTreeWidgetItem([entry['run_id'],str(len(entry['items'])),str(entry['moved'])])
+                record.setData(0,Role,entry['run_id'])
+                self.qtree.addTopLevelItem(record)
+
+        def quarantine_preview(self):
+            entry=self.qtree.currentItem()
+            if entry is None:return
+            run_id=entry.data(0,Role)
+            run=next((r for r in engine.quarantine_runs(home,engine.xdg_roots(home)) if r['run_id']==run_id),None)
+            if run:
+                QtWidgets.QMessageBox.information(self,'Zawartość kwarantanny',
+                    '\n'.join(x.get('source','?') for x in run['items'][:45]) or '(brak danych)')
+
+        def compare_report_gui(self):
+            if not self.scan_complete:return
+            from xdg_history import summary
+            path, _filter = QtWidgets.QFileDialog.getOpenFileName(self,
+                'Wybierz wcześniejszy raport' if _language=='pl' else 'Choose an earlier report',
+                str(home), 'JSON (*.json)')
+            if not path:return
+            try:
+                differences = engine.compare_report(self.items, Path(path), list(engine.SCOPES))
+                content=summary(differences, _language)
+            except (OSError, SystemExit, ValueError) as exc:
+                QtWidgets.QMessageBox.warning(self, 'Comparison failed', str(exc));return
+            dialog=QtWidgets.QDialog(self);dialog.setWindowTitle('Porównanie raportów / Report comparison')
+            dialog.resize(750,500)
+            box=QtWidgets.QVBoxLayout(dialog)
+            view=QtWidgets.QPlainTextEdit(content);view.setReadOnly(True)
+            box.addWidget(view)
+            close=QtWidgets.QPushButton('Close' if _language=='en' else 'Zamknij')
+            close.clicked.connect(dialog.accept);box.addWidget(close)
+            dialog.exec()
+
+        def export_json(self):
+            from xdg_history import suggested_export_path
+            file_name, _ = QtWidgets.QFileDialog.getSaveFileName(self, 'Eksport raportu',
+                              str(suggested_export_path(home)), 'JSON (*.json)')
+            if not file_name:
+                return
+            try:
+                with open(file_name, 'x', encoding='utf-8') as file:
+                    json.dump({'version': engine.VERSION, 'scopes': list(engine.SCOPES),
+                               'stats': self.stats, 'entries': [it.json() for it in self.items]},
+                              file, indent=2, ensure_ascii=False)
+                self.statusBar().showMessage(f'Zapisano: {file_name}')
+            except OSError as exc:
+                QtWidgets.QMessageBox.warning(self, 'Błąd zapisu',
+                     f'{exc}\nIstniejące pliki nie są nadpisywane.')
+
+        def restore_dialog(self):
+            runs = engine.quarantine_runs(home, engine.xdg_roots(home))
+            if not runs:
+                QtWidgets.QMessageBox.information(self, tr('Kwarantanna'), 'Nie znaleziono operacji.')
+                return
+            chosen_row = self.qtree.currentItem() if self.content_stack.currentIndex() == 1 else None
+            labels = [f"{x['run_id']}  ({x['moved']} przeniesionych / {len(x['items'])} zapisanych)" for x in runs]
+            if chosen_row:
+                label=next((key for key,run in zip(labels,runs) if run['run_id']==chosen_row.data(0,Role)),labels[0])
+                ok=True
+            else:
+                label,ok=QtWidgets.QInputDialog.getItem(self,tr('Kwarantanna'),
+                    'Wybierz operację do przywrócenia:',labels,0,False)
+            if not ok:
+                return
+            selected = runs[labels.index(label)]
+            details = '\n'.join(f"{x.get('move_status', '?')}: {x.get('source', '?')}" for x in selected['items'][:22])
+            if QtWidgets.QMessageBox.question(self, 'Plan przywracania',
+                     f"Operacja {selected['run_id']}\n\n{details}\n\nIstniejące pliki NIE zostaną nadpisane. Kontynuować?",
+                     QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No,
+                     QtWidgets.QMessageBox.StandardButton.No) != QtWidgets.QMessageBox.StandardButton.Yes:
+                return
+            answer, confirmed = QtWidgets.QInputDialog.getText(self, 'Potwierdzenie', 'Wpisz RESTORE:')
+            if not confirmed or answer != 'RESTORE':
+                return
+            output = []
+            try:
+                result = engine.restore_quarantine_run(home, engine.xdg_roots(home),
+                           selected['run_id'], emit=output.append)
+                QtWidgets.QMessageBox.information(self, 'Przywracanie',
+                   f"Przywrócono: {result['restored']}\nPominięto: {result['skipped']}\n" + '\n'.join(output[-8:]))
+                self.scan_async()
+            except (ValueError, OSError, KeyError) as exc:
+                QtWidgets.QMessageBox.critical(self, 'Błąd przywracania', str(exc))
+
+        def open_settings(self):
+            from xdg_prefs import (defaults, load, save, validate, parse_alias_lines,
+                                   format_aliases, SCOPES)
+            current, warning = load(home, engine.xdg_roots(home))
+            dialog = QtWidgets.QDialog(self)
+            dialog.setWindowTitle(tr('Ustawienia xdg-audit'))
+            dialog.resize(600, 540)
+            layout = QtWidgets.QVBoxLayout(dialog)
+            layout.addWidget(QtWidgets.QLabel(tr('Zakres początkowy')))
+            scope = QtWidgets.QComboBox()
+            for name in SCOPES: scope.addItem(name)
+            scope.setCurrentText(current['startup_scope'])
+            layout.addWidget(scope)
+            layout.addWidget(QtWidgets.QLabel(tr('Język / Language')))
+            language = QtWidgets.QComboBox()
+            language.addItem('Polski', 'pl')
+            language.addItem('English', 'en')
+            language.setCurrentIndex(max(0, language.findData(current['language'])))
+            layout.addWidget(language)
+            quick = QtWidgets.QCheckBox(tr('Szybki skan (bez rozmiarów)'))
+            quick.setChecked(current['quick_scan'])
+            layout.addWidget(quick)
+            shown = QtWidgets.QCheckBox(tr('Pokazuj aktywne i chronione'))
+            shown.setChecked(current['show_active'])
+            layout.addWidget(shown)
+            layout.addWidget(QtWidgets.QLabel(tr('Zachowaj — jedna nazwa katalogu w linii')))
+            keep = QtWidgets.QPlainTextEdit('\n'.join(current['keep']))
+            keep.setMaximumHeight(110)
+            layout.addWidget(keep)
+            layout.addWidget(QtWidgets.QLabel(tr('Alias — katalog=wzorzec')))
+            alias = QtWidgets.QPlainTextEdit(format_aliases(current['aliases']))
+            alias.setMaximumHeight(125)
+            layout.addWidget(alias)
+            info = QtWidgets.QLabel(warning or tr('Zapis jest wykonywany dopiero po kliknięciu Zapisz.'))
+            info.setWordWrap(True)
+            layout.addWidget(info)
+            buttons = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.StandardButton.Save |
+                                                 QtWidgets.QDialogButtonBox.StandardButton.Cancel)
+            buttons.rejected.connect(dialog.reject)
+            layout.addWidget(buttons)
+            def commit():
+                try:
+                    new = validate({'startup_scope':scope.currentText(),
+                                    'quick_scan':quick.isChecked(), 'show_active':shown.isChecked(),
+                                    'language':language.currentData(),
+                                    'keep':[x.strip() for x in keep.toPlainText().splitlines() if x.strip()],
+                                    'aliases':parse_alias_lines(alias.toPlainText())})
+                    save(home, new, engine.xdg_roots(home))
+                except (OSError, ValueError) as exc:
+                    info.setText('Błąd: '+str(exc)); return
+                from xdg_prefs import scan_inputs_changed
+                needs_scan=scan_inputs_changed(current,new)
+                self.prefs = new
+                args.keep=list(new['keep'])
+                aliases.clear();aliases.update(new['aliases'])
+                args.quick=new['quick_scan']
+                args.all=new['show_active']
+                self.show_all.setChecked(args.all)
+                self.quick.setChecked(args.quick)
+                # Saved startup scope takes effect on the next launch.
+                dialog.accept()
+                if current['language'] != new['language']:
+                    self.apply_language(new['language'])
+                if needs_scan:
+                    self.scan_async()
+                else:
+                    self.statusBar().showMessage('Settings saved. Scan results preserved.' if new['language']=='en'
+                                               else 'Ustawienia zapisane. Wyniki audytu zachowane.')
+            buttons.accepted.connect(commit)
+            dialog.exec()
+
+        def apply_language(self, language: str):
+            """Re-translate controls and model headers without restarting Qt."""
+            nonlocal _language
+            old=_language
+            if old==language:return
+            _language=language
+            self.prefs['language']=language
+            self.setWindowTitle('xdg-audit · Audit' if language=='en' else 'xdg-audit · Audyt konfiguracji')
+            # Update fixed UI labels, not file paths or model data.
+            for cls in (QtWidgets.QLabel, QtWidgets.QPushButton, QtWidgets.QCheckBox):
+                for widget in self.findChildren(cls):
+                    original_text=widget.text()
+                    translated=translate_ui_text(original_text,old,language)
+                    if translated!=original_text:widget.setText(translated)
+            self.subtitle.setText(tr('Audyt i bezpieczne porządki w katalogach użytkownika'))
+            for state,title in (('CANDIDATE','Kandydaci'),('REVIEW','Do sprawdzenia'),
+                                ('UNKNOWN','Nieznane'),('ACTIVE','Aktywne'),('PROTECTED','Chronione')):
+                self.metric_captions[state].setText(tr(title))
+            self.refresh_button.setText(('◌ ' + tr('Skanowanie…')) if self.thread and self.thread.isRunning()
+                                        else '↻  '+tr('Skanuj ponownie'))
+            self.cancel_button.setText('Cancel scan' if language=='en' else 'Anuluj skan')
+            self.settings_button.setText(tr('⚙ Ustawienia'))
+            self.audit_heading.setText(tr('Wyniki audytu'))
+            self.status_heading.setText(tr('Status'))
+            self.search_box.setPlaceholderText(tr('Szukaj nazwy, lokalizacji lub uzasadnienia…'))
+            self.scan_progress.setFormat(tr('Skanowanie…'))
+            for index,(_,scope) in enumerate([('Wszystko','all'),('Konfiguracja','config'),
+                    ('Dane','data'),('Stan','state'),('Cache','cache'),('Flatpak','flatpak'),
+                    ('Dotfiles','dotfiles'),('Kwarantanna','quarantine')]):
+                title=('Wszystko','Konfiguracja','Dane','Stan','Cache','Flatpak','Dotfiles','Kwarantanna')[index]
+                self.scope_tabs.setTabText(index,tr(title))
+            self.scope_combo.setItemText(0,tr('Wszystko'))
+            self.scope_combo.setItemText(5,tr('Flatpak'))
+            self.scope_combo.setItemText(6,tr('Dotfiles'))
+            self.audit_model.headerDataChanged.emit(Qt.Orientation.Horizontal,0,4)
+            self.visible_count.setText(entries_count(self.audit_model.rowCount(),_language))
+            self.update_selection_status(reveal=False)
+            # Theme/palette is unchanged by language; avoid repainting widgets.
+            # Dynamic messages in QStatusBar aren't QLabel children; translate
+            # them explicitly when changing language without restarting.
+            if self.thread is not None and self.thread.isRunning():
+                self.statusBar().showMessage('Scanning…' if language=='en' else 'Skanowanie…')
+            elif self.scan_complete:
+                self.statusBar().showMessage((f'Scanned {len(self.items)} entries. No changes.' if language=='en'
+                                              else f'Zbadano {len(self.items)} pozycji. Żadnych zmian.'))
+
+        def scan_async(self, *_):
+            if self.thread is not None and self.thread.isRunning():
+                return
+            scopes = list(engine.SCOPES)
+            self.refresh_button.setEnabled(False)
+            self.refresh_button.setText('◌ '+tr('Skanowanie…'))
+            self.scan_progress.show()
+            self.scan_progress.setRange(0,0)
+            self.cancel_button.setVisible(True)
+            self.scan_complete=False
+            self.items = []
+            self.checked.clear()
+            self.refresh_table()
+            self.scope_tabs.setEnabled(False)
+            self.scope_combo.setEnabled(False)
+            self.move_button.setEnabled(False)
+            self.statusBar().showMessage('Scanning (read-only)…' if _language=='en' else 'Trwa skanowanie (tylko odczyt)…')
+            self.thread = QtCore.QThread(self)
+            self.worker = Scanner(scopes, self.quick.isChecked())
+            self.worker.moveToThread(self.thread)
+            self.thread.started.connect(self.worker.run)
+            self.worker.finished.connect(self.scan_done)
+            self.worker.phase.connect(self.scan_phase)
+            self.worker.batch.connect(self.scan_batch)
+            self.worker.failed.connect(self.scan_error)
+            self.worker.cancelled.connect(self.scan_cancelled)
+            self.worker.finished.connect(self.thread.quit)
+            self.worker.failed.connect(self.thread.quit)
+            self.worker.cancelled.connect(self.thread.quit)
+            self.thread.finished.connect(self.worker.deleteLater)
+            self.thread.finished.connect(self.thread.deleteLater)
+            self.thread.finished.connect(self.clear_worker)
+            self.thread.start()
+
+        def clear_worker(self):
+            self.thread = None
+            self.worker = None
+            self.refresh_button.setEnabled(True)
+            self.refresh_button.setText('↻ '+tr('Skanuj ponownie'))
+            self.scan_progress.hide()
+            self.cancel_button.setVisible(False)
+            self.scope_tabs.setEnabled(True)
+            self.scope_combo.setEnabled(True)
+            self.update_selection_status()
+
+        def cancel_scan(self):
+            if self.worker is not None:
+                self.worker.cancel_event.set()
+                self.statusBar().showMessage('Anulowanie skanu po bieżącym etapie…')
+
+        def scan_cancelled(self):
+            self.scan_complete=False
+            self.checked.clear()
+            self.move_button.setEnabled(False)
+            self.statusBar().showMessage('Skan anulowany. Częściowe wyniki nie służą do przenoszenia plików.')
+
+        def scan_phase(self, name):
+            self.scan_progress.setFormat('Skanowanie: ' + name)
+            self.statusBar().showMessage(('Scanning: ' if _language=='en' else 'Skanowanie: ') + tr(name))
+
+        def scan_batch(self, kind, batch, done, total):
+            if kind == 'classified':
+                self.items = list(batch)
+                self.refresh_table()
+            elif kind == 'sizes':
+                self.scan_progress.setRange(0, max(total, 1))
+                self.scan_progress.setValue(done)
+                self.refresh_table()
+
+        def is_eligible(self, it):
+            return self.scan_complete and not it.protected and (it.state == 'CANDIDATE' or
+                (self.allow_uncertain_box.isChecked() and it.state in {'REVIEW', 'UNKNOWN'}))
+
+        def focused_item(self):
+            index = self.table.currentIndex()
+            if not index.isValid():
+                return None
+            source = self.proxy_model.mapToSource(index)
+            return self.audit_model.rows[source.row()] if source.isValid() else None
+
+        def scan_done(self, items, roots, stats):
+            self.scan_complete=True
+            self.items, self.roots, self.stats = items, roots, stats
+            self.hide_inspector()
+            self.refresh_table()
+            self.refresh_quarantine()
+            self.statusBar().showMessage((f'Scanned {len(items)} entries. No files changed.' if _language=='en' else f'Zbadano {len(items)} pozycji. Żadnych zmian w plikach.'))
+
+        def scan_error(self, message):
+            self.scan_complete=False
+            self.statusBar().showMessage("Błąd skanowania")
+            QtWidgets.QMessageBox.critical(self, "Błąd skanowania", message)
+
+        def display_items(self):
+            query = self.search_box.text().strip().casefold()
+            result = []
+            scope=self.scope_combo.currentData()
+            for item in self.items:
+                if scope != 'all' and item.scope != scope: continue
+                if self.status_filter.currentText() != 'ALL' and item.state != self.status_filter.currentText():
+                    continue
+                if not self.show_all.isChecked() and item.state in {"ACTIVE", "PROTECTED"}:
+                    continue
+                hay = " ".join([str(item.path), item.scope, item.state, *item.reasons]).casefold()
+                if query and query not in hay:
+                    continue
+                result.append(item)
+            return result
+
+        def refresh_table(self, *_):
+            self.audit_model.set_rows(self.display_items())
+            counts = {state: sum(it.state == state for it in self.items) for state in
+                      ('CANDIDATE', 'REVIEW', 'UNKNOWN', 'ACTIVE', 'PROTECTED')}
+            for name, value in counts.items():
+                self.metric_values[name].setText(str(value))
+            self.update_metric_borders()
+            self.visible_count.setText(entries_count(self.audit_model.rowCount(),_language))
+            self.update_selection_status()
+
+        def chosen_paths(self):
+            return set(self.checked)
+
+        def select_candidates(self):
+            if not self.scan_complete:return
+            self.checked.update(str(it.path) for it in self.display_items() if it.state == 'CANDIDATE')
+            self.audit_model.set_rows(self.audit_model.rows)
+            self.update_selection_status(reveal=True)
+
+        def clear_selection(self):
+            self.checked.clear()
+            self.audit_model.set_rows(self.audit_model.rows)
+            self.update_selection_status()
+            self.hide_inspector()
+
+        def update_selection_status(self, *_, reveal=False):
+            self.select_candidates_button.setEnabled(bool(self.items))
+            self.summary.setText(selected_count(len(self.checked),_language))
+            if self.thread is None or not self.thread.isRunning():
+                self.move_button.setEnabled(bool(self.checked))
+            if reveal:
+                self.update_details()
+
+        def hide_inspector(self):
+            self.inspection.hide()
+
+        def open_selected_location(self):
+            if self.previewed_item is None:
+                return
+            try:
+                open_item_location(self.previewed_item.path, home)
+            except (OSError, ValueError, RuntimeError) as exc:
+                self.statusBar().showMessage(str(exc))
+
+        def update_details(self):
+            focused = self.focused_item()
+            chosen = [it for it in self.items if str(it.path) in self.checked]
+            content = details_text(chosen, engine.human, focused, language=_language)
+            self.previewed_item = focused if focused is not None else (chosen[0] if len(chosen) == 1 else None)
+            self.open_location_button.setEnabled(self.previewed_item is not None)
+            if not content:
+                self.hide_inspector()
+                return
+            self.details.setPlainText(content)
+            self.inspection.show()
+            self.splitter.setSizes([max(480, self.splitter.width()-330),330])
+
+        def open_quarantine(self):
+            root = engine.quarantine_dir(home, engine.xdg_roots(home))
+            if not root.is_dir():
+                QtWidgets.QMessageBox.information(self, tr('Kwarantanna'), 'Brak operacji kwarantanny.')
+                return
+            QtGui.QDesktopServices.openUrl(QtCore.QUrl.fromLocalFile(str(root)))
+
+        def move_selected(self):
+            if self.thread is not None:
+                return
+            selected = self.chosen_paths()
+            selected_items = [it for it in self.items if str(it.path) in selected]
+            chosen = [it for it in selected_items if (it.state == "CANDIDATE" or
+                      (self.allow_uncertain_box.isChecked() and it.state in {"REVIEW", "UNKNOWN"})) and not it.protected]
+            if not chosen:
+                QtWidgets.QMessageBox.information(self, "Brak wyboru", "Nie zaznaczono pozycji dostępnych do kwarantanny.")
+                return
+            uncertain = [it for it in chosen if it.state in {"REVIEW", "UNKNOWN"}]
+            details = "\n".join(f"{it.state:10} {engine.human(it.bytes):>9}  {it.path}" for it in chosen[:30])
+            if len(chosen) > 30:
+                details += f"\n... i {len(chosen)-30} kolejnych"
+            total = engine.human(sum(it.bytes for it in chosen))
+            message = (f"Przenieść {len(chosen)} pozycji ({total}) do kwarantanny?\n"
+                       "Żadne pliki nie zostaną trwale usunięte.\n\n" + details)
+            if QtWidgets.QMessageBox.question(self, "Plan kwarantanny", message,
+                   QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No,
+                   QtWidgets.QMessageBox.StandardButton.No) != QtWidgets.QMessageBox.StandardButton.Yes:
+                return
+            if uncertain:
+                answer, ok = QtWidgets.QInputDialog.getText(self, "Niepewne pozycje",
+                    f"Wybierasz {len(uncertain)} pozycji REVIEW/UNKNOWN.\n"
+                    "Nie ustalono, czy są niepotrzebne. Wpisz UNCERTAIN:")
+                if not ok or answer != "UNCERTAIN":
+                    return
+            answer, ok = QtWidgets.QInputDialog.getText(self, "Ostateczne potwierdzenie",
+                      "Zamknij powiązane aplikacje. Aby zatwierdzić przeniesienie wpisz MOVE:")
+            if not ok or answer != "MOVE":
+                return
+            output = []
+            try:
+                result = engine.commit_quarantine(chosen, self.roots, home,
+                        allow_uncertain=bool(uncertain), emit=output.append, extra_aliases=aliases,keep_names=args.keep)
+                text = "\n".join(output[-12:])
+                QtWidgets.QMessageBox.information(self, "Kwarantanna", f"Run ID: {result['run_id']}\n\n{text}")
+            except Exception as exc:
+                QtWidgets.QMessageBox.critical(self, "Błąd", f"Nie udało się przeprowadzić operacji:\n{exc}")
+            self.scan_async()
+
+        def apply_system_theme(self, force=False):
+            appearance = detect_appearance(home)
+            if appearance == self.scheme_info and not force:
+                return
+            self.scheme_info = appearance
+            app = QtWidgets.QApplication.instance()
+            # Always inherit native Qt platform palette first; honor KDE/qt6ct plugins.
+            palette = QtGui.QPalette(self.original_palette)
+            roles = {
+                "window": QtGui.QPalette.ColorRole.Window,
+                "window_text": QtGui.QPalette.ColorRole.WindowText,
+                "base": QtGui.QPalette.ColorRole.Base,
+                "text": QtGui.QPalette.ColorRole.Text,
+                "button": QtGui.QPalette.ColorRole.Button,
+                "button_text": QtGui.QPalette.ColorRole.ButtonText,
+                "highlight": QtGui.QPalette.ColorRole.Highlight,
+                "highlight_text": QtGui.QPalette.ColorRole.HighlightedText,
+                "tooltip_base": QtGui.QPalette.ColorRole.ToolTipBase,
+                "tooltip_text": QtGui.QPalette.ColorRole.ToolTipText,
+            }
+            # KDE stores actual RGB palette. In other environments, preserve
+            # Qt's platform theme; portal only supplies light/dark/accent.
+            if appearance.desktop == "KDE Plasma" and appearance.kde_colors:
+                for name, color in appearance.kde_colors.items():
+                    if name in roles:
+                        palette.setColor(roles[name], QtGui.QColor(*color))
+            elif appearance.scheme in {"light", "dark"} and "qt6ct" not in os.environ.get("QT_QPA_PLATFORMTHEME", "").lower():
+                dark = appearance.scheme == "dark"
+                native_dark = palette.color(QtGui.QPalette.ColorRole.Window).lightnessF() < 0.5
+                if native_dark != dark:
+                    # Qt platform integration is missing/mismatched (common on bare
+                    # Wayland compositors). Generate contrast from the inherited Qt
+                    # hues; do not embed a fixed RGB desktop color theme.
+                    def adjust(role, target_lightness):
+                        color = palette.color(role).toHsl()
+                        h = color.hslHueF()
+                        saturation = color.hslSaturationF()
+                        return QtGui.QColor.fromHslF(0 if h < 0 else h,
+                            max(0.02, saturation), target_lightness)
+                    values = (
+                        ("window", 0.17 if dark else 0.94),
+                        ("base", 0.12 if dark else 0.99),
+                        ("button", 0.23 if dark else 0.88),
+                        ("window_text", 0.92 if dark else 0.10),
+                        ("text", 0.92 if dark else 0.10),
+                        ("button_text", 0.92 if dark else 0.10),
+                        ("tooltip_base", 0.23 if dark else 0.96),
+                        ("tooltip_text", 0.92 if dark else 0.10),
+                    )
+                    for name, luminance in values:
+                        palette.setColor(roles[name], adjust(roles[name], luminance))
+            if appearance.accent:
+                palette.setColor(QtGui.QPalette.ColorRole.Highlight, QtGui.QColor(*appearance.accent))
+                r, g, b = appearance.accent
+                luminosity = 0.2126*r + 0.7152*g + 0.0722*b
+                palette.setColor(QtGui.QPalette.ColorRole.HighlightedText,
+                                 QtGui.QColor(0, 0, 0) if luminosity > 148 else QtGui.QColor(255, 255, 255))
+            app.setPalette(palette)
+            self.theme_label.setText((f"Desktop: {appearance.desktop} · Session: {runtime['session']}\nGUI: Qt6 · Style: {appearance.source or 'unknown'}"
+                  if _language=='en' else
+                  f"Środowisko: {appearance.desktop} · Sesja: {runtime['session']}\nGUI: Qt6 · Styl: {appearance.source or 'nieznany'}"))
+
+        def closeEvent(self, event):
+            if self.thread is not None and self.thread.isRunning():
+                QtWidgets.QMessageBox.information(self, "Skanowanie", "Skanowanie jeszcze trwa. Zamknij okno po zakończeniu.")
+                event.ignore()
+                return
+            event.accept()
+
+    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication(["xdg-audit"])
+    app.setApplicationName("xdg-audit")
+    window = MainWindow()
+    window.show()
+    return int(app.exec())
