@@ -32,7 +32,7 @@ jobs:
 
   archives:
     name: Source ZIP and tar.gz
-    needs: [test, gui-smoke, wayland-smoke, benchmark]
+    needs: [test, gui-smoke, wayland-smoke, benchmark, quarantine-cycle]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -60,7 +60,7 @@ jobs:
   release:
     name: GitHub release on version tag
     if: startsWith(github.ref, 'refs/tags/v') && github.event_name == 'push'
-    needs: [test, gui-smoke, wayland-smoke, benchmark, archives]
+    needs: [test, gui-smoke, wayland-smoke, benchmark, quarantine-cycle, archives]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -128,6 +128,17 @@ jobs:
         run: /usr/bin/python3 scripts/gui_wayland_smoke.py --backend gtk4
       - name: Qt6 full application on native Wayland
         run: /usr/bin/python3 scripts/gui_wayland_smoke.py --backend qt6
+
+  quarantine-cycle:
+    name: Quarantine and restore E2E (isolated)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Safe full cycle on disposable XDG data
+        run: python scripts/smoke_quarantine_cycle.py --synthetic-inventory
 
   benchmark:
     name: Synthetic scan benchmark
