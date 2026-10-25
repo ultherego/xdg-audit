@@ -238,7 +238,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
 
             toolbar = QtWidgets.QHBoxLayout()
             title = QtWidgets.QLabel(tr('Wyniki audytu'))
-            tf=title.font();tf.setBold(True);tf.setPointSize(tf.pointSize()+2);title.setFont(tf)
+            title_font=title.font();title_font.setBold(True);title_font.setPointSize(title_font.pointSize()+2);title.setFont(title_font)
             self.audit_heading=title
             toolbar.addWidget(title)
             self.visible_count=QtWidgets.QLabel(entries_count(0,_language))
