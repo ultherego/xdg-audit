@@ -68,7 +68,7 @@ class LocalizationCompletenessTests(unittest.TestCase):
                 self.assertIn('38.4MiB', description)
                 self.assertIn('CANDIDATE', description)
                 if language == 'en':
-                    self.assertIn(f'Plan: {count} entries', description)
+                    self.assertIn(f"Plan: {count} {'entry' if count == 1 else 'entries'}", description)
                     self.assertIn('Files will be MOVED', description)
                     self.assertNotIn('Dane zostaną', description)
                 else:
