@@ -106,4 +106,6 @@ python3 -m unittest discover -s tests -v
 python3 scripts/build_archives.py --output-dir dist
 ```
 
+For an isolated quarantine/restore test without touching real user files, see [Quarantine integration testing](docs/testing-quarantine.md).
+
 Desktop-menu installation and distribution packaging are intentionally deferred. See [CHANGELOG.md](CHANGELOG.md) for release history.
