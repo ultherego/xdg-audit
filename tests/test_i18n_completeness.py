@@ -29,6 +29,19 @@ class LocalizationCompletenessTests(unittest.TestCase):
                     if isinstance(key, str):
                         self.assertIn(key, EN, f'{file}:{node.lineno}: {key}')
 
+    def test_no_local_variable_shadows_translation_formatter(self):
+        for file in GUIS:
+            tree = ast.parse((ROOT / file).read_text(encoding='utf-8'))
+            launch = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == 'launch_gui')
+            for node in ast.walk(launch):
+                if isinstance(node, ast.FunctionDef) and node.name == 'tf':
+                    continue
+                if isinstance(node, (ast.Assign, ast.AnnAssign, ast.NamedExpr)):
+                    targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+                    for target in targets:
+                        if isinstance(target, ast.Name) and target.id == 'tf':
+                            self.fail(f'{file}:{node.lineno}: local variable shadows tf()')
+
     def test_translations_have_matching_template_placeholders(self):
         parse = lambda v: {field for _, field, _, _ in Formatter().parse(v) if field}
         for key, en in EN.items():
