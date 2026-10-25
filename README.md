@@ -79,6 +79,7 @@ sudo pacman -S --needed python pyside6
 - A scan is **read-only**. Moving any entry requires an explicit user action and confirmation.
 - Quarantined items live under `~/.local/share/xdg-audit-quarantine/` and can be restored.
 - The app rechecks relevant filesystem and package information before moving, refuses cross-filesystem relocation and uses no-overwrite operations.
+- New v3 quarantine manifests record device, inode and file type; restore rejects a substituted object while remaining compatible with older manifests.
 - Cancelled or unfinished scans cannot be used to move files.
 
 > **Important:** Application ownership cannot always be determined reliably. Review every selection and keep backups of important files. Quarantine reduces risk; it does not replace a backup.
@@ -98,7 +99,7 @@ Scopes: `all`, `config`, `data`, `state`, `cache`, `flatpak`, `dotfiles`.
 
 ## Development status
 
-**v1.7.0-rc1 — development preview.** Automated tests cover Python 3.10–3.14 and build source ZIP/tar.gz archives in [GitHub Actions](https://github.com/ultherego/xdg-audit/actions). GTK4/Niri and Qt6/KDE still need broader real-session integration testing before a stable release.
+**Unreleased v1.7.0-rc2 development branch.** The latest published prerelease is [v1.7.0-rc1](https://github.com/ultherego/xdg-audit/releases/tag/v1.7.0-rc1). Automated tests cover Python 3.10–3.14 and build source ZIP/tar.gz archives in [GitHub Actions](https://github.com/ultherego/xdg-audit/actions). GTK4/Niri and Qt6/KDE still need broader real-session integration testing before a stable release.
 
 ```sh
 python3 -m unittest discover -s tests -v
