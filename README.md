@@ -179,15 +179,44 @@ The builder produces versioned `.zip` and `.tar.gz` archives plus a `SHA256SUMS`
 
 Desktop-menu installation, AUR/system packaging, and automatic updates are intentionally postponed while the application is being refined.
 
-## Technical references and related projects
+## Requirements
 
-- [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir-spec/latest/)
-- [GTK4 Gtk.ColumnView](https://docs.gtk.org/gtk4/class.ColumnView.html)
-- [GTK4 Gtk.SortListModel](https://docs.gtk.org/gtk4/class.SortListModel.html)
-- [Qt for Python: Model/View Programming](https://doc.qt.io/qtforpython-6/overviews/qtwidgets-model-view-programming.html)
-- [Python os.rename / os.replace](https://docs.python.org/3/library/os.html)
-- [OrphyCleaner](https://github.com/dodog/orphycleaner)
-- [pacrid](https://github.com/ParkerrDev/pacrid)
-- [xdg-unused-data](https://github.com/pawel-0/xdg-unused-data)
+**The CLI does not require any third-party Python packages.** Only one GUI backend is needed; xdg-audit automatically uses a compatible backend already installed on your system.
+
+### Core
+
+| Package / component | Purpose |
+| --- | --- |
+| **Linux** | Required operating system |
+| **Python 3.10+** (`python` on Arch/CachyOS) | Required to run the application |
+| `pacman` | Package inventory on Arch/CachyOS; **required for moving items into quarantine** (moves fail closed if the package inventory cannot be verified) |
+| `coreutils` (`du`) | Directory size calculation; not needed for a quick scan without size calculation |
+| `procps-ng` (`ps`) | Running-process detection; scanning still works with reduced evidence if unavailable |
+
+### Native GUI — choose one backend
+
+| Backend | Arch Linux / CachyOS packages | Notes |
+| --- | --- | --- |
+| **GTK4** | `python-gobject gtk4` | Preferred on GTK-oriented desktops such as GNOME and Niri |
+| **GTK3** | `python-gobject gtk3` | GTK fallback |
+| **Qt6** | `pyside6` **or** `python-pyqt6` | Preferred on KDE Plasma and LXQt |
+| **Tk** | `tk` | Fallback; requires X11 or XWayland |
+
+For example, to install the **GTK4 dependencies** on Arch Linux / CachyOS:
+
+```sh
+sudo pacman -S --needed python coreutils procps-ng python-gobject gtk4
+```
+
+For **Qt6**, install `pyside6` or `python-pyqt6` instead of `python-gobject gtk4`. For **Tk**, install `tk` instead. You do **not** need to install all GUI backends.
+
+### Optional integrations
+
+- `xdg-utils` (`xdg-open`) — opens an item's location in your file manager.
+- `flatpak` — detects installed Flatpak applications.
+- `snapd` (`snap`) — detects installed Snap applications.
+- `systemd` (`systemctl --user`) — provides additional user-service evidence when available.
+
+No `pip install` step or `requirements.txt` is needed for the core application. The app does not install packages automatically or require root privileges to run.
 
 For version-by-version changes, see [CHANGELOG.md](CHANGELOG.md).
