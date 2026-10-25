@@ -72,7 +72,7 @@ jobs:
       - name: Verify tag matches source version
         shell: bash
         run: |
-          actual=$(python xdg_audit.py --version | awk '{print $NF}')
+          actual=$(python -c 'import xdg_audit; print(xdg_audit.VERSION)')
           if [[ "$GITHUB_REF_NAME" != "v$actual" ]]; then
             echo "Tag $GITHUB_REF_NAME does not match application v$actual" >&2
             exit 1
