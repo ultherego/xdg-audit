@@ -227,7 +227,7 @@ def translate_ui_text(value: str, old: str, new: str) -> str:
 
 def entries_count(number: int, language: str) -> str:
     if language == 'en':
-        return f'{number} entries'
+        return f"{number} {'entry' if number == 1 else 'entries'}"
     # Polish count forms for concise UI counters.
     word = 'pozycja' if number == 1 else ('pozycje' if number % 10 in (2, 3, 4) and number % 100 not in (12, 13, 14) else 'pozycji')
     return f'{number} {word}'
