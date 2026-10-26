@@ -198,6 +198,8 @@ python3 xdg_audit.py --purge RUN_ID           # Explicit PURGE confirmation
 python3 xdg_audit.py --purge-expired          # Retention preview
 python3 xdg_audit.py --cleanup-history RUN_ID --dry-run
 python3 xdg_audit.py --cleanup-expired-history # 30 days after PURGE
+python3 xdg_audit.py --cleanup-all-history    # Preview all completed history
+python3 xdg_audit.py --cleanup-all-history --execute # Explicit HISTORY confirmation
 ```
 
 Available scopes: `all`, `config`, `data`, `state`, `cache`, `flatpak`, `dotfiles`.
