@@ -23,6 +23,18 @@ MAX_DEPTH = 64
 MAX_ISSUES = 30
 
 
+def needs_access_recovery(exc: BaseException) -> bool:
+    """Only trigger guided ACCESS/ADOPT for known recoverable preflight errors.
+
+    Other manifest/inode/hash failures must remain blocked without adoption.
+    """
+    return (isinstance(exc, PermissionError) or
+            (isinstance(exc, ValueError) and str(exc) in {
+                "Missing recursive inventory; legacy run requires adoption",
+                "Foreign owner or filesystem inside quarantine",
+            }))
+
+
 def authority_context() -> dict:
     """Describe the invoking identity; never guess Polkit authorization."""
     uid = os.getuid()
