@@ -142,9 +142,16 @@ def main() -> None:
                     raise AssertionError("Slow preview still running")
                 if work_threads != [x for x in work_threads if x != main_thread]:
                     raise AssertionError("Slow file inspection ran on UI thread")
-                if not any(w.get_title() == "Trwałe usunięcie"
-                           for w in open_windows()):
+                prompt = next((w for w in open_windows()
+                               if w.get_title() == "Trwałe usunięcie"), None)
+                if prompt is None:
                     raise AssertionError("PURGE confirmation dialog never appeared")
+                labels = [w for w in find_widgets(prompt) if isinstance(w, Gtk.Label)]
+                if any(w.get_selectable() for w in labels):
+                    raise AssertionError("Prompt description must not be text-selectable")
+                entries = [w for w in find_widgets(prompt) if isinstance(w, Gtk.Entry)]
+                if len(entries) != 1 or not entries[0].has_focus():
+                    raise AssertionError("Confirmation entry did not receive keyboard focus")
             except BaseException as exc:
                 errors.append(str(exc))
             finally:
