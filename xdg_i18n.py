@@ -7,7 +7,7 @@ from __future__ import annotations
 
 LANGUAGES = {'pl': 'Polski', 'en': 'English'}
 EN = {
-    "Polkit dostępny: {state}": "Polkit available: {state}",
+    "pkexec zainstalowany: {state}": "pkexec installed: {state}",
     "tak": "yes",
     "nie": "no",
     "Naprawa tego obiektu wymaga dodatkowej analizy. Zasady Polkit określa system; xdg-audit nie uruchamia kodu użytkownika jako root.": "This object requires further analysis. The system controls Polkit authorization; xdg-audit never runs user-owned code as root.",
