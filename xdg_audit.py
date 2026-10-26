@@ -466,6 +466,7 @@ class Item:
     protected: bool = False
     removable: bool = False
     identity: tuple[int, int, int] | None = None
+    size_known: bool = False
 
     def json(self):
         signals = []
@@ -495,12 +496,22 @@ class Item:
                 for prefix, source, strength in evidence_types
                 if normalized.startswith(prefix)), ('heuristic', 'unknown'))
             signals.append({'source': source, 'strength': strength, 'detail': reason})
+        strong_installed = any(signal['strength'] == 'strong' for signal in signals)
+        historical_only = (self.state == 'CANDIDATE' and bool(signals)
+                           and all(signal['strength'] == 'historical' for signal in signals))
+        evidence_level = ('installed_evidence' if strong_installed else
+                          'historical_only' if historical_only else
+                          'protective_hint' if self.state in {'ACTIVE', 'REVIEW'} else
+                          'policy_protected' if self.state == 'PROTECTED' else 'unknown')
         return {'schema_version': 2, 'scope': self.scope, 'path': str(self.path),
-                'state': self.state, 'size_bytes': self.bytes,
+                'state': self.state, 'size_bytes': self.bytes if self.size_known else None,
+                'size_calculated': self.size_known,
+                'evidence_level': evidence_level, 'orphan_ownership_verified': False,
                 'reasons': self.reasons, 'evidence': signals,
                 'protected': self.protected, 'removable': self.removable,
                 'risk_flags': (["protected"] if self.protected else
-                               ["unverified_owner"] if self.state in ('CANDIDATE','UNKNOWN','REVIEW') else [])}
+                               (["unverified_owner"] + (["history_only"] if historical_only else [])
+                                if self.state in ('CANDIDATE','UNKNOWN','REVIEW') else []))}
 
 
 def names_for(name: str, aliases: dict[str, list[str]] | None = None) -> set[str]:
@@ -626,7 +637,11 @@ def scan(home: Path, scopes: list[str], keeps: set[str], extra_aliases: dict[str
                 installed_appimage = nonpacman_matches(path.name, appimages, alias_map)
                 manual_matches = nonpacman_matches(
                     path.name, getattr(inventory, "manual", ()), alias_map)
-                found_units = nonpacman_matches(path.name, units, alias_map)
+                # Generic units cannot establish application ownership.
+                generic_units = {"app", "session", "service", "scope", "slice",
+                                 "timer", "target", "socket", "path"}
+                found_units = nonpacman_matches(
+                    path.name, units.difference(generic_units), alias_map)
                 found_processes = nonpacman_matches(path.name, processes, alias_map)
                 found_desktops = nonpacman_matches(path.name, desktops, alias_map)
                 found_exec = [x for x in {path.name, path.name.lower(), stem_package(path.name),
@@ -712,6 +727,7 @@ def scan(home: Path, scopes: list[str], keeps: set[str], extra_aliases: dict[str
             for path, number in partial.items():
                 if path in by_path:
                     by_path[path].bytes = number
+                    by_path[path].size_known = True
                     changed.append(by_path[path])
             if on_batch:
                 on_batch('sizes', tuple(changed), done, total)
