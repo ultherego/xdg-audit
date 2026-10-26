@@ -513,7 +513,7 @@ def recover_manifest_temps(home: Path, roots: dict[str, Path], run_id: str,
                 scopes.add(row["scope"])
             names = set(os.listdir(runfd))
             temps = sorted(name for name in names if
-                           re.fullmatch(r"\\.manifest-[a-zA-Z0-9_-]{6,40}\\.tmp", name))
+                           re.fullmatch(r"\.manifest-[a-zA-Z0-9_-]{6,40}\.tmp", name))
             if names - set(temps) - {"manifest.json"} - scopes:
                 raise ValueError("Unexpected files outside scope directories")
             for name in temps:
