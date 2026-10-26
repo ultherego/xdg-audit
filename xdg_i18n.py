@@ -19,7 +19,7 @@ EN = {
     'Uprawnienia: {mode}': 'Permissions: {mode}',
     'Nie można automatycznie naprawić. Nie podnoszę uprawnień ani nie omijam kontroli PURGE.': 'This cannot be repaired automatically. No privilege elevation or PURGE safeguard bypass will occur.',
     'Proponowana zmiana: {before} → {after}': 'Proposed change: {before} → {after}',
-    'Zmienię tylko prawo odczytu właściciela. Bez sudo i bez usuwania plików.': 'Only the owner's read permission will change. No sudo and no file deletion.',
+    'Zmienię tylko prawo odczytu właściciela. Bez sudo i bez usuwania plików.': "Only the owner's read permission will change. No sudo and no file deletion.",
     'Wpisz ACCESS:': 'Type ACCESS:',
     'Zmieniono uprawnienia: {before} → {after}': 'Permissions changed: {before} → {after}',
     'Nie wykonano PURGE. Ponownie sprawdź dostęp i osobno potwierdź usunięcie.': 'PURGE was not performed. Recheck access and confirm deletion separately.',
