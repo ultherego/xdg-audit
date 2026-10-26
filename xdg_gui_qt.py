@@ -662,7 +662,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
                     return
                 message+='\n'+tf('Proponowana zmiana: {before} → {after}',
                                  before=issue['mode'],after=issue['suggested_mode'])
-                message+='\n'+tr('Zmienię tylko prawo odczytu właściciela. Bez sudo i bez usuwania plików.')
+                message+='\n'+tr('Zmienię tylko wskazane uprawnienia właściciela w kwarantannie. Bez sudo i bez usuwania plików.')
                 if QtWidgets.QMessageBox.question(self,tr('Napraw dostęp'),message,
                         QtWidgets.QMessageBox.StandardButton.Yes |
                         QtWidgets.QMessageBox.StandardButton.No,
