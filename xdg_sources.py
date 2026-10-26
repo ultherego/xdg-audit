@@ -143,7 +143,13 @@ def _run(source: str, args: list[str], timeout: int) -> tuple[Probe, str]:
         return Probe(source, "timeout", note="query exceeded time limit"), ""
     except OSError as exc:
         return Probe(source, "failed", note=exc.__class__.__name__), ""
-    if proc.returncode != 0:
+    # The foreign filter uses exit 1 when nothing matches. Restrict this
+    # informational exception to the exact query with no output/diagnostics;
+    # it cannot authorize MOVE or excuse a failed native database read.
+    empty_foreign = (source == 'pacman_foreign' and args == ['pacman', '-Qmq']
+                     and proc.returncode == 1 and not proc.stdout.strip()
+                     and not proc.stderr.strip())
+    if proc.returncode != 0 and not empty_foreign:
         return Probe(source, "failed", note=f"exit code {proc.returncode}"), ""
     if len(proc.stdout) > 16 * 1024 * 1024:
         return Probe(source, "parse_error", note="oversized query output"), ""
@@ -154,6 +160,8 @@ def _run(source: str, args: list[str], timeout: int) -> tuple[Probe, str]:
 
 
 _PACKAGE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9+_.@-]{0,199}$")
+_DEB_ARCH = re.compile(r'[A-Za-z0-9][A-Za-z0-9-]*')
+_FLATPAK_ID = re.compile(r'(?:[A-Za-z_][A-Za-z0-9_]*\.){2,}[A-Za-z_-][A-Za-z0-9_-]*')
 SNAP_EMPTY = "No snaps are installed yet. Try 'snap install hello-world'."
 _SNAP_ID = re.compile(r'(?=.{2,51}$)[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:_[a-z0-9]{1,10})?')
 
@@ -164,14 +172,19 @@ def valid_snap_id(value: str) -> bool:
                 and '--' not in base and re.search('[a-z]', base))
 
 
+def valid_flatpak_id(value: str) -> bool:
+    """Validate Flatpak's ASCII, segment and length rules before case folding."""
+    return 0 < len(value) <= 255 and bool(_FLATPAK_ID.fullmatch(value))
+
+
 def pacman_packages() -> Probe:
     base, output = _run("pacman", ["pacman", "-Qq"], 30)
     if base.status != "ok":
         return base
-    names = [line.strip().casefold() for line in output.splitlines() if line.strip()]
+    names = [line.strip() for line in output.splitlines() if line.strip()]
     if any(not _PACKAGE.fullmatch(name) for name in names):
         return Probe("pacman", "parse_error", note="unexpected package identifier")
-    return Probe("pacman", "ok", frozenset(names))
+    return Probe("pacman", "ok", frozenset(name.casefold() for name in names))
 
 
 def pacman_foreign() -> Probe:
@@ -179,10 +192,10 @@ def pacman_foreign() -> Probe:
     base, output = _run("pacman_foreign", ["pacman", "-Qmq"], 30)
     if base.status != "ok":
         return base
-    names = [line.strip().casefold() for line in output.splitlines() if line.strip()]
+    names = [line.strip() for line in output.splitlines() if line.strip()]
     if any(not _PACKAGE.fullmatch(name) for name in names):
         return Probe("pacman_foreign", "parse_error", note="unexpected package identifier")
-    return Probe("pacman_foreign", "ok", frozenset(names))
+    return Probe("pacman_foreign", "ok", frozenset(name.casefold() for name in names))
 
 
 def dpkg_packages() -> Probe:
@@ -199,10 +212,13 @@ def dpkg_packages() -> Probe:
         fields = line.split("\t", 1)
         if len(fields) != 2 or not fields[0].strip():
             return Probe("dpkg", "parse_error", note="invalid dpkg-query fields")
-        name = fields[0].casefold().strip()
-        base_name = name.split(":", 1)[0]  # Multi-Arch qualified identifiers
-        if not _PACKAGE.fullmatch(base_name):
+        raw_name = fields[0].strip()
+        raw_base, qualifier, architecture = raw_name.partition(':')
+        if (not _PACKAGE.fullmatch(raw_base)
+                or (qualifier and not _DEB_ARCH.fullmatch(architecture))):
             return Probe("dpkg", "parse_error", note="invalid dpkg package name")
+        name = raw_name.casefold()
+        base_name = raw_base.casefold()
         state = fields[1].strip().casefold().split()
         # dpkg Status is a three-part tuple: Want / Err? / Status.
         # Malformed rows must not turn a partial inventory into "ok".
@@ -229,10 +245,10 @@ def rpm_packages() -> Probe:
     base, output = _run("rpm", ["rpm", "-qa", "--qf", "%{NAME}\\n"], 30)
     if base.status != "ok":
         return base
-    names = [x.strip().casefold() for x in output.splitlines() if x.strip()]
+    names = [x.strip() for x in output.splitlines() if x.strip()]
     if any(not _PACKAGE.fullmatch(x) for x in names):
         return Probe("rpm", "parse_error", note="invalid rpm package identifier")
-    return Probe("rpm", "ok", frozenset(names))
+    return Probe("rpm", "ok", frozenset(name.casefold() for name in names))
 
 
 def flatpak_apps() -> Probe:
@@ -250,7 +266,10 @@ def flatpak_apps() -> Probe:
         fields = line.split("\t")
         if len(fields) != 3 or not fields[0].strip() or not fields[2].strip():
             return Probe("flatpak", "parse_error", note="unexpected column format")
-        app_id = fields[0].strip().casefold()
+        raw_id = fields[0].strip()
+        if not valid_flatpak_id(raw_id):
+            return Probe('flatpak', 'parse_error', note='invalid Flatpak application ID')
+        app_id = raw_id.casefold()
         names.add(app_id)
         app_ids.add(app_id)
         if fields[1].strip():

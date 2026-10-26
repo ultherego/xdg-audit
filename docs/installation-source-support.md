@@ -38,6 +38,8 @@ present packages. Residual configuration (`config-files`) is not treated as
 an active installation. States such as `unpacked`, `half-configured` or
 `reinstreq` produce `partial` health and block MOVE until the user repairs
 the package database. xdg-audit does not perform that repair.
+Architecture-qualified identifiers are validated in full; malformed qualifiers
+discard the listing instead of leaving a partial native inventory labelled healthy.
 
 Bounded dpkg removal history is read from plain and gzip-rotated logs.
 Missing logs or access permissions do not establish uninstallation.
@@ -49,6 +51,15 @@ remains UNKNOWN/REVIEW and requires additional explicit consent before MOVE.
 not moved by default. The CLI requires `--allow-uncertain` and the separate
 `UNCERTAIN` and `MOVE` confirmations. The GUI preserves corresponding
 independent confirmations.
+
+## Flatpak inventory integrity
+
+The complete three-column listing validates each application ID using Flatpak's
+ASCII, segment and 255-character limit rules before normalizing names for matching.
+A single malformed ID discards the partial inventory and blocks MOVE.
+Display names may contain Unicode and remain protective aliases; they do not
+establish installation of a Flatpak namespace. A healthy empty list is distinct
+from a failed or malformed query and still does not verify orphan ownership.
 
 ## Snap user-data namespace
 
@@ -107,6 +118,10 @@ Image-file counts are kept separate from protective filename/display aliases.
 
 - **foreign ≠ AUR**: pacman foreign records also include local packages and
   packages no longer available from repositories. Neither yay nor paru is required.
+  A quiet `pacman -Qmq` exit 1 with no output or diagnostics means no filter
+  matches and is reported as a healthy empty foreign list. Errors, partial output,
+  timeouts and missing tools remain separate states. This informational exception
+  never authorizes MOVE or applies to the native `pacman -Qq` query.
 - Manual binaries, `/opt` directories, npm global and pipx provide protective
   hints. Missing hints do not prove absence; custom prefixes may not be covered.
 - Protection for secrets, profiles, backups, games and session data remains active.
@@ -134,7 +149,9 @@ files, matching the non-execution contract.
 ## Sources
 
 - [os-release and ID_LIKE](https://www.freedesktop.org/software/systemd/man/latest/os-release.html)
+- [pacman query filters](https://man.archlinux.org/man/pacman.8)
 - [dpkg-query and package states](https://manpages.debian.org/bookworm/dpkg/dpkg-query.1.en.html)
+- [Flatpak application ID validation](https://github.com/flatpak/flatpak/blob/main/common/flatpak-ref-utils.c)
 - [RPM query formats](https://rpm.org/docs/latest/man/rpm-queryformat.7)
 - [Snap data locations](https://snapcraft.io/docs/reference/administration/data-locations/)
 - [Install modes and snap list columns](https://snapcraft.io/docs/explanation/snap-development/install-modes/)

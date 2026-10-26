@@ -5,6 +5,10 @@
 
 ## New since v1.7.0-rc1
 
+- Healthy empty foreign-package filters distinguished from failures, with a
+  live pacman query check in native CI.
+- Strict raw Flatpak/native identifiers and complete dpkg architecture qualifiers;
+  malformed fresh query results block MOVE and preserve selected data.
 - Native database name, unique package-name count and health in CLI reports,
   plus compatible JSON statistics without double-counting dpkg aliases.
 - Real Arch/pacman inventory and lifecycle coverage alongside Ubuntu and Fedora,
