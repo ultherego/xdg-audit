@@ -54,8 +54,10 @@ o opublikowaniu nowego tagu.
   narzędzie naprawia tylko sprawdzone obiekty bieżącego użytkownika.
 - `PURGE` nie oznacza bezpiecznego nadpisywania nośnika.
   Wewnętrzne limity lub brak dostępu blokują operację.
-- To nadal kandydat; potrzebne są testy ręczne GNOME/KDE/Xfce,
-  decyzja właściciela o licencji oraz przegląd finalnego pakowania.
+- To nadal kandydat. Autor potwierdził działanie testowanego GUI (2026-10-26),
+  ale nie udokumentowano osobno macierzy GNOME/KDE/Xfce.
+  Niezależny przegląd bezpieczeństwa, decyzja o licencji oraz odbiór
+  finalnych artefaktów nadal pozostają otwarte.
 
 ## Weryfikacja
 
@@ -71,3 +73,6 @@ Dalsza kontrola jakości:
 Rozwój wykrywania AUR / binarek / Flatpak / Snap / AppImage i później
 DEB/RPM:
 [docs/installation-source-support.md](docs/installation-source-support.md).
+
+Dokumentacja instalacji/aktualizacji/usuwania rejestracji desktopowej:
+[docs/desktop-installation.md](docs/desktop-installation.md).
