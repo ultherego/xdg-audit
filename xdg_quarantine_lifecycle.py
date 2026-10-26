@@ -475,6 +475,12 @@ def purge_run(home: Path, roots: dict[str, Path], run_id: str, mounts_checker,
                     emit("PURGED " + str(entry["destination"]))
                 finally:
                     os.close(scopefd)
+            # Retention starts at successful PURGE completion, never run creation.
+            # Old journals lacking purged_at are not auto-expired by history GC.
+            if (all(row["move_status"] == "purged" for row in payload["items"])
+                    and "purged_at" not in payload):
+                payload["purged_at"] = dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")
+                _write_manifest(runfd, payload)
             return result
         finally:
             os.close(runfd)
