@@ -384,6 +384,9 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
             qpurge=QtWidgets.QPushButton(tr('Usuń trwale wybraną…'))
             qpurge.clicked.connect(self.purge_dialog)
             qb.addWidget(qpurge)
+            qaccess=QtWidgets.QPushButton(tr('Sprawdź dostęp…'))
+            qaccess.clicked.connect(self.access_diagnostics_dialog)
+            qb.addWidget(qaccess)
             qhistory=QtWidgets.QPushButton(tr('Usuń historię…'))
             qhistory.clicked.connect(self.cleanup_history_dialog)
             qb.addWidget(qhistory)
@@ -590,6 +593,64 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
                     home,engine.xdg_roots(home),rid) for rid in run_ids],
                 completed,'Sprawdzanie historii…')
 
+        def access_diagnostics_dialog(self, run_id=None):
+            if run_id is None:
+                current=self.qtree.currentItem()
+                if current is None:return
+                run_id=current.data(0,Role)
+            def finished(ok, report):
+                if not ok:
+                    QtWidgets.QMessageBox.warning(
+                        self,tr('Diagnostyka dostępu'),str(report))
+                    return
+                issues=report['issues']
+                if not issues:
+                    note=tr('Nie znaleziono problemów z odczytem. Sprawdź pozostałe komunikaty PURGE.')
+                    if report['unsealed']:
+                        note+='\n'+tr('Brak kompletnego spisu plików. Wymagane osobne zatwierdzenie aktualnej zawartości (ADOPT).')
+                    QtWidgets.QMessageBox.information(self,tr('Diagnostyka dostępu'),note)
+                    return
+                issue=issues[0]
+                message=(tf('Użytkownik: {user}',user=report['identity']['user'])+
+                         '\n'+tf('Problem: {code}',code=issue['code'])+
+                         '\n'+issue['path']+
+                         '\n'+tf('Uprawnienia: {mode}',mode=issue['mode']))
+                if not issue['repairable']:
+                    QtWidgets.QMessageBox.warning(
+                        self,tr('Diagnostyka dostępu'),message+'\n'+
+                        tr('Nie można automatycznie naprawić. Nie podnoszę uprawnień ani nie omijam kontroli PURGE.'))
+                    return
+                message+='\n'+tf('Proponowana zmiana: {before} → {after}',
+                                 before=issue['mode'],after=issue['suggested_mode'])
+                message+='\n'+tr('Zmienię tylko prawo odczytu właściciela. Bez sudo i bez usuwania plików.')
+                if QtWidgets.QMessageBox.question(self,tr('Napraw dostęp'),message,
+                        QtWidgets.QMessageBox.StandardButton.Yes |
+                        QtWidgets.QMessageBox.StandardButton.No,
+                        QtWidgets.QMessageBox.StandardButton.No) != QtWidgets.QMessageBox.StandardButton.Yes:
+                    return
+                token,accepted=QtWidgets.QInputDialog.getText(
+                    self,tr('Napraw dostęp'),tr('Wpisz ACCESS:'))
+                if not accepted or token!='ACCESS':return
+                def after_repair(success,outcome):
+                    if not success:
+                        QtWidgets.QMessageBox.warning(
+                            self,tr('Napraw dostęp'),str(outcome))
+                        return
+                    result=(tf('Zmieniono uprawnienia: {before} → {after}',
+                               before=outcome['old_mode'],after=outcome['new_mode'])+
+                            '\n'+tr('Nie wykonano PURGE. Ponownie sprawdź dostęp i osobno potwierdź usunięcie.'))
+                    if report['unsealed']:
+                        result+='\n'+tr('Brak kompletnego spisu plików. Wymagane osobne zatwierdzenie aktualnej zawartości (ADOPT).')
+                    QtWidgets.QMessageBox.information(self,tr('Napraw dostęp'),result)
+                self._quarantine_job(
+                    lambda:engine.repair_quarantine_access(
+                        home,engine.xdg_roots(home),run_id,issue['relative']),
+                    after_repair,'Naprawianie dostępu…')
+            self._quarantine_job(
+                lambda:engine.diagnose_quarantine_access(
+                    home,engine.xdg_roots(home),run_id),
+                finished,'Sprawdzanie dostępu…')
+
         def purge_dialog(self):
             entry=self.qtree.currentItem()
             if entry is None:
@@ -618,6 +679,8 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
             def completed(ok, outcome):
                 if not ok:
                     QtWidgets.QMessageBox.critical(self,tr('Zablokowano PURGE'),str(outcome))
+                    if isinstance(outcome,PermissionError) and len(run_ids)==1:
+                        self.access_diagnostics_dialog(run_ids[0])
                     return
                 description='\\n'.join(
                     str(plan['run_id'])+': '+str(plan['objects'])+' entries / '+str(plan['bytes'])+' B'
