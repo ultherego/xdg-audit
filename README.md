@@ -167,6 +167,13 @@ sudo pacman -S --needed python pyside6
 
 ### Wykrywanie źródeł instalacji aplikacji
 
+**Nowe ochronne źródła:** `npm_global` i `pipx` wykrywają statycznie
+nazwy z wybranych katalogów instalacji. Ich obecność wstrzymuje
+kwestionowany MOVE, lecz brak wpisu **nie** dowodzi odinstalowania
+aplikacji. Kod pakietów nie jest uruchamiany. `flatpak_app_ids`
+zlicza rzeczywiste identyfikatory, a nie dodatkowe nazwy wyświetlane.
+
+
 To dotyczy tego, **jak zainstalowane zostały audytowane aplikacje**,
 a nie metody instalacji samego xdg-audit.
 
