@@ -59,6 +59,10 @@ plików spoza jawnego manifestu.
    zapisywał bezpośrednio i nie obsługiwał poprawnie procentów w Exec.
 7. Archiwizator zbierał dowolne pliki z checkoutu. Obecnie wymaga jawnego
    manifestu, również przy budowaniu poza repozytorium Git.
+8. dpkg może zwrócić `deinstall ok installed` albo `purge ok installed`:
+   to żądanie przyszłej akcji, a pakiet nadal jest zainstalowany. Takie rekordy
+   chronią dane tak samo jak `install ok installed`; potwierdza to także
+   zapytanie rzeczywistego dpkg do izolowanej testowej bazy statusów.
 
 ## Przegląd screenshotów i plików projektu
 

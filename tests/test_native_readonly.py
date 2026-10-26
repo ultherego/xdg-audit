@@ -2,6 +2,7 @@
 import os
 from pathlib import Path
 import shutil
+import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -16,6 +17,18 @@ class NativeReadOnlyTests(unittest.TestCase):
     def test_real_dpkg_scan_and_mutation_refusal_preserve_fixture(self):
         with tempfile.TemporaryDirectory(prefix='xdg-native-readonly-') as temp:
             home = Path(temp)
+            db = home / 'fixture-dpkg-db'
+            db.mkdir()
+            (db / 'status').write_text(''.join(
+                f'Package: fixture-{want}\nStatus: {want} ok installed\n'
+                'Architecture: all\nVersion: 1.0\nMaintainer: Fixture\n'
+                'Description: disposable fixture\n\n' for want in ('deinstall', 'purge')))
+            native = subprocess.run(['dpkg-query', '--admindir=' + str(db), '-W',
+                '-f=${binary:Package}\t${Status}\n'], capture_output=True, text=True, check=True)
+            with patch.object(sources, '_run', return_value=(sources.Probe('dpkg', 'ok'), native.stdout)):
+                pending = sources.dpkg_packages()
+            self.assertEqual(pending.status, 'ok')
+            self.assertEqual(pending.names, {'fixture-deinstall', 'fixture-purge'})
             source = home / '.config/xdg-native-fixture'
             source.mkdir(parents=True)
             (source / 'settings').write_bytes(b'preserve\x00\xff')

@@ -16,6 +16,8 @@
   exercise the GTK disk-full error path without permitting deletion.
 - Validate complete Flatpak columns and dpkg status tuples, discarding partial
   results on malformed records.
+- Keep fully installed dpkg packages protective even when their desired
+  selection is deinstall/purge; the requested action is not proof of removal.
 
 - Fail closed on symlinked ancestor directories when inspecting manual binaries,
   AppImages, and /opt-style hints; cap large directory listings before relying
