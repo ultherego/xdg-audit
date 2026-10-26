@@ -51,6 +51,51 @@ class NativePackageHintsTests(unittest.TestCase):
         (base / "node_modules").symlink_to("/tmp", target_is_directory=True)
         self.assertEqual(sources.npm_global_packages(self.home).status, "failed")
 
+    def test_symlinked_npm_parent_is_not_traversed(self):
+        target = self.home / "external-node-modules"
+        (target / "lib/node_modules/private-package").mkdir(parents=True)
+        (self.home / ".npm-global").symlink_to(target, target_is_directory=True)
+        with patch.object(sources.subprocess, "run") as run:
+            result = sources.npm_global_packages(self.home)
+        run.assert_not_called()
+        self.assertEqual(result.status, "failed")
+        self.assertNotIn("private-package", result.names)
+
+    def test_symlinked_pipx_parent_is_not_traversed(self):
+        outside = self.home / "external-pipx"
+        (outside / "venvs/private-tool").mkdir(parents=True)
+        (self.home / ".local").symlink_to(outside, target_is_directory=True)
+        with patch.object(sources.subprocess, "run") as run:
+            result = sources.pipx_environments(self.home)
+        run.assert_not_called()
+        self.assertEqual(result.status, "failed")
+        self.assertNotIn("private-tool", result.names)
+
+    def test_symlinked_nvm_ancestor_and_version_are_rejected(self):
+        outside = self.home / "external-nvm"
+        (outside / "node").mkdir(parents=True)
+        (self.home / ".nvm").mkdir()
+        (self.home / ".nvm/versions").symlink_to(outside, target_is_directory=True)
+        self.assertEqual(sources.npm_global_packages(self.home).status, "failed")
+        (self.home / ".nvm/versions").unlink()
+        (self.home / ".nvm/versions/node").mkdir(parents=True)
+        (self.home / ".nvm/versions/node/v999").symlink_to(
+            outside, target_is_directory=True)
+        self.assertEqual(sources.npm_global_packages(self.home).status, "failed")
+
+    def test_npm_package_enumeration_is_bounded_before_inspection(self):
+        root = self.home / ".npm-global/lib/node_modules"
+        root.mkdir(parents=True)
+        seen = []
+        def many(_):
+            for idx in range(100_000):
+                seen.append(idx)
+                yield root / f"entry-{idx}"
+        with patch.object(Path, "iterdir", many):
+            _, status = sources._package_directories(root, home=self.home)
+        self.assertEqual(status, "failed")
+        self.assertEqual(len(seen), 2001)
+
     def test_npm_prevents_historical_candidate(self):
         (self.home / ".cache/opencode").mkdir()
         inv = sources.ActiveInventory(
