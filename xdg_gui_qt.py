@@ -542,6 +542,10 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
             entry=self.qtree.currentItem()
             if entry is None:
                 return
+            if entry.text(1) in ("PURGED","RESTORED","COMPLETED"):
+                QtWidgets.QMessageBox.information(self,tr('Historia'),
+                    tr('Ta operacja jest zakończona. Użyj opcji Usuń historię.'))
+                return
             self._purge_runs([entry.data(0,Role)])
 
         def purge_expired_dialog(self):
@@ -626,11 +630,16 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
                      f'{exc}\n'+tr('Istniejące pliki nie są nadpisywane.'))
 
         def restore_dialog(self):
-            runs = engine.quarantine_runs(home, engine.xdg_roots(home))
+            runs = [r for r in engine.quarantine_runs(home, engine.xdg_roots(home))
+                    if r['status'] not in ('PURGED','RESTORED','COMPLETED')]
             if not runs:
                 QtWidgets.QMessageBox.information(self, tr('Kwarantanna'), tr('Nie znaleziono operacji.'))
                 return
             chosen_row = self.qtree.currentItem() if self.content_stack.currentIndex() == 1 else None
+            if chosen_row and chosen_row.text(1) in ('PURGED','RESTORED','COMPLETED'):
+                QtWidgets.QMessageBox.information(self,tr('Historia'),
+                    tr('Ta operacja jest zakończona. Użyj opcji Usuń historię.'))
+                return
             labels = [x['run_id']+'  ('+tf('{count} przeniesionych / {total} zapisanych',count=x['moved'],total=len(x['items']))+')' for x in runs]
             if chosen_row:
                 label=next((key for key,run in zip(labels,runs) if run['run_id']==chosen_row.data(0,Role)),labels[0])
