@@ -314,16 +314,19 @@ def read_active_names(home: Path, roots: dict[str, Path]):
     output is executed. pacman -Qmq is informational (foreign is not AUR).
     """
     from xdg_sources import (ActiveInventory, pacman_packages, pacman_foreign,
-                             flatpak_apps, snap_apps, user_appimages,
-                             manual_binaries)
+                             dpkg_packages, rpm_packages, flatpak_apps, snap_apps,
+                             user_appimages, manual_binaries)
 
     installed = pacman_packages()
     foreign = pacman_foreign() if installed.status == "ok" else None
+    dpkg = dpkg_packages()
+    rpm = rpm_packages()
     flatpak = flatpak_apps()
     snap = snap_apps()
     appimage = user_appimages(home)
     manual = manual_binaries(home)
-    probes = {"pacman": installed, "flatpak": flatpak, "snap": snap,
+    probes = {"pacman": installed, "dpkg": dpkg, "rpm": rpm,
+              "flatpak": flatpak, "snap": snap,
               "appimage": appimage, "manual_binary": manual}
     if foreign is not None:
         probes["pacman_foreign"] = foreign
@@ -351,6 +354,7 @@ def read_active_names(home: Path, roots: dict[str, Path]):
         status={name: p.status for name, p in probes.items()},
         foreign=foreign.names if foreign and foreign.status == "ok" else (),
         manual=manual.names,
+        distro={"dpkg": dpkg.names, "rpm": rpm.names},
         provenance={name: p.note for name, p in probes.items() if p.note})
 
 def references(home: Path, roots: dict[str, Path], names: set[str]) -> dict[str, set[str]]:
@@ -469,6 +473,8 @@ class Item:
             normalized = reason.lower()
             evidence_types = (
                 ('installed pacman package:', 'pacman', 'strong'),
+                ('installed dpkg package:', 'dpkg', 'strong'),
+                ('installed rpm package:', 'rpm', 'strong'),
                 ('installed flatpak:', 'flatpak', 'strong'),
                 ('installed snap:', 'snap', 'strong'),
                 ('appimage found:', 'appimage', 'medium'),
@@ -587,6 +593,11 @@ def scan(home: Path, scopes: list[str], keeps: set[str], extra_aliases: dict[str
                 # event must not override a package now present under a new
                 # variant (brave-bin -> brave-browser, opera -> opera-stable).
                 installed, helpers = match_installed_packages(path.name, packages, alias_map)
+                installed_distro = {}
+                for provider, names in getattr(inventory, "distro", {}).items():
+                    matches, _aux = match_installed_packages(path.name, names, alias_map)
+                    if matches:
+                        installed_distro[provider] = matches
                 installed_flatpak = nonpacman_matches(path.name, flatpaks, alias_map)
                 installed_snap = nonpacman_matches(path.name, snaps, alias_map)
                 installed_appimage = nonpacman_matches(path.name, appimages, alias_map)
@@ -600,8 +611,8 @@ def scan(home: Path, scopes: list[str], keeps: set[str], extra_aliases: dict[str
                               if re.fullmatch(r"[A-Za-z][A-Za-z0-9_.-]{2,}", x) and shutil.which(x)]
                 if scope == "flatpak" and path.name.casefold() in flatpaks:
                     installed_flatpak.append(path.name)
-                if (installed or installed_flatpak or installed_snap or installed_appimage
-                        or found_units or found_processes or found_exec):
+                if (installed or installed_distro or installed_flatpak or installed_snap
+                        or installed_appimage or found_units or found_processes or found_exec):
                     it.state = "ACTIVE"
                     reasons = []
                     if installed:
@@ -609,6 +620,9 @@ def scan(home: Path, scopes: list[str], keeps: set[str], extra_aliases: dict[str
                         reasons += [f"installed pacman package: {pkg} (match: {pat})" +
                                     (" [foreign: AUR or local]" if pkg in foreign else "")
                                     for pkg, pat in installed[:5]]
+                    for provider, matches in sorted(installed_distro.items()):
+                        reasons += [f"installed {provider} package: {pkg} (match: {pat})"
+                                    for pkg, pat in matches[:5]]
                     if installed_flatpak:
                         reasons.append("installed Flatpak: " + ",".join(installed_flatpak[:3]))
                     if installed_snap:
@@ -1020,10 +1034,12 @@ def commit_quarantine(chosen: list[Item], roots: dict[str, Path], home: Path,
         if normalize(it.path.name) in protected_names:
             raise ValueError(f'Entry is explicitly protected in current settings: {it.path}')
         installed, _helpers = match_installed_packages(it.path.name, current_packages, alias_map)
+        live_distro = any(match_installed_packages(it.path.name, names, alias_map)[0]
+                          for names in getattr(current_inventory, "distro", {}).values())
         live_other = any(nonpacman_matches(it.path.name, source, alias_map) for source in (
             current_flatpaks, current_snaps, current_appimages, current_units,
             current_processes, getattr(current_inventory, "manual", ())))
-        if installed or live_other:
+        if installed or live_distro or live_other:
             raise ValueError(f"Application is present now; refusing quarantine: {it.path} ({installed[:3]})")
     root = quarantine_dir(home, roots)
     stamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S-%f")
@@ -1433,6 +1449,8 @@ def main(argv=None):
             "counts": {"pacman": len(packages),
                        "foreign_pacman_AUR_or_local": len(getattr(inventory, "foreign", ())),
                        "flatpak_evidence": len(flatpaks),
+                       "dpkg": len(getattr(inventory, "distro", {}).get("dpkg", ())),
+                       "rpm": len(getattr(inventory, "distro", {}).get("rpm", ())),
                        "snap": len(snaps),
                        "appimage": len(appimages),
                        "manual_binary_hints": len(getattr(inventory, "manual", ()))},
