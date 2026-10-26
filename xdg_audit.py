@@ -1101,7 +1101,20 @@ def quarantine_runs(home: Path, roots: dict[str, Path]) -> list[dict]:
                         if row.get('move_status') in ('moved', 'moving', 'restoring'):
                             view['move_status'] = 'restored'
                 reconciled.append(view)
+            states = [x.get("move_status") for x in reconciled]
+            terminal = bool(states) and all(x in ("purged", "restored") for x in states)
+            if terminal:
+                from xdg_quarantine_history import history_info
+                try:
+                    state = history_info(home, roots, run.name)["status"]
+                except (ValueError, OSError):
+                    state = "ERROR"
+            elif states and all(x == "moved" for x in states):
+                state = "QUARANTINED"
+            else:
+                state = "INCOMPLETE"
             result.append({"run_id": run.name, "items": reconciled,
+                           "status": state, "purged_at": data.get("purged_at"),
                            "moved": sum(r.get("move_status") == "moved" for r in reconciled)})
         except (ValueError, OSError, UnicodeError):
             continue
@@ -1187,6 +1200,18 @@ def expired_quarantine_runs(home: Path, roots: dict[str, Path]) -> list[str]:
     from xdg_quarantine_lifecycle import expired_run_ids
     from xdg_retention import load
     return expired_run_ids(quarantine_runs(home, roots), load(home, roots)["days"])
+
+
+def cleanup_quarantine_history(home: Path, roots: dict[str, Path], run_id: str,
+                               dry_run: bool = True) -> dict:
+    from xdg_quarantine_history import cleanup_history
+    return cleanup_history(home, roots, run_id, dry_run=dry_run)
+
+
+def expired_quarantine_history(home: Path, roots: dict[str, Path]) -> list[str]:
+    from xdg_quarantine_history import history_candidates
+    return history_candidates(home, roots,
+                              [x["run_id"] for x in quarantine_runs(home, roots)])
 
 
 def list_quarantine(home: Path, roots: dict[str, Path]):
