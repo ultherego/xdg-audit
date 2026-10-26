@@ -162,6 +162,23 @@ def user_appimages(home: Path) -> Probe:
     return Probe("appimage", "ok", frozenset(names))
 
 
+def _app_directories(base: Path) -> tuple[set[str], str]:
+    """Shallow /opt-style directory evidence; no traversal or code execution."""
+    if base.is_symlink() or not base.is_dir():
+        return set(), "absent" if not base.exists() else "unsafe"
+    names = set()
+    try:
+        for idx, entry in enumerate(base.iterdir()):
+            if idx >= 2000:
+                return set(), "failed"
+            info = entry.lstat()
+            if stat.S_ISDIR(info.st_mode) and info.st_uid in (0, os.getuid()):
+                names.add(entry.name.casefold())
+    except OSError:
+        return set(), "failed"
+    return names, "ok"
+
+
 def manual_binaries(home: Path) -> Probe:
     """Protective filename hints from bounded trusted bins, never run binaries."""
     names = set()
@@ -169,6 +186,14 @@ def manual_binaries(home: Path) -> Probe:
     for folder in (home / ".local/bin", home / "bin", home / "Applications",
                    Path("/usr/local/bin")):
         found, state = _safe_direct_children(folder, require_exec=True)
+        names.update(found)
+        if state in ("failed", "unsafe"):
+            problems.append(str(folder))
+    # An application copied to /opt or ~/.local/opt does not necessarily
+    # expose a bin symlink or desktop launcher. Top-level directory names
+    # are hints only; they must NEVER become ownership/deletion evidence.
+    for folder in (Path("/opt"), home / ".local/opt"):
+        found, state = _app_directories(folder)
         names.update(found)
         if state in ("failed", "unsafe"):
             problems.append(str(folder))
