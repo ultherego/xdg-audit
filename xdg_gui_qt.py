@@ -399,6 +399,9 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
             qpolkit=QtWidgets.QPushButton(tr('Test Polkit…'))
             qpolkit.clicked.connect(self.polkit_selftest_dialog)
             qb.addWidget(qpolkit)
+            qfixture=QtWidgets.QPushButton(tr('Test uprawnień ~/.config…'))
+            qfixture.clicked.connect(self.config_access_selftest_dialog)
+            qb.addWidget(qfixture)
             qexpired_history=QtWidgets.QPushButton(tr('Wyczyść całą zakończoną historię…'))
             qexpired_history.clicked.connect(self.cleanup_all_history_dialog)
             qb.addWidget(qexpired_history)
@@ -538,46 +541,69 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
         def polkit_selftest_dialog(self):
             from xdg_polkit import status as polkit_status, run_test
             if not polkit_status()['ready']:
-                QtWidgets.QMessageBox.warning(
-                    self,tr('Test Polkit'),
-                    tr('Test Polkit wymaga instalacji systemowego helpera. Instrukcja: packaging/polkit/README.md'))
+                QtWidgets.QMessageBox.warning(self,tr('Test Polkit'),
+                    tr('pkexec lub systemowy /usr/bin/id jest niedostępny.'))
                 return
             if QtWidgets.QMessageBox.question(self,tr('Test Polkit'),
-                    tr('Poproszę system Polkit o autoryzację i utworzę odizolowany katalog testowy, bez dotykania danych kwarantanny.'),
+                    tr('Systemowy Polkit poprosi o autoryzację uruchomienia /usr/bin/id -u. Nic nie zostanie zapisane ani usunięte. Nie wymaga instalacji helpera.'),
                     QtWidgets.QMessageBox.StandardButton.Yes |
                     QtWidgets.QMessageBox.StandardButton.No,
-                    QtWidgets.QMessageBox.StandardButton.No) != QtWidgets.QMessageBox.StandardButton.Yes:
-                return
-            token,ok=QtWidgets.QInputDialog.getText(self,tr('Test Polkit'),tr('Wpisz TEST:'))
-            if not ok or token!='TEST':return
-
-            def created(success, result):
-                if not success:
+                    QtWidgets.QMessageBox.StandardButton.No) != QtWidgets.QMessageBox.StandardButton.Yes:return
+            token,ok=QtWidgets.QInputDialog.getText(self,tr('Test Polkit'),tr('Wpisz AUTH:'))
+            if not ok or token!='AUTH':return
+            def done(success,result):
+                if success:
+                    QtWidgets.QMessageBox.information(self,tr('Test Polkit'),
+                        tr('Polkit potwierdził uprawnienia administratora. Uruchomiono tylko odczyt UID=0; żadne pliki nie zostały zmienione.'))
+                else:
                     QtWidgets.QMessageBox.warning(self,tr('Test Polkit'),str(result))
-                    return
-                if QtWidgets.QMessageBox.question(self,tr('Usuń katalog testowy Polkit'),
-                        tr('Polkit utworzył katalog testowy. Usunę tylko ten katalog, nigdy kwarantannę użytkownika.')+
-                        '\n'+result['fixture'],
-                        QtWidgets.QMessageBox.StandardButton.Yes |
-                        QtWidgets.QMessageBox.StandardButton.No,
-                        QtWidgets.QMessageBox.StandardButton.No) != QtWidgets.QMessageBox.StandardButton.Yes:
-                    return
-                token,ok=QtWidgets.QInputDialog.getText(
-                    self,tr('Usuń katalog testowy Polkit'),tr('Wpisz DELETE TEST:'))
-                if not ok or token!='DELETE TEST':return
-                def deleted(success, outcome):
-                    if success:
-                        QtWidgets.QMessageBox.information(self,tr('Test Polkit'),
-                            tr('Test Polkit zakończony: usunięto wyłącznie odizolowany katalog testowy.')+
-                            '\n'+outcome['fixture'])
-                    else:
-                        QtWidgets.QMessageBox.warning(self,tr('Test Polkit'),str(outcome))
-                self._quarantine_job(
-                    lambda:run_test('test-delete',graphical=True),
-                    deleted,'Uwierzytelnianie Polkit…')
             self._quarantine_job(
-                lambda:run_test('test-create',graphical=True),
-                created,'Uwierzytelnianie Polkit…')
+                lambda:run_test('test-auth',graphical=True),
+                done,'Uwierzytelnianie Polkit…')
+
+        def config_access_selftest_dialog(self):
+            from xdg_config_selftest import create, diagnose, repair, cleanup
+            if QtWidgets.QMessageBox.question(self,tr('Test uprawnień ~/.config'),
+                    tr('Utworzę ~/.config/xdg-audit-polkit-test z katalogiem 111 i plikiem 000. Nie zmienię innych danych.'),
+                    QtWidgets.QMessageBox.StandardButton.Yes |
+                    QtWidgets.QMessageBox.StandardButton.No,
+                    QtWidgets.QMessageBox.StandardButton.No) != QtWidgets.QMessageBox.StandardButton.Yes:return
+            token,ok=QtWidgets.QInputDialog.getText(self,tr('Test uprawnień ~/.config'),tr('Wpisz TEST:'))
+            if not ok or token!='TEST':return
+            def after_create(success,result):
+                if not success:
+                    QtWidgets.QMessageBox.warning(self,tr('Test uprawnień ~/.config'),str(result))
+                    return
+                details=diagnose(home)
+                description=(tr('Utworzono testowe pliki użytkownika:')+'\n'+
+                    result['restricted_directory']+'\n'+
+                    tf('Katalog: {mode}',mode=details['directory_mode'])+', '+
+                    tf('Plik: {mode}',mode=details['file_mode'])+'\n'+
+                    tr('Naprawię odczyt tylko tych dwóch obiektów, bez Polkit i bez roota.'))
+                if QtWidgets.QMessageBox.question(self,tr('Naprawa testowych uprawnień'),description,
+                    QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No,
+                    QtWidgets.QMessageBox.StandardButton.No) != QtWidgets.QMessageBox.StandardButton.Yes:return
+                token,ok=QtWidgets.QInputDialog.getText(self,tr('Naprawa testowych uprawnień'),tr('Wpisz ACCESS TEST:'))
+                if not ok or token!='ACCESS TEST':return
+                def after_repair(repaired,outcome):
+                    if not repaired:
+                        QtWidgets.QMessageBox.warning(self,tr('Test uprawnień ~/.config'),str(outcome))
+                        return
+                    if QtWidgets.QMessageBox.question(self,tr('Usuń katalog testowy'),
+                        tr('Zakończono naprawę. Zatwierdź usunięcie wyłącznie katalogu testowego.'),
+                        QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No,
+                        QtWidgets.QMessageBox.StandardButton.No) != QtWidgets.QMessageBox.StandardButton.Yes:return
+                    token,ok=QtWidgets.QInputDialog.getText(self,tr('Usuń katalog testowy'),tr('Wpisz DELETE TEST:'))
+                    if not ok or token!='DELETE TEST':return
+                    def after_cleanup(ok,result):
+                        if ok:
+                            QtWidgets.QMessageBox.information(self,tr('Test uprawnień ~/.config'),
+                                tr('Usunięto wyłącznie katalog testowy ~/.config/xdg-audit-polkit-test.'))
+                        else:
+                            QtWidgets.QMessageBox.warning(self,tr('Test uprawnień ~/.config'),str(result))
+                    self._quarantine_job(lambda:cleanup(home),after_cleanup,'Usuwanie katalogu testowego…')
+                self._quarantine_job(lambda:repair(home),after_repair,'Test naprawy uprawnień…')
+            self._quarantine_job(lambda:create(home),after_create,'Tworzenie plików testowych…')
 
         def cleanup_history_dialog(self):
             selected=self.qtree.currentItem()
