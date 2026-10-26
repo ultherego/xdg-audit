@@ -2,6 +2,11 @@
 
 ## 1.7.0-rc2 (unreleased)
 
+- Read-only npm-global and pipx directory-name evidence protects applications
+  installed outside pacman. Missing/unsafe source paths never authorize removal.
+- Keep canonical Flatpak application IDs separate from display names and report
+  the number of unique installed Flatpak IDs without double-counting aliases.
+
 - Introduce health-aware installed-application providers: pacman and foreign
   packages (AUR or local), Flatpak, Snap, AppImage, manual binaries and
   shallow /opt installation hints. Failed probes never imply uninstallation.
