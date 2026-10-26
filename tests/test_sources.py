@@ -30,6 +30,31 @@ class SourceProviderTests(unittest.TestCase):
         self.assertFalse(empty.names)
         self.assertEqual(error.status, "failed")
 
+    def test_dpkg_rejects_malformed_status_without_partial_results(self):
+        for output in (
+            "safe-package\\tinstall ok installed\\n"
+            "broken-package\\tgarbled\\n",
+            "safe-package\\tinstall ok installed\\n"
+            "broken-package\\tinstall invalid installed\\n",
+            "safe-package\\tinstall ok installed\\n"
+            "broken-package\\tinstall ok installed extra\\n",
+        ):
+            with self.subTest(output=output), patch.object(sources, "_run", return_value=(
+                sources.Probe("dpkg", "ok"), output)):
+                probe = sources.dpkg_packages()
+            self.assertEqual(probe.status, "parse_error")
+            self.assertFalse(probe.names)
+
+    def test_dpkg_installed_and_residual_config_are_distinct(self):
+        output = ("active:amd64\\tinstall ok installed\\n"
+                  "retired\\tdeinstall ok config-files\\n"
+                  "waiting\\tinstall ok unpacked\\n")
+        with patch.object(sources, "_run", return_value=(
+            sources.Probe("dpkg", "ok"), output)):
+            probe = sources.dpkg_packages()
+        self.assertEqual(probe.status, "ok")
+        self.assertEqual(probe.names, {"active", "active:amd64"})
+
     def test_flatpak_lists_apps_not_runtimes(self):
         output = ("org.mozilla.Firefox\tFirefox\tuser\n"
                   "com.valvesoftware.Steam\tSteam\tsystem\n")
