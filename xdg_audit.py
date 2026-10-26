@@ -1219,6 +1219,12 @@ def expired_quarantine_history(home: Path, roots: dict[str, Path]) -> list[str]:
                               [x["run_id"] for x in quarantine_runs(home, roots)])
 
 
+def adopt_quarantine_inventory(home: Path, roots: dict[str, Path], run_id: str) -> dict:
+    """User-confirmed snapshot of current contents after access recovery."""
+    from xdg_quarantine_lifecycle import adopt_legacy_run
+    return adopt_legacy_run(home, roots, run_id, nested_mounts_status)
+
+
 def diagnose_quarantine_access(home: Path, roots: dict[str, Path], run_id: str) -> dict:
     from xdg_access import diagnose_access
     return diagnose_access(home, roots, run_id)
