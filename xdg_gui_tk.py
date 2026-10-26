@@ -844,7 +844,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                     return
                 issue=issues[0]
                 msg=(tf('Użytkownik: {user}',user=report['identity']['user'])+
-                     '\n'+tf('Polkit dostępny: {state}',
+                     '\n'+tf('pkexec zainstalowany: {state}',
                                state=tr('tak') if report['identity']['pkexec_installed'] else tr('nie'))+
                      '\n'+tf('Problem: {code}',code=issue['code'])+
                      '\n'+issue['path']+'\n'+
