@@ -1079,6 +1079,9 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                     result=engine.commit_quarantine(selected,self.roots,home,allow_uncertain=bool(uncertain),emit=output.append,extra_aliases=aliases,keep_names=args.keep)
                     self.status.set_text(tf('Kwarantanna: {run_id}, przeniesiono {count}.',run_id=result['run_id'],count=entries_count(len(result['moved']),_language)))
                     self.start_scan()
+                    if any('purge inventory unavailable' in line for line in output):
+                        self._quarantine_notice(
+                            tr('Pliki przeniesiono, ale nie można było sprawdzić całej zawartości. Przed PURGE użyj „Sprawdź dostęp…”, następnie osobno „Zatwierdź stan…” (ADOPT).'))
                 except (ValueError,OSError,SystemExit) as exc:self.status.set_text(tf('Błąd przenoszenia: {error}',error=exc))
             def confirm_move():self.prompt(tr('Ostateczne potwierdzenie'),description+'\n'+tr('Zamknij powiązane aplikacje.'), 'MOVE', commit)
             if uncertain:
