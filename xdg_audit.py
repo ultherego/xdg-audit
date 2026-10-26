@@ -1328,6 +1328,8 @@ def main(argv=None):
     parser.add_argument("--home", type=Path, default=Path.home(), help="Override HOME (useful for testing)")
     parser.add_argument("--gui", action="store_true", help="Launch native GUI using available system toolkit (GTK/Qt/Tk)")
     parser.add_argument("--theme-info", action="store_true", help="Print detected desktop theme source (read-only)")
+    parser.add_argument("--installed-sources", action="store_true",
+                        help="Show read-only installed-application provider health and package counts")
     parser.add_argument("--polkit-test-status", action="store_true",
                         help="Check installed system Polkit helper (read-only)")
     parser.add_argument("--polkit-test-create", action="store_true",
@@ -1385,6 +1387,9 @@ def main(argv=None):
         parser.error("HOME must be an existing directory")
     if args.gui and args.theme_info:
         parser.error("--gui and --theme-info are mutually exclusive")
+    if args.installed_sources and (args.gui or args.remove or args.json or args.compare or
+                                  args.select or args.repair_target):
+        parser.error("--installed-sources is a standalone read-only command")
     if args.gui and (args.json or args.compare or args.select or args.list_quarantine or args.restore):
         parser.error("--gui cannot be combined with --json/--compare/--select/--list-quarantine/--restore")
     if args.remove and args.json:
@@ -1416,6 +1421,23 @@ def main(argv=None):
     if lifecycle and (args.gui or args.remove or args.json or args.compare or args.select):
         parser.error("Lifecycle commands cannot be combined with GUI, scan or move")
     roots = xdg_roots(home)
+    if args.installed_sources:
+        if any(bool(x) for x in operations) or args.theme_info:
+            parser.error("--installed-sources cannot be combined with lifecycle operations")
+        inventory = read_active_names(home, roots)
+        packages, flatpaks, snaps, appimages, _units, _processes, _desktops, _active = inventory
+        print(json.dumps({
+            "health": dict(getattr(inventory, "status", {})),
+            "counts": {"pacman": len(packages),
+                       "foreign_pacman_AUR_or_local": len(getattr(inventory, "foreign", ())),
+                       "flatpak_evidence": len(flatpaks),
+                       "snap": len(snaps),
+                       "appimage": len(appimages),
+                       "manual_binary_hints": len(getattr(inventory, "manual", ()))},
+            "notes": dict(getattr(inventory, "provenance", {})),
+            "warning": "Provider health and installed hints are not proof that files can be deleted"
+        }, ensure_ascii=False, indent=2))
+        return 0
     if lifecycle:
         if (args.polkit_test_status or args.polkit_test_create or args.polkit_test_delete
                 or args.polkit_test_auth or args.polkit_test_repair):
