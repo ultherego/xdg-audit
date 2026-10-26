@@ -830,7 +830,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                     home,engine.xdg_roots(home),run_id),
                 done,'Weryfikacja kwarantanny')
 
-        def access_diagnostics(self,run_id=None, resume_purge=False):
+        def access_diagnostics(self,run_id=None, resume_purge=False, repaired=False):
             if run_id is None:
                 selected=self.qtree.selection()
                 if not selected:return
@@ -841,7 +841,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                     return
                 issues=report['issues']
                 if not issues:
-                    if resume_purge:
+                    if resume_purge and (repaired or report['unsealed']):
                         if report['unsealed']:
                             self.adopt_inventory(run_id, resume_purge=True)
                         else:
@@ -881,7 +881,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                     if report['unsealed']:
                         note+='\n'+tr('Brak kompletnego spisu plików. Wymagane osobne zatwierdzenie aktualnej zawartości (ADOPT).')
                     if resume_purge:
-                        self.access_diagnostics(run_id, resume_purge=True)
+                        self.access_diagnostics(run_id, resume_purge=True, repaired=True)
                     else:
                         messagebox.showinfo(tr('Napraw dostęp'),note,parent=root)
                 self._quarantine_job(
