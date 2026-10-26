@@ -71,6 +71,28 @@ class AccessTests(unittest.TestCase):
         self.assertEqual(self.row["move_status"], "moving")
         self.assertNotIn("tree_inventory", json.loads(self.manifest.read_text())["items"][0])
 
+    def test_full_recovery_keeps_adopt_and_purge_as_separate_operations(self):
+        self.assertTrue(diagnose_access(self.home, self.roots, self.run_id)["unsealed"])
+        relative="cache/Shelly/lib32-gstreamer/pkg"
+        repair_owner_directory(self.home, self.roots, self.run_id, relative)
+        # ACCESS alone does not invent SHA256 inventory or delete anything.
+        self.assertTrue(self.pkg.exists())
+        self.assertNotIn("tree_inventory", json.loads(self.manifest.read_text())["items"][0])
+        # ADOPT is a separate action gated by its own user confirmation in CLI/GUI.
+        result = audit.adopt_quarantine_inventory(self.home, self.roots, self.run_id)
+        self.assertEqual(result["adopted"], 1)
+        self.assertTrue(self.tree.exists())
+        # PURGE remains a third distinct action with the original preflight.
+        preview = audit.purge_quarantine_run(
+            self.home, self.roots, self.run_id, dry_run=True, emit=lambda *_:None)
+        self.assertTrue(preview["dry_run"])
+        self.assertTrue(self.tree.exists())
+        deleted = audit.purge_quarantine_run(
+            self.home, self.roots, self.run_id, dry_run=False, emit=lambda *_:None)
+        self.assertEqual(deleted["objects"], 1)
+        self.assertFalse(self.tree.exists())
+        self.assertTrue(self.manifest.exists())
+
     def test_repair_refuses_arbitrary_path(self):
         outside = self.home / "outside"
         outside.mkdir()
