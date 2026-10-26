@@ -722,7 +722,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
             def completed(ok, outcome):
                 if not ok:
                     QtWidgets.QMessageBox.critical(self,tr('Zablokowano PURGE'),str(outcome))
-                    if isinstance(outcome,PermissionError) and len(run_ids)==1:
+                    if len(run_ids)==1 and engine.quarantine_access_recoverable_error(outcome):
                         self.access_diagnostics_dialog(run_ids[0], resume_purge=True)
                     return
                 description='\\n'.join(
