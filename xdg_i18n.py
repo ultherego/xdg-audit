@@ -7,6 +7,17 @@ from __future__ import annotations
 
 LANGUAGES = {'pl': 'Polski', 'en': 'English'}
 EN = {
+    "Test Polkit…": "Test Polkit…",
+    "Test Polkit": "Polkit test",
+    "Test Polkit wymaga instalacji systemowego helpera. Instrukcja: packaging/polkit/README.md": "The Polkit test needs an installed system helper. Instructions: packaging/polkit/README.md",
+    "Poproszę system Polkit o autoryzację i utworzę odizolowany katalog testowy, bez dotykania danych kwarantanny.": "The system's Polkit agent will request authentication to create an isolated test folder, without touching quarantined data.",
+    "Uwierzytelnianie Polkit…": "Authenticating with Polkit…",
+    "Usuń katalog testowy Polkit": "Delete Polkit test folder",
+    "Polkit utworzył katalog testowy. Usunę tylko ten katalog, nigdy kwarantannę użytkownika.": "Polkit created the test folder. Only that exact test folder will be deleted, never user quarantine data.",
+    "Wpisz TEST:": "Type TEST:",
+    "Wpisz DELETE TEST:": "Type DELETE TEST:",
+    "Test Polkit zakończony: usunięto wyłącznie odizolowany katalog testowy.": "Polkit test completed: only the isolated test folder was removed.",
+    "Błąd testu Polkit: {error}": "Polkit test failed: {error}",
     "pkexec zainstalowany: {state}": "pkexec installed: {state}",
     "tak": "yes",
     "nie": "no",
