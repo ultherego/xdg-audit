@@ -7,6 +7,25 @@ from __future__ import annotations
 
 LANGUAGES = {'pl': 'Polski', 'en': 'English'}
 EN = {
+    'Retencja: usuń wygasłe operacje': 'Retention: clean up expired runs',
+    'Usuń wygasłe…': 'Purge expired…',
+    'Usuń trwale…': 'Purge permanently…',
+    'Zablokowano PURGE: {error}': 'Purge blocked: {error}',
+    'Trwale usunięto obiektów: ': 'Permanently purged objects: ',
+    'Trwałe usunięcie': 'Permanent deletion',
+    'Nie można cofnąć tej operacji.': 'This action cannot be undone.',
+    'Brak wygasłych kwarantann.': 'No expired quarantine runs.',
+    'Błąd retencji: {error}': 'Retention error: {error}',
+    'Usuń trwale wybraną…': 'Purge selected…',
+    'Nie znaleziono wygasłych kwarantann.': 'No expired quarantine runs found.',
+    'Zablokowano PURGE': 'Purge blocked',
+    'Trwałe usuwanie': 'Permanent deletion',
+    'Tej operacji nie da się cofnąć. Kontynuować?': 'This action cannot be undone. Continue?',
+    'Potwierdzenie PURGE': 'Purge confirmation',
+    'Wpisz PURGE:': 'Type PURGE:',
+    'Usunięto obiektów: ': 'Purged objects: ',
+    'Nie ma wygasłych operacji.': 'No expired runs.',
+    'Ta operacja jest nieodwracalna. Kontynuować?': 'This action is irreversible. Continue?',
     'Dane aplikacji': 'Application data', 'Anuluj skan': 'Cancel scan',
     'Audyt nie zmienia danych. Kwarantanna wymaga MOVE; można ją przywrócić.':
       'Auditing is read-only. Quarantine requires MOVE and is reversible.',
