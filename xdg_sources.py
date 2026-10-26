@@ -30,13 +30,15 @@ class Probe:
 class ActiveInventory(tuple):
     """Backward-compatible 8-field tuple carrying provider health metadata."""
 
-    def __new__(cls, values, *, status=None, foreign=(), manual=(), provenance=None):
+    def __new__(cls, values, *, status=None, foreign=(), manual=(),
+                distro=None, provenance=None):
         obj = super().__new__(cls, values)
         if len(obj) != 8:
             raise ValueError("Invalid installed-application inventory shape")
         obj.status = dict(status or {})
         obj.foreign = frozenset(foreign)
         obj.manual = frozenset(manual)
+        obj.distro = {name: frozenset(values) for name, values in (distro or {}).items()}
         obj.provenance = dict(provenance or {})
         return obj
 
