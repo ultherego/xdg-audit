@@ -195,6 +195,36 @@ def run(synthetic_inventory: bool) -> None:
             check(snapshot(protected) == expected_protected, 'protected sentinel changed')
             print('PASS fail-closed: missing inventory denied; protected fixture untouched')
 
+            # Full second cycle: explicitly test irreversible purge on isolated
+            # fixtures. Verify the protected tree and unrelated data survive.
+            entries, _, _ = audit.scan(home, ['config', 'data'], set(), {}, True)
+            selected = [next(item for item in entries if item.path == path)
+                        for path in main_paths]
+            purged = audit.commit_quarantine(selected, roots, home, emit=log_messages.append)
+            check(len(purged['moved']) == 2, 'purge cycle quarantine failed')
+            before = Path(purged['manifest']).read_bytes()
+            preview = audit.purge_quarantine_run(home, roots, purged['run_id'], dry_run=True)
+            check(preview['objects'] == 2, 'purge preview expected two entries')
+            check(before == Path(purged['manifest']).read_bytes(),
+                  'dry run unexpectedly modified journal')
+            check(all(not path.exists() for path in main_paths),
+                  'source still exists during purge preview')
+            finished = audit.purge_quarantine_run(home, roots, purged['run_id'], dry_run=False)
+            check(finished['objects'] == 2, 'purge returned wrong object count')
+            payload = json.loads(Path(purged['manifest']).read_text())
+            check(all(row['move_status'] == 'purged' for row in payload['items']),
+                  'purge journal is not a tombstone')
+            check(all(not Path(row['destination']).exists() for row in payload['items']),
+                  'purge left quarantined objects')
+            check(snapshot(protected) == expected_protected,
+                  'purge damaged protected data')
+            check((home / 'preserved-collision' / 'do-not-overwrite').read_text()
+                  == 'unrelated data', 'purge damaged unrelated data')
+            print('PASS purge: dry-run immutable, 2 objects deleted, journal retained, protected untouched')
+            again = audit.purge_quarantine_run(home, roots, purged['run_id'], dry_run=False)
+            check(again['objects'] == 0, 'repeated purge should do nothing')
+            print('PASS purge idempotence: no deletion outside run')
+
     print('PASS cleanup: isolated temporary HOME removed automatically')
 
 
