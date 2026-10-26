@@ -91,8 +91,11 @@ def main() -> None:
                                w.get_label() == "Usuń trwale…"), None)
                 if button is None:
                     raise AssertionError("PURGE button not found")
+                print("DEBUG button",button.get_sensitive(),button.get_visible(),
+                      button.get_mapped(),flush=True)
                 start = time.monotonic()
                 button.emit("clicked")
+                print("DEBUG clicked",preview_started.is_set(),flush=True)
                 if time.monotonic() - start > 0.3:
                     raise AssertionError("PURGE click blocked GTK event loop")
             except BaseException as exc:
@@ -103,6 +106,8 @@ def main() -> None:
         def check_progress():
             try:
                 if not preview_started.is_set():
+                    print("DEBUG windows:",[w.get_title() for w in open_windows()],
+                          "ticks:",len(ticks),flush=True)
                     raise AssertionError("PURGE worker never started")
                 if preview_done.is_set():
                     raise AssertionError("Preview finished too quickly for test")
