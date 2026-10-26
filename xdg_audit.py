@@ -315,7 +315,8 @@ def read_active_names(home: Path, roots: dict[str, Path]):
     """
     from xdg_sources import (ActiveInventory, pacman_packages, pacman_foreign,
                              dpkg_packages, rpm_packages, flatpak_apps, snap_apps,
-                             user_appimages, manual_binaries)
+                             user_appimages, manual_binaries,
+                             npm_global_packages, pipx_environments)
 
     installed = pacman_packages()
     foreign = pacman_foreign() if installed.status == "ok" else None
@@ -325,7 +326,10 @@ def read_active_names(home: Path, roots: dict[str, Path]):
     snap = snap_apps()
     appimage = user_appimages(home)
     manual = manual_binaries(home)
+    npm = npm_global_packages(home)
+    pipx = pipx_environments(home)
     probes = {"pacman": installed, "dpkg": dpkg, "rpm": rpm,
+              "npm_global": npm, "pipx": pipx,
               "flatpak": flatpak, "snap": snap,
               "appimage": appimage, "manual_binary": manual}
     if foreign is not None:
@@ -354,6 +358,8 @@ def read_active_names(home: Path, roots: dict[str, Path]):
         status={name: p.status for name, p in probes.items()},
         foreign=foreign.names if foreign and foreign.status == "ok" else (),
         manual=manual.names,
+        npm_global=npm.names, pipx=pipx.names,
+        flatpak_ids=flatpak.app_ids if flatpak.status == "ok" else (),
         distro={"dpkg": dpkg.names, "rpm": rpm.names},
         provenance={name: p.note for name, p in probes.items() if p.note})
 
@@ -480,6 +486,8 @@ class Item:
                 ('installed snap:', 'snap', 'strong'),
                 ('appimage found:', 'appimage', 'medium'),
                 ('manual executable found', 'manual_binary', 'weak'),
+                ('npm global directory found', 'npm_global', 'weak'),
+                ('pipx environment found', 'pipx', 'weak'),
                 ('installed-app inventory failed:', 'source_health', 'weak'),
                 ('executable on path:', 'executable', 'medium'),
                 ('running executable:', 'process', 'medium'),
@@ -610,7 +618,10 @@ def scan(home: Path, scopes: list[str], keeps: set[str], extra_aliases: dict[str
                     # executables cannot prove that the *Flatpak app ID* is
                     # installed. Preserve REVIEW for old/unverified data.
                     flatpak_health = (health or {}).get("flatpak")
-                    if path.name.casefold() in flatpaks and flatpak_health in (None, "ok"):
+                    flatpak_ids = getattr(inventory, "flatpak_ids", None)
+                    if flatpak_ids is None:  # legacy unit-test inventory tuple
+                        flatpak_ids = flatpaks
+                    if path.name.casefold() in flatpak_ids and flatpak_health in (None, "ok"):
                         it.state = "ACTIVE"
                         it.reasons.append("installed Flatpak: " + path.name)
                     else:
@@ -637,6 +648,10 @@ def scan(home: Path, scopes: list[str], keeps: set[str], extra_aliases: dict[str
                 installed_appimage = nonpacman_matches(path.name, appimages, alias_map)
                 manual_matches = nonpacman_matches(
                     path.name, getattr(inventory, "manual", ()), alias_map)
+                npm_matches = nonpacman_matches(
+                    path.name, getattr(inventory, "npm_global", ()), alias_map)
+                pipx_matches = nonpacman_matches(
+                    path.name, getattr(inventory, "pipx", ()), alias_map)
                 # Generic units cannot establish application ownership.
                 generic_units = {"app", "session", "service", "scope", "slice",
                                  "timer", "target", "socket", "path"}
@@ -676,7 +691,7 @@ def scan(home: Path, scopes: list[str], keeps: set[str], extra_aliases: dict[str
                     it.reasons = reasons
                 else:
                     removed = [removed_normal[k] for k in keys if k in removed_normal]
-                    if helpers or found_desktops or manual_matches:
+                    if helpers or found_desktops or manual_matches or npm_matches or pipx_matches:
                         it.state = "REVIEW"
                         if helpers:
                             it.reasons.append("auxiliary installed package, not proof of app: "
@@ -686,6 +701,12 @@ def scan(home: Path, scopes: list[str], keeps: set[str], extra_aliases: dict[str
                         if manual_matches:
                             it.reasons.append("manual executable found (protective hint only): " +
                                               ",".join(manual_matches[:3]))
+                        if npm_matches:
+                            it.reasons.append("npm global directory found (protective hint only): " +
+                                              ",".join(npm_matches[:3]))
+                        if pipx_matches:
+                            it.reasons.append("pipx environment found (protective hint only): " +
+                                              ",".join(pipx_matches[:3]))
                         if removed:
                             it.reasons.append("historical removed package: " + ",".join(sorted(set(removed))[:4]))
                     elif removed:
@@ -1072,7 +1093,9 @@ def commit_quarantine(chosen: list[Item], roots: dict[str, Path], home: Path,
                           for names in getattr(current_inventory, "distro", {}).values())
         live_other = any(nonpacman_matches(it.path.name, source, alias_map) for source in (
             current_flatpaks, current_snaps, current_appimages, current_units,
-            current_processes, getattr(current_inventory, "manual", ())))
+            current_processes, getattr(current_inventory, "manual", ()),
+            getattr(current_inventory, "npm_global", ()),
+            getattr(current_inventory, "pipx", ())))
         if installed or live_distro or live_other:
             raise ValueError(f"Application is present now; refusing quarantine: {it.path} ({installed[:3]})")
     root = quarantine_dir(home, roots)
@@ -1483,6 +1506,10 @@ def main(argv=None):
             "counts": {"pacman": len(packages),
                        "foreign_pacman_AUR_or_local": len(getattr(inventory, "foreign", ())),
                        "flatpak_evidence": len(flatpaks),
+                       "flatpak_app_ids": (len(inventory.flatpak_ids) if
+                          getattr(inventory, "flatpak_ids", None) is not None else None),
+                       "npm_global_hints": len(getattr(inventory, "npm_global", ())),
+                       "pipx_hints": len(getattr(inventory, "pipx", ())),
                        "dpkg": len(getattr(inventory, "distro", {}).get("dpkg", ())),
                        "rpm": len(getattr(inventory, "distro", {}).get("rpm", ())),
                        "snap": len(snaps),
