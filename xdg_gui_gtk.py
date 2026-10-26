@@ -1328,7 +1328,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                     done,'Weryfikacja kwarantanny')
             self.prompt(tr('Zatwierdź aktualny stan'),explanation,'ADOPT',commit)
 
-        def access_diagnostics(self, run_id, resume_purge=False):
+        def access_diagnostics(self, run_id, resume_purge=False, repaired=False):
             """Investigate one run without granting elevated privileges."""
             def ready(ok, result):
                 if not ok:
@@ -1339,7 +1339,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                 polkit_text=tf('pkexec zainstalowany: {state}',
                                state=tr('tak') if result['identity']['pkexec_installed'] else tr('nie'))
                 if not issues:
-                    if resume_purge:
+                    if resume_purge and (repaired or result['unsealed']):
                         if result['unsealed']:
                             self.adopt_inventory(run_id, resume_purge=True)
                         else:
@@ -1381,7 +1381,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                             info+='\n'+tr('Brak kompletnego spisu plików. Wymagane osobne zatwierdzenie aktualnej zawartości (ADOPT).')
                         if resume_purge:
                             # Continue diagnosis until all inaccessible items are resolved.
-                            self.access_diagnostics(run_id, resume_purge=True)
+                            self.access_diagnostics(run_id, resume_purge=True, repaired=True)
                         else:
                             self._quarantine_notice(info)
                     self._quarantine_job(operation,completed,'Naprawianie dostępu…')
