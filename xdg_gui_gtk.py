@@ -1225,10 +1225,38 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                 self.status.set_text(tr('Operacja kwarantanny jest już wykonywana.'))
                 return
             self._quarantine_job_busy=True
+            self._quarantine_progress=None
             self.status.set_text(tr(activity))
+
+            def show_progress():
+                # Quick operations never need an extra modal. For large trees,
+                # show immediate visible progress rather than an inert button.
+                if not self._quarantine_job_busy:
+                    return False
+                dialog=Gtk.Window(title=tr('Weryfikacja kwarantanny'),
+                                  transient_for=self.win,modal=True)
+                dialog.set_default_size(390,120)
+                dialog.set_deletable(False)
+                pane=Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL,spacing=12)
+                for side in ('top','bottom','start','end'):
+                    getattr(pane,'set_margin_'+side)(18)
+                spinner=Gtk.Spinner()
+                spinner.start()
+                append(pane,spinner)
+                append(pane,label(tr(activity)),True)
+                set_child(dialog,pane)
+                self._quarantine_progress=dialog
+                dialog.present() if GTK4 else dialog.show_all()
+                return False
+
+            GLib.timeout_add(200,show_progress)
 
             def finish(ok, outcome):
                 self._quarantine_job_busy=False
+                dialog=self._quarantine_progress
+                self._quarantine_progress=None
+                if dialog is not None:
+                    dialog.destroy()
                 try:
                     completed(ok, outcome)
                 except Exception as exc:
