@@ -2,6 +2,9 @@
 
 ## 1.7.0-rc2 (unreleased)
 
+- Fail closed on symlinked ancestor directories when inspecting manual binaries,
+  AppImages, and /opt-style hints; cap large directory listings before relying
+  on their evidence, without running any installed application.
 - Read-only npm-global and pipx directory-name evidence protects applications
   installed outside pacman. Missing/unsafe source paths never authorize removal.
 - Keep canonical Flatpak application IDs separate from display names and report
