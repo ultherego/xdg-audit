@@ -680,6 +680,10 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
         def restore(self):
             row=self.qtree.selection()
             if not row:return
+            if self.qtree.set(row[0], 'status') in ('PURGED','RESTORED','COMPLETED'):
+                messagebox.showinfo(tr('Historia'),
+                    tr('Ta operacja jest zakończona. Użyj opcji Usuń historię.'),parent=root)
+                return
             run_id=row[0]
             if not messagebox.askyesno(tr('Przywracanie'),tf('Przywrócić dane z operacji {run_id}?',run_id=run_id)+'\n'+tr('Istniejące pliki nie zostaną nadpisane.'),parent=root):return
             if simpledialog.askstring(tr('Potwierdzenie'),tr('Wpisz RESTORE:'),parent=root)!='RESTORE':return
@@ -758,6 +762,10 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
         def purge_quarantine(self):
             selected=self.qtree.selection()
             if selected:
+                if self.qtree.set(selected[0], 'status') in ('PURGED','RESTORED','COMPLETED'):
+                    messagebox.showinfo(tr('Historia'),
+                        tr('Ta operacja jest zakończona. Użyj opcji Usuń historię.'),parent=root)
+                    return
                 self._purge_runs([selected[0]])
 
         def _purge_runs(self,run_ids):
