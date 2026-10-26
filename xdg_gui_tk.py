@@ -261,6 +261,8 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
             ttk.Button(qbuttons,text=tr('Usuń historię…'),command=self.cleanup_history).pack(side='right',padx=6)
             ttk.Button(qbuttons,text=tr('Test Polkit…'),
                        command=self.polkit_selftest).pack(side='right',padx=6)
+            ttk.Button(qbuttons,text=tr('Test uprawnień ~/.config…'),
+                       command=self.config_access_selftest).pack(side='right',padx=6)
             ttk.Button(qbuttons,text=tr('Wyczyść całą zakończoną historię…'),
                        command=self.cleanup_all_history).pack(side='right',padx=6)
             idx=next((i for i,(_,scope) in enumerate(SCOPE_LABELS) if scope==args.scope),0)
@@ -732,41 +734,65 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
         def polkit_selftest(self):
             from xdg_polkit import status as polkit_status, run_test
             if not polkit_status()['ready']:
-                messagebox.showwarning(
-                    tr('Test Polkit'),
-                    tr('Test Polkit wymaga instalacji systemowego helpera. Instrukcja: packaging/polkit/README.md'),
-                    parent=root)
+                messagebox.showwarning(tr('Test Polkit'),
+                    tr('pkexec lub systemowy /usr/bin/id jest niedostępny.'),parent=root)
                 return
             if not messagebox.askyesno(tr('Test Polkit'),
-                tr('Poproszę system Polkit o autoryzację i utworzę odizolowany katalog testowy, bez dotykania danych kwarantanny.'),
-                parent=root):
+                tr('Systemowy Polkit poprosi o autoryzację uruchomienia /usr/bin/id -u. Nic nie zostanie zapisane ani usunięte. Nie wymaga instalacji helpera.'),
+                parent=root):return
+            if simpledialog.askstring(tr('Test Polkit'),tr('Wpisz AUTH:'),parent=root)!='AUTH':
                 return
-            if simpledialog.askstring(tr('Test Polkit'),tr('Wpisz TEST:'),parent=root)!='TEST':
+            def done(ok,result):
+                if ok:
+                    messagebox.showinfo(tr('Test Polkit'),
+                        tr('Polkit potwierdził uprawnienia administratora. Uruchomiono tylko odczyt UID=0; żadne pliki nie zostały zmienione.'),
+                        parent=root)
+                else:
+                    messagebox.showwarning(tr('Test Polkit'),str(result),parent=root)
+            self._quarantine_job(
+                lambda:run_test('test-auth',graphical=True),
+                done,'Uwierzytelnianie Polkit…')
+
+        def config_access_selftest(self):
+            from xdg_config_selftest import create, diagnose, repair, cleanup
+            if not messagebox.askyesno(tr('Test uprawnień ~/.config'),
+                tr('Utworzę ~/.config/xdg-audit-polkit-test z katalogiem 111 i plikiem 000. Nie zmienię innych danych.'),
+                parent=root):return
+            if simpledialog.askstring(tr('Test uprawnień ~/.config'),tr('Wpisz TEST:'),parent=root)!='TEST':
                 return
             def created(ok,result):
                 if not ok:
-                    messagebox.showerror(tr('Test Polkit'),str(result),parent=root)
+                    messagebox.showerror(tr('Test uprawnień ~/.config'),str(result),parent=root)
                     return
-                if not messagebox.askyesno(tr('Usuń katalog testowy Polkit'),
-                    tr('Polkit utworzył katalog testowy. Usunę tylko ten katalog, nigdy kwarantannę użytkownika.')+
-                    '\n'+result['fixture'],parent=root):
-                    return
-                if simpledialog.askstring(tr('Usuń katalog testowy Polkit'),
-                    tr('Wpisz DELETE TEST:'),parent=root)!='DELETE TEST':
-                    return
-                def deleted(ok,outcome):
-                    if ok:
-                        messagebox.showinfo(tr('Test Polkit'),
-                            tr('Test Polkit zakończony: usunięto wyłącznie odizolowany katalog testowy.')+
-                            '\n'+outcome['fixture'],parent=root)
-                    else:
-                        messagebox.showerror(tr('Test Polkit'),str(outcome),parent=root)
-                self._quarantine_job(
-                    lambda:run_test('test-delete',graphical=True),
-                    deleted,'Uwierzytelnianie Polkit…')
-            self._quarantine_job(
-                lambda:run_test('test-create',graphical=True),
-                created,'Uwierzytelnianie Polkit…')
+                info=diagnose(home)
+                summary=(tr('Utworzono testowe pliki użytkownika:')+'\n'+
+                    result['restricted_directory']+'\n'+
+                    tf('Katalog: {mode}',mode=info['directory_mode'])+', '+
+                    tf('Plik: {mode}',mode=info['file_mode'])+'\n'+
+                    tr('Naprawię odczyt tylko tych dwóch obiektów, bez Polkit i bez roota.'))
+                if not messagebox.askyesno(tr('Naprawa testowych uprawnień'),
+                    summary,parent=root):return
+                if simpledialog.askstring(tr('Naprawa testowych uprawnień'),
+                    tr('Wpisz ACCESS TEST:'),parent=root)!='ACCESS TEST':return
+                def repaired(success,outcome):
+                    if not success:
+                        messagebox.showerror(tr('Test uprawnień ~/.config'),str(outcome),parent=root)
+                        return
+                    if not messagebox.askyesno(tr('Usuń katalog testowy'),
+                        tr('Zakończono naprawę. Zatwierdź usunięcie wyłącznie katalogu testowego.'),
+                        parent=root):return
+                    if simpledialog.askstring(tr('Usuń katalog testowy'),
+                        tr('Wpisz DELETE TEST:'),parent=root)!='DELETE TEST':return
+                    def removed(success,result):
+                        if success:
+                            messagebox.showinfo(tr('Test uprawnień ~/.config'),
+                                tr('Usunięto wyłącznie katalog testowy ~/.config/xdg-audit-polkit-test.'),
+                                parent=root)
+                        else:
+                            messagebox.showerror(tr('Test uprawnień ~/.config'),str(result),parent=root)
+                    self._quarantine_job(lambda:cleanup(home),removed,'Usuwanie katalogu testowego…')
+                self._quarantine_job(lambda:repair(home),repaired,'Test naprawy uprawnień…')
+            self._quarantine_job(lambda:create(home),created,'Tworzenie plików testowych…')
 
         def cleanup_all_history(self):
             def done(ok, result):
