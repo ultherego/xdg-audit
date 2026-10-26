@@ -4,7 +4,7 @@
 Ostatni opublikowany tag/Release: `v1.7.0-rc1`.
 Nie publikować nowego wydania ani stabilnego tagu bez odrębnej decyzji.
 
-## 1. Bezpieczeństwo (P0)
+Dowody wymagane do zamknięcia otwartych pozycji: [protokół walidacji P0/P1](release-verification-evidence.md).\nZaznaczenie checkboxa wymaga podlinkowanego wyniku; sam skrypt/test dodany do repozytorium nie jest dowodem jego uruchomienia.\n\n## 1. Bezpieczeństwo (P0)
 
 - [x] Dostęp do kwarantanny, manifestu i podrzędnych katalogów oparty
   na deskryptorach, bez podążania za symlinkami.
