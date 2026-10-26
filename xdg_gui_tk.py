@@ -239,8 +239,8 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                       style='Section.TLabel').pack(anchor='w',pady=(0,3))
             ttk.Label(quarantine_tab,text=tr('Przywracanie nigdy nie nadpisuje istniejących plików.'),
                       style='Muted.TLabel').pack(anchor='w',pady=(0,10))
-            self.qtree=ttk.Treeview(quarantine_tab,columns=('run','entries','moved'),show='headings',selectmode='browse')
-            for name,title,width in [('run',tr('Identyfikator operacji'),280),('entries',tr('W manifestie'),135),('moved',tr('Przeniesione'),135)]:
+            self.qtree=ttk.Treeview(quarantine_tab,columns=('run','status','entries','moved'),show='headings',selectmode='browse')
+            for name,title,width in [('run',tr('Identyfikator operacji'),270),('status',tr('Status operacji'),130),('entries',tr('W manifestie'),110),('moved',tr('Przeniesione'),135)]:
                 self.qtree.heading(name,text=title);self.qtree.column(name,width=width)
             self.qtree.pack(fill='both',expand=True)
             qbuttons=ttk.Frame(quarantine_tab)
@@ -251,6 +251,9 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
             ttk.Button(qbuttons,text=tr('Usuń trwale…'),command=self.purge_quarantine).pack(side='right',padx=6)
             ttk.Button(qbuttons,text=tr('Usuń wygasłe…'),command=self.purge_expired).pack(side='right',padx=6)
             ttk.Button(qbuttons,text=tr('Ustaw retencję…'),command=self.configure_retention).pack(side='right',padx=6)
+            ttk.Button(qbuttons,text=tr('Usuń historię…'),command=self.cleanup_history).pack(side='right',padx=6)
+            ttk.Button(qbuttons,text=tr('Wyczyść starą historię…'),
+                       command=self.cleanup_expired_history).pack(side='right',padx=6)
             idx=next((i for i,(_,scope) in enumerate(SCOPE_LABELS) if scope==args.scope),0)
             self.tabs.select(idx)
             self.tabs.bind('<<NotebookTabChanged>>',self._on_tab_changed)
@@ -662,7 +665,9 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
         def _refresh_quarantine(self):
             self.qtree.delete(*self.qtree.get_children(''))
             for run in engine.quarantine_runs(home,engine.xdg_roots(home)):
-                self.qtree.insert('','end',iid=run['run_id'],values=(run['run_id'],len(run['items']),run['moved']))
+                self.qtree.insert('','end',iid=run['run_id'],
+                                  values=(run['run_id'],tr(run['status']),
+                                          len(run['items']),run['moved']))
 
         def quarantine_details(self):
             row=self.qtree.selection()
@@ -684,6 +689,45 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                 messagebox.showinfo(tr('Przywracanie'),tf('Przywrócono: {count}',count=result['restored'])+'\n'+tf('Pominięto: {count}',count=result['skipped']),parent=root)
             except (ValueError,OSError,KeyError) as exc:messagebox.showerror(tr('Błąd'),str(exc),parent=root)
             self.start_scan()
+
+        def cleanup_expired_history(self):
+            try:
+                ids=engine.expired_quarantine_history(home,engine.xdg_roots(home))
+                if ids:
+                    self._cleanup_history_runs(ids)
+                else:
+                    messagebox.showinfo(tr('Historia'),tr('Brak wygasłych manifestów.'),parent=root)
+            except (ValueError,OSError) as exc:
+                messagebox.showerror(tr('Historia'),str(exc),parent=root)
+
+        def cleanup_history(self):
+            selected=self.qtree.selection()
+            if selected:
+                self._cleanup_history_runs([selected[0]])
+
+        def _cleanup_history_runs(self,ids):
+            try:
+                plans=[engine.cleanup_quarantine_history(home,engine.xdg_roots(home),rid)
+                       for rid in ids]
+            except (ValueError,OSError) as exc:
+                messagebox.showerror(tr('Historia'),str(exc),parent=root)
+                return
+            summary='\\n'.join(p['run_id']+' ('+p['status']+')' for p in plans)
+            if not messagebox.askyesno(tr('Usuń historię'),
+                summary+'\\n\\n'+tr('Zostaną usunięte tylko zakończone dzienniki.'),
+                parent=root):
+                return
+            if simpledialog.askstring(tr('Potwierdzenie'),tr('Wpisz HISTORY:'),
+                                      parent=root) != 'HISTORY':
+                return
+            try:
+                for plan in plans:
+                    engine.cleanup_quarantine_history(home,engine.xdg_roots(home),
+                                                      plan['run_id'],dry_run=False)
+                self._refresh_quarantine()
+            except (ValueError,OSError) as exc:
+                self._refresh_quarantine()
+                messagebox.showerror(tr('Historia'),str(exc),parent=root)
 
         def configure_retention(self):
             from xdg_retention import load, save
