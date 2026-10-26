@@ -93,6 +93,77 @@ class AccessTests(unittest.TestCase):
         self.assertFalse(self.tree.exists())
         self.assertTrue(self.manifest.exists())
 
+    def test_regular_unreadable_file_and_nonwritable_parent_block_purge_preflight(self):
+        # Simulates a real cache directory containing a mode-000 file.
+        self.pkg.chmod(0o700)
+        protected = self.pkg / "userdata.txt"
+        protected.write_bytes(b"sample protected user data")
+        protected.chmod(0o000)
+        self.addCleanup(lambda: protected.chmod(0o600) if protected.is_file() else None)
+        self.pkg.chmod(0o111)
+
+        def next_issue():
+            return diagnose_access(self.home, self.roots, self.run_id)["issues"][0]
+
+        first = next_issue()
+        self.assertEqual(first["code"], "DIRECTORY_UNREADABLE")
+        repair_owner_directory(self.home, self.roots, self.run_id, first["relative"])
+        self.assertEqual(stat.S_IMODE(self.pkg.stat().st_mode), 0o511)
+
+        report = diagnose_access(self.home, self.roots, self.run_id)
+        self.assertEqual([i["code"] for i in report["issues"]],
+                         ["DIRECTORY_NOT_WRITABLE", "FILE_UNREADABLE"])
+        # Single interactive step adds only the directory owner-write bit.
+        repair_owner_directory(self.home, self.roots, self.run_id,
+                               report["issues"][0]["relative"])
+        self.assertEqual(stat.S_IMODE(self.pkg.stat().st_mode), 0o711)
+        pending = next_issue()
+        self.assertEqual(pending["code"], "FILE_UNREADABLE")
+        self.assertEqual(pending["mode"], "000")
+        self.assertEqual(pending["suggested_mode"], "400")
+        repair_owner_directory(self.home, self.roots, self.run_id, pending["relative"])
+        self.assertEqual(stat.S_IMODE(protected.stat().st_mode), 0o400)
+
+        self.assertEqual(diagnose_access(self.home, self.roots, self.run_id)["issues"], [])
+        approved = audit.adopt_quarantine_inventory(self.home, self.roots, self.run_id)
+        self.assertEqual(approved["adopted"], 1)
+        plan = audit.purge_quarantine_run(self.home, self.roots, self.run_id, dry_run=True)
+        self.assertEqual(plan["objects"], 1)
+        self.assertTrue(protected.exists())
+        audit.purge_quarantine_run(self.home, self.roots, self.run_id,
+                                   dry_run=False, emit=lambda *_: None)
+        self.assertFalse(self.tree.exists())
+
+    def test_preflight_denies_readable_but_nonwritable_directory_with_children(self):
+        self.pkg.chmod(0o700)
+        child = self.pkg / "example"
+        child.write_text("must not be partially deleted")
+        # Root inventory is readable and hashable, but unlink cannot succeed.
+        self.pkg.chmod(0o511)
+        self.row["tree_inventory"] = capture_inventory(self.tree)
+        self.row["move_status"] = "moved"
+        self.write_manifest()
+
+        with self.assertRaises(PermissionError):
+            audit.purge_quarantine_run(self.home, self.roots, self.run_id,
+                                       dry_run=True, emit=lambda *_: None)
+        self.assertTrue(child.exists())
+        issues = diagnose_access(self.home, self.roots, self.run_id)["issues"]
+        self.assertEqual([i["code"] for i in issues], ["DIRECTORY_NOT_WRITABLE"])
+
+    def test_no_owner_repair_for_hardlinked_unreadable_file(self):
+        self.pkg.chmod(0o700)
+        file = self.pkg / "private-file"
+        file.write_text("text")
+        twin = self.pkg / "twin"
+        os.link(file, twin)
+        file.chmod(0o000)
+        self.addCleanup(lambda: file.chmod(0o600) if file.exists() else None)
+        report = diagnose_access(self.home, self.roots, self.run_id)
+        self.assertIn("HARDLINK_UNSAFE", [i["code"] for i in report["issues"]])
+        for issue in report["issues"]:
+            self.assertFalse(issue["repairable"])
+
     def test_repair_refuses_arbitrary_path(self):
         outside = self.home / "outside"
         outside.mkdir()
