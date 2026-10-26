@@ -61,8 +61,20 @@ def run(backend, output):
                                 child = child.get_next_sibling()
                         else:
                             buttons = switcher.get_children()
-                        button = next(w for w in buttons if w.get_label() == scope.title())
-                        return button.get_visible()
+                        def labels(widget):
+                            if isinstance(widget, Gtk.Label):
+                                return [widget.get_text()]
+                            if backend == 'gtk4':
+                                nested = []
+                                child = widget.get_first_child()
+                                while child is not None:
+                                    nested.append(child)
+                                    child = child.get_next_sibling()
+                            else:
+                                nested = widget.get_children() if hasattr(widget, 'get_children') else []
+                            return [text for child in nested for text in labels(child)]
+                        matches = [w for w in buttons if scope.title() in labels(w)]
+                        return any(button.get_visible() for button in matches)
                     select = lambda scope: controller.stack.set_visible_child_name(scope)
                     current = lambda: controller.stack.get_visible_child_name()
                 elif backend == 'qt6':
