@@ -2,6 +2,10 @@
 
 ## 1.7.0-rc2 (unreleased)
 
+- Distinguish a healthy empty pacman foreign filter from failed queries while
+  keeping native package database authorization strict.
+- Validate raw package/Flatpak identifiers before case folding and reject
+  malformed dpkg architecture qualifiers without retaining partial results.
 - Report the native package database, unique installed package-name count and
   provider health in CLI/JSON, preserving the existing pacman JSON statistic.
 - Require real Arch/pacman protection and quarantine lifecycle checks alongside

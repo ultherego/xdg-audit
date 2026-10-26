@@ -9,6 +9,7 @@ from hashlib import sha256
 import json
 import os
 from pathlib import Path
+import subprocess
 import sys
 import tempfile
 from unittest.mock import patch
@@ -45,6 +46,17 @@ def run(expected):
             if expected != 'pacman':
                 require(not installed[0], 'non-Arch smoke expects a system without pacman')
             print('PASS real native database:', expected)
+
+            if expected == 'pacman':
+                queried = subprocess.run(['pacman', '-Qmq'], text=True, capture_output=True,
+                    timeout=30, check=False,
+                    env={**os.environ, 'LC_ALL': 'C', 'LC_MESSAGES': 'C', 'LANG': 'C'})
+                require(queried.returncode in (0, 1) and not queried.stderr.strip(),
+                    'foreign query failed with diagnostics')
+                expected_foreign = {name.casefold() for name in queried.stdout.splitlines() if name.strip()}
+                require(installed.status.get('pacman_foreign') == 'ok', 'foreign inventory unhealthy')
+                require(installed.foreign == expected_foreign, 'foreign package names differ from real query')
+                print(f'PASS real pacman foreign query: exit={queried.returncode}; names={len(expected_foreign)}')
 
             # A directory named after the actual installed package manager must
             # remain ACTIVE and refuse even an explicitly uncertain MOVE.
