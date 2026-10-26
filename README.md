@@ -302,4 +302,4 @@ python3 scripts/build_archives.py --output-dir dist
 
 The quarantine test creates a disposable `HOME`, performs real moves, restores and purge, verifies file hashes and handles simulated conflicts without writing into your real XDG directories. Details: [Safe integration testing](docs/testing-quarantine.md).
 
-Desktop-menu installation and distribution packaging are intentionally deferred. See the [changelog](CHANGELOG.md) for version history.
+Optional per-user desktop-menu registration, updating and safe unregistration are described in [Desktop installation](docs/desktop-installation.md). Distribution packaging is intentionally deferred. See the [changelog](CHANGELOG.md) for version history.
