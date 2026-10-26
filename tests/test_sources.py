@@ -80,6 +80,36 @@ class SourceProviderTests(unittest.TestCase):
             run.assert_not_called()
             self.assertIn("mytool", found.names)
 
+    def test_opt_style_dirs_are_shallow_protective_only(self):
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp) / "opt"
+            base.mkdir()
+            (base / "brave-bin").mkdir()
+            (base / "not-an-app.txt").write_text("content")
+            (base / "symlink").symlink_to("/etc", target_is_directory=True)
+            names, state = sources._app_directories(base)
+            self.assertEqual(state, "ok")
+            self.assertEqual(names, {"brave-bin"})
+
+    def test_source_health_cli_report_contains_no_user_files(self):
+        with patch.object(audit, "read_active_names",
+                          return_value=sources.ActiveInventory((
+                              {"python"}, {"org.example.App"}, set(), set(),
+                              set(), set(), set(), set()),
+                              status={"pacman": "ok", "flatpak": "ok"},
+                              foreign={"python"})):
+            import contextlib
+            import io
+            import json
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                result = audit.main(["--home", str(self.home), "--installed-sources"])
+            self.assertEqual(result, 0)
+            report = json.loads(output.getvalue())
+            self.assertEqual(report["health"]["pacman"], "ok")
+            self.assertEqual(report["counts"]["foreign_pacman_AUR_or_local"], 1)
+            self.assertNotIn("test-only.txt", output.getvalue())
+
     def test_manual_bin_symlink_cannot_count_as_bundled_executable(self):
         with tempfile.TemporaryDirectory() as temp:
             home = Path(temp)
@@ -88,6 +118,21 @@ class SourceProviderTests(unittest.TestCase):
             (local / "example").symlink_to("/usr/bin/true")
             result = sources.manual_binaries(home)
             self.assertNotIn("example", result.names)
+
+    def test_pacman_foreign_hint_surfaces_without_claiming_origin(self):
+        with tempfile.TemporaryDirectory() as temp:
+            home = Path(temp)
+            (home / ".config" / "brave").mkdir(parents=True)
+            packages = sources.ActiveInventory((
+                {"brave-bin"}, set(), set(), set(), set(), set(), set(), set()),
+                status={"pacman": "ok", "flatpak": "absent",
+                        "snap": "absent", "appimage": "ok", "manual_binary": "ok"},
+                foreign={"brave-bin"})
+            with patch.object(audit, "read_active_names", return_value=packages), \
+                 patch.object(audit, "parse_removals", return_value={}):
+                items, *_ = audit.scan(home, ["config"], set(), {}, True)
+            self.assertEqual(items[0].state, "ACTIVE")
+            self.assertIn("foreign: AUR or local", " ".join(items[0].reasons))
 
     def test_provider_failure_is_not_health_ok(self):
         probes = {
