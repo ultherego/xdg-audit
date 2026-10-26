@@ -2,6 +2,12 @@
 
 ## 1.7.0-rc2 (unreleased)
 
+- Distinguish current AUR name matches from unlisted and unverified foreign
+  packages using a bounded public index; never infer verified build origin.
+- Add one-level AppImage discovery in apps/opt/XDG data roots, Cargo/Go/manual
+  binary locations and configurable extra source directories in every GUI.
+- Gate source archives on a real snapd VM lifecycle, including disabled parallel
+  instances, fresh MOVE refusal and exact-namespace RESTORE/PURGE checks.
 - Hide unavailable Flatpak/Snap tabs only when no leftover data was found;
   retain failed-source visibility and stable scope selection after rescanning.
 - Fit GTK/Qt/Tk dialogs to content with 20 px internal padding, screen bounds,

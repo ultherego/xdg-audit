@@ -32,7 +32,7 @@ jobs:
 
   archives:
     name: Source ZIP and tar.gz
-    needs: [test, gui-smoke, wayland-smoke, benchmark, quarantine-cycle, native-sources]
+    needs: [test, gui-smoke, wayland-smoke, benchmark, quarantine-cycle, native-sources, snapd-live]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -60,7 +60,7 @@ jobs:
   release:
     name: GitHub release on version tag
     if: startsWith(github.ref, 'refs/tags/v') && github.event_name == 'push'
-    needs: [test, gui-smoke, wayland-smoke, benchmark, quarantine-cycle, native-sources, archives]
+    needs: [test, gui-smoke, wayland-smoke, benchmark, quarantine-cycle, native-sources, snapd-live, archives]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -217,6 +217,57 @@ jobs:
         run: runuser -u audit-test -- env PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -q
       - name: Real native inventory and complete quarantine lifecycle
         run: runuser -u audit-test -- env PYTHONDONTWRITEBYTECODE=1 python3 scripts/smoke_native_sources.py --expect ${{ matrix.provider }}
+
+  snapd-live:
+    name: Real snapd inventory and lifecycle
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install and start the real snapd service
+        timeout-minutes: 12
+        run: |
+          for sources in /etc/apt/sources.list /etc/apt/sources.list.d/*.sources /etc/apt/sources.list.d/*.list; do
+            if [ -f "$sources" ]; then
+              sudo sed -i -e 's|mirror+file:/etc/apt/apt-mirrors.txt|https://archive.ubuntu.com/ubuntu/|g' -e 's|https\?://azure\.archive\.ubuntu\.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' "$sources"
+            fi
+          done
+          sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=25 -o Acquire::https::Timeout=25 update -qq
+          sudo env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=25 -o Acquire::https::Timeout=25 install -y --no-install-recommends snapd squashfs-tools
+          sudo systemctl start snapd.socket
+          timeout 120s snap wait system seed.loaded
+          snap version
+      - name: Install only local metadata-only fixtures, including a disabled parallel instance
+        timeout-minutes: 4
+        run: |
+          fixture="$RUNNER_TEMP/xdg-audit-local-snap"
+          mkdir -p "$fixture/source/meta"
+          cat > "$fixture/source/meta/snap.yaml" <<'YAML'
+          name: xdg-audit-fixture
+          version: '1.0'
+          summary: Disposable xdg-audit inventory fixture
+          description: Metadata only, with no applications, hooks or external runtime.
+          base: none
+          grade: devel
+          confinement: strict
+          YAML
+          mksquashfs "$fixture/source" "$fixture/xdg-audit-fixture.snap" -noappend -all-root -comp xz -processors 1
+          sudo snap set system experimental.parallel-instances=true
+          sudo snap install --dangerous "$fixture/xdg-audit-fixture.snap"
+          sudo snap install --dangerous --name=xdg-audit-fixture_blue "$fixture/xdg-audit-fixture.snap"
+          sudo snap disable xdg-audit-fixture_blue
+      - name: Installed instances protect disposable data as a regular user
+        run: /usr/bin/python3 scripts/smoke_snapd.py --phase installed
+      - name: Remove only the base fixture, retaining its disabled parallel instance
+        run: sudo snap remove --purge xdg-audit-fixture
+      - name: Real inventory and explicit MOVE, RESTORE and PURGE as a regular user
+        run: /usr/bin/python3 scripts/smoke_snapd.py --phase removed
+      - name: Clean up only the exact test fixtures
+        if: always()
+        run: |
+          if command -v snap >/dev/null; then
+            sudo timeout 60s snap remove --purge xdg-audit-fixture_blue xdg-audit-fixture || true
+          fi
 
   benchmark:
     name: Synthetic scan benchmark

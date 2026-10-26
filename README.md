@@ -190,8 +190,12 @@ count and source health. JSON reports expose `native_package_source` and
 
 The read-only diagnostic reports provider health for pacman, foreign packages,
 Flatpak, Snap, AppImage, installed DEB/RPM packages, and protective hints for
-manual binaries in `~/.local/bin`, `~/bin`, `/usr/local/bin` and `/opt`.
-Foreign packages can come from AUR **or** local installation.
+manual binaries, including Cargo/Go bins and `/opt` directory hints.
+Foreign pacman packages are compared with the public AUR name index: names
+currently listed in AUR, unlisted names (possibly local, renamed or removed),
+and unavailable metadata are reported separately. This does not verify build
+origin. No installed names are sent, no disk cache is written, and AUR metadata
+cannot authorize MOVE.
 
 On Debian/Ubuntu and RPM-family systems, MOVE verifies the actual native
 package database without requiring pacman. Inventories are read again before
@@ -201,8 +205,11 @@ acknowledgement of uncertain ownership.
 
 The **Snap** scope covers `~/snap`, distinguishes exact instance IDs such as
 `firefox` and `firefox_work`, and requires a healthy Snap inventory before MOVE.
-**AppImage** detection recognizes conventional locations, versioned filenames,
-and safe desktop launchers pointing to existing images elsewhere.
+**AppImage** detection recognizes versioned filenames, apps/opt/XDG data
+locations, one application-directory level and safe launchers pointing to existing
+images elsewhere. **Settings** in every GUI accepts extra AppImage and binary
+folders, one absolute or `~/` path per line (`appimage_dirs` / `binary_dirs` in
+the saved JSON preferences). Custom folders are inspected directly.
 Images, `Exec` commands and wrapper scripts are never executed.
 
 ```fish
@@ -304,7 +311,7 @@ for the current contract and its limitations.
 
 The unreleased development version on `main` is **`1.7.0-rc2`**. The most recent tagged prerelease is **[v1.7.0-rc1](https://github.com/ultherego/xdg-audit/releases/tag/v1.7.0-rc1)**.
 
-GitHub Actions runs Python 3.10–3.14 tests, GTK4/Qt6/Tk GUI startup under Xvfb, native GTK4/Qt6 Wayland startup with headless Weston, a synthetic benchmark, the isolated end-to-end quarantine/restore/purge test, real SIGKILL recovery checkpoints, native Arch/pacman, Ubuntu/dpkg and Fedora/RPM protection and lifecycle checks, a Gio desktop-launch test, GTK disk-full error handling, and source ZIP/tar.gz integrity checks. The owner confirmed the tested GUI functionality on 2026-10-26. Additional GNOME/KDE/Xfce session coverage remains separately recorded in the readiness checklist.
+GitHub Actions runs Python 3.10–3.14 tests, GTK4/GTK3/Qt6/Tk adaptive-dialog and tab checks under Xvfb, native GTK4/Qt6 Wayland startup with headless Weston, a synthetic benchmark, the isolated end-to-end quarantine/restore/purge test, real SIGKILL recovery checkpoints, native Arch/pacman, Ubuntu/dpkg and Fedora/RPM protection and lifecycle checks, live snapd with disabled parallel instances and disposable user data, a Gio desktop-launch test, GTK disk-full error handling, and source ZIP/tar.gz integrity checks. The owner confirmed the tested GUI functionality on 2026-10-26. Additional GNOME/KDE/Xfce session coverage remains separately recorded in the readiness checklist.
 
 ```bash
 python3 -m unittest discover -s tests -v

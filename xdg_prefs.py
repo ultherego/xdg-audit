@@ -1,7 +1,7 @@
 """Explicit user preferences for xdg-audit. No writes during normal scans.
 
-Do not accept arbitrary paths outside the user's XDG config directory. Settings
-are data only; entries are never executed or evaluated.
+Write settings only within the user's XDG config directory. Additional source
+directories are read-only hints; entries are never executed or evaluated.
 """
 from __future__ import annotations
 
@@ -18,6 +18,7 @@ PATTERN = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._+*?-]{0,127}$')
 
 def defaults() -> dict:
     return {'keep': [], 'aliases': {}, 'quick_scan': False,
+            'appimage_dirs': [], 'binary_dirs': [],
             'startup_scope': 'all', 'show_active': False, 'language': 'pl'}
 
 
@@ -47,6 +48,15 @@ def validate(payload: dict) -> dict:
             raise ValueError(f'Niepoprawny wzorzec dla {name}')
         output[name.casefold()] = sorted(set(matches))
     result['aliases'] = output
+    for key in ('appimage_dirs', 'binary_dirs'):
+        directories = payload.get(key, [])
+        if not isinstance(directories, list) or len(directories) > 32 or any(
+                not isinstance(value, str) or not value or len(value) > 4096
+                or any(ord(char) < 32 for char in value)
+                or not (value.startswith('/') or value.startswith('~/')) or value.startswith('~//')
+                or '..' in Path(value).parts for value in directories):
+            raise ValueError('Source directories must be absolute or start with ~/ (maximum 32)')
+        result[key] = sorted(set(directories))
     for key in ('quick_scan', 'show_active'):
         val = payload.get(key, False)
         if not isinstance(val, bool):
@@ -129,4 +139,10 @@ def scan_inputs_changed(previous: dict, updated: dict) -> bool:
     Do not destroy cached scan results or bulk selections when toggling them.
     """
     return any(previous.get(key) != updated.get(key)
-               for key in ('keep', 'aliases', 'quick_scan'))
+               for key in ('keep', 'aliases', 'quick_scan', 'appimage_dirs', 'binary_dirs'))
+
+
+def source_directories(settings: dict, key: str, home: Path) -> tuple[Path, ...]:
+    """Expand only the explicit HOME prefix; never expand environment or shell."""
+    return tuple(home / value[2:] if value.startswith('~/') else Path(value)
+                 for value in settings.get(key, ()))

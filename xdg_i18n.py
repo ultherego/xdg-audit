@@ -7,6 +7,9 @@ from __future__ import annotations
 
 LANGUAGES = {'pl': 'Polski', 'en': 'English'}
 EN = {
+    'Dodatkowe katalogi AppImage — jedna ścieżka w linii': 'Additional AppImage directories — one path per line',
+    'Dodatkowe katalogi binarek — jedna ścieżka w linii': 'Additional binary directories — one path per line',
+    'Ścieżki bezwzględne lub ~/; odczyt bez uruchamiania plików.': 'Absolute paths or ~/; files are inspected without execution.',
     'Tak': 'Yes',
     'Nie': 'No',
     'Nieprawidłowa wartość.': 'Invalid value.',
@@ -404,6 +407,14 @@ def localize_evidence(reason: str, language: str = 'pl') -> str:
         return reason
     if reason in _PL_EVIDENCE_EXACT:
         return _PL_EVIDENCE_EXACT[reason]
+    for english, polish in (
+            ('AUR name listed: ', 'Nazwa dostępna w AUR: '),
+            ('foreign name not listed in AUR: ', 'Nazwa pakietu spoza repozytoriów nieobecna w AUR: '),
+            ('foreign origin unverified: ', 'Niezweryfikowane pochodzenie pakietu spoza repozytoriów: ')):
+        if reason.startswith(english):
+            return polish + reason[len(english):].replace(
+                ' (build origin unverified)', ' (pochodzenie kompilacji niezweryfikowane)').replace(
+                ' (local, renamed or removed)', ' (lokalny, przemianowany lub usunięty)')
     for english, polish in _PL_EVIDENCE_PREFIXES:
         if reason.startswith(english):
             remainder = reason[len(english):].replace(' (match: ', ' (dopasowanie: ')
