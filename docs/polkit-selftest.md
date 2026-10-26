@@ -11,14 +11,13 @@ part of this test authorizes a real quarantine PURGE as root.
 
 ## Test A: system Polkit authorization
 
-The GUI button **Test Polkit…** requests authorization to run the single,
+The optional **CLI** command requests authorization to run the single,
 trusted system command `/usr/bin/id -u` through `pkexec`. No paths, file
 changes, commands from the repository or arbitrary arguments are supplied.
-The GUI passes `--disable-internal-agent` so an absent graphical agent is
-reported rather than replaced by an invisible text-based password prompt.
+No installation or special policy is needed for this check.
 
 The system agent—not xdg-audit—chooses which administrator may authenticate.
-The GUI never reads or stores the password. A successful response must be
+xdg-audit never reads or stores the password. A successful response must be
 exactly UID `0`. It proves *only* this fixed authorization action worked,
 not that xdg-audit is authorized to perform arbitrary privileged operations.
 
@@ -37,7 +36,7 @@ files. The status command reports `pkexec_installed`,
 
 ## Test B: permissions under ~/.config
 
-The independent GUI button **Test uprawnień ~/.config…** creates exactly:
+The independent optional **CLI** fixture command creates exactly:
 
 ```text
 ~/.config/xdg-audit-polkit-test/
@@ -51,11 +50,11 @@ traversed but not listed and a file that cannot be read. The test invokes
 the standard recursive inventory after granting explicit owner-read
 permissions, verifying that both items are now readable.
 
-In the GUI, independent confirmations are required:
+Interactive CLI confirmations are required:
 `TEST` creates the objects, `ACCESS TEST` changes only the two test
 objects' owner-read bits, and `DELETE TEST` deletes only the fixed verified
-fixture. Each change takes place after explicit consent; cancellation
-leaves the fixture under the path above for later recovery.
+fixture. These self-tests are intentionally absent from GTK, Qt and Tk.
+Cancellation leaves the fixture under the path above for later recovery.
 
 In an interactive shell:
 
