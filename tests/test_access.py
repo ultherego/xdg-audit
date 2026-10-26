@@ -10,7 +10,7 @@ import unittest
 from unittest.mock import patch
 
 import xdg_audit as audit
-from xdg_access import authority_context, diagnose_access, repair_owner_directory
+from xdg_access import authority_context, diagnose_access, repair_owner_directory, needs_access_recovery
 from xdg_quarantine_lifecycle import capture_inventory
 
 
@@ -204,6 +204,20 @@ class AccessTests(unittest.TestCase):
         self.assertTrue(self.manifest.exists())
         self.assertTrue(self.pkg.exists())
         self.assertEqual(self.row["move_status"], "moving")
+
+    def test_only_known_preflight_failures_start_guided_access_recovery(self):
+        self.assertTrue(needs_access_recovery(PermissionError(13, "No read", "pkg")))
+        self.assertTrue(needs_access_recovery(
+            ValueError("Missing recursive inventory; legacy run requires adoption")))
+        self.assertTrue(needs_access_recovery(
+            ValueError("Foreign owner or filesystem inside quarantine")))
+        for error in (ValueError("Quarantine inode substitution"),
+                      ValueError("Invalid inventory row"),
+                      ValueError("Unexpected new file in quarantine"),
+                      ValueError("Untracked content in quarantine run"),
+                      RuntimeError("Other error")):
+            with self.subTest(error=str(error)):
+                self.assertFalse(needs_access_recovery(error))
 
     def test_authorization_context_never_guesses_root_password(self):
         with patch.dict(os.environ, {"XDG_SESSION_TYPE": "wayland",
