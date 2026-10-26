@@ -81,6 +81,12 @@ def main() -> None:
                 window = app.get_active_window()
                 if window is None:
                     raise AssertionError("GTK main window not active")
+                results_stack = next((w for w in find_widgets(window)
+                                      if isinstance(w, Gtk.Stack) and
+                                      w.get_child_by_name("results") is not None), None)
+                if results_stack is None:
+                    raise AssertionError("GTK results/loading stack not found")
+                results_stack.set_visible_child_name("results")
                 stack = next((w for w in find_widgets(window)
                               if isinstance(w, Gtk.Stack) and
                               w.get_child_by_name("quarantine") is not None), None)
