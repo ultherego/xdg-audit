@@ -919,7 +919,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
             def preview_ready(ok, result):
                 if not ok:
                     messagebox.showerror(tr('Zablokowano PURGE'),str(result),parent=root)
-                    if isinstance(result,PermissionError) and len(run_ids)==1:
+                    if len(run_ids)==1 and engine.quarantine_access_recoverable_error(result):
                         self.access_diagnostics(run_ids[0], resume_purge=True)
                     return
                 details='\\n'.join(
