@@ -134,6 +134,32 @@ class AccessTests(unittest.TestCase):
                                    dry_run=False, emit=lambda *_: None)
         self.assertFalse(self.tree.exists())
 
+    def test_readable_directory_without_owner_search_bit_is_repaired_first(self):
+        self.pkg.chmod(0o700)
+        (self.pkg / "child.txt").write_text("safe")
+        self.pkg.chmod(0o400)
+        issues = diagnose_access(self.home, self.roots, self.run_id)["issues"]
+        self.assertEqual([issue["code"] for issue in issues],
+                         ["DIRECTORY_NOT_TRAVERSABLE"])
+        self.assertEqual(issues[0]["suggested_mode"], "500")
+        report = repair_owner_directory(
+            self.home, self.roots, self.run_id, issues[0]["relative"])
+        self.assertEqual(report["new_mode"], "500")
+        self.assertEqual((self.pkg / "child.txt").read_text(), "safe")
+        # The separate owner-write permission still requires approval.
+        next_issues = diagnose_access(self.home, self.roots, self.run_id)["issues"]
+        self.assertEqual(next_issues[0]["code"], "DIRECTORY_NOT_WRITABLE")
+
+    def test_directory_without_any_permissions_needs_explicit_read_and_search(self):
+        self.pkg.chmod(0o000)
+        issue = diagnose_access(self.home, self.roots, self.run_id)["issues"][0]
+        self.assertEqual(issue["code"], "DIRECTORY_NOT_TRAVERSABLE")
+        self.assertEqual(issue["mode"], "000")
+        self.assertEqual(issue["suggested_mode"], "500")
+        outcome = repair_owner_directory(self.home, self.roots,
+                                         self.run_id, issue["relative"])
+        self.assertEqual(outcome["new_mode"], "500")
+
     def test_preflight_denies_readable_but_nonwritable_directory_with_children(self):
         self.pkg.chmod(0o700)
         child = self.pkg / "example"

@@ -1,5 +1,12 @@
 # xdg-audit — audyt architektury i plan rozwoju po v1.4.8
 
+> **Dokument historyczny (2026-10-25).** Dotyczy stanu po v1.4.8;
+> część opisanych zadań została już wdrożona w aktualnym main.
+> Bieżące priorytety: [Release Readiness 1.7.0](docs/release-readiness.md).
+> Następna faza to [rozpoznawanie źródeł instalacji aplikacji](docs/installation-source-support.md),
+> **nie** budowa paczek instalacyjnych xdg-audit.
+
+
 Data: 2026-10-25. Analiza lokalnego kodu xdg-audit v1.4.7 i źródeł online. **Poniższe propozycje nie zostały wdrożone w v1.4.8**, poza dwiema poprawkami wyglądu opisanymi w README.
 
 ## Stan obecny (ustalenia z kodu)

@@ -1,35 +1,59 @@
-# xdg-audit 1.7.0-rc1
+# xdg-audit 1.7.0-rc2 — przygotowanie do wydania
 
-**Release candidate — not a stable release.** Scanning is read-only by default; quarantine and restore require explicit confirmation.
+**Niewydany kandydat (main).** Ostatnie opublikowane wydanie pozostaje
+`v1.7.0-rc1`. Tekst odzwierciedla aktualny kod; nie jest komunikatem
+o opublikowaniu nowego tagu.
 
-## Changes
+## Nowe od v1.7.0-rc1
 
-- Protect user game saves, developer workspaces and custom icon themes from being suggested as removable.
-- Additional application aliases for KDE Connect, Zen Browser, GitKraken CLI, Stormshield, pip, GStreamer and Tracker.
-- Classification JSON identifies more evidence sources and distinguishes strong, weak, medium, historical and policy evidence.
-- Linux directory-descriptor-based no-overwrite rename now opens **each ancestor** with `O_NOFOLLOW`, avoiding linked parent directories.
-- New regression tests for mistaken identity, symlink parents, modified restore manifests and helper-package misidentification.
-- GTK4, Qt6 and Tk widget checks and real application startup checks under Xvfb; repeatable synthetic scan benchmarking in CI.
-- No visual redesign or new installation procedure.
+- Pełny cykl kwarantanny z jawnie zatwierdzanym `PURGE`, rekursywnym
+  inwentarzem SHA-256, sprawdzaniem tożsamości plików i dziennikiem v3.
+- Bezpieczne wznowienie po przerwaniu operacji oraz osobne `ADOPT`
+  bieżącej zawartości, gdy inwentaryzacja nie powiodła się podczas MOVE.
+- Naprawa ograniczonych uprawnień bieżącego użytkownika: `ACCESS`
+  na dokładnie zweryfikowanym obiekcie w kwarantannie, następnie
+  nowy preflight i oddzielne `PURGE`.
+- Historyczne wpisy `PURGED` / `RESTORED`, ręczne czyszczenie
+  zakończonej historii i opcjonalna retencja z jednostką systemd --user.
+  Automatyczne usuwanie jest domyślnie wyłączone.
+- Wyjaśnienia problemów w GTK/Qt/Tk i operacje na wątku roboczym,
+  bez blokowania głównego interfejsu podczas liczenia SHA-256.
+- Polskie/angielskie tłumaczenia interfejsu; natywny test GTK/Qt
+  na Wayland (Weston) i kompletny syntetyczny test E2E.
+- Dodatkowe testy bezpieczeństwa: awaria przed/po usunięciu,
+  katalog bez prawa przeszukiwania, pliki bez odczytu,
+  symlinki, hardlinki, obce inode i nieprawidłowe manifesty.
 
-## Known limitations
+## Granice produktu
 
-- `CANDIDATE` is never proof of a safe orphan. Manual review and backups still matter.
-- Quarantine authorization currently requires a working pacman installed-package inventory; other distributions can use read-only scanning.
-- Xvfb GUI startup tests do not replace real Niri or KDE Plasma testing on Wayland.
-- Active process names and desktop launcher files are hints, not authoritative ownership proof.
-- An in-progress `du` command may continue briefly after scan cancellation.
-- Multi-item quarantine is journaled but not an ACID transaction; manual recovery can be needed.
-- `renameat2(RENAME_NOREPLACE)` is Linux-specific and fails closed if unsupported; cross-device moves are refused.
-- Desktop entry installation, AUR and automatic updates are deliberately postponed.
+- Skanowanie jest tylko do odczytu; `CANDIDATE` nie oznacza
+  pewnego osierocenia. Przed MOVE należy sprawdzić dane.
+- Aktualny MOVE wymaga prawidłowego inwentarza `pacman`; na systemach
+  Debian/RPM dostępne jest obecnie skanowanie, nie bezpieczne przenoszenie.
+- AUR instalowany przez pacmana znajduje się w `pacman -Qq`;
+  pochodzenie z AUR nie jest dziś rozróżniane od innych pakietów foreign.
+- Flatpak i Snap mają podstawowe przesłanki instalacji.
+  AppImage i ręczne binarki nie są jeszcze wykrywane we wszystkich
+  możliwych lokalizacjach.
+- Test systemowego `pkexec` nie nadaje xdg-audit prawa
+  do usuwania plików należących do roota. W rzeczywistej kwarantannie
+  narzędzie naprawia tylko sprawdzone obiekty bieżącego użytkownika.
+- `PURGE` nie oznacza bezpiecznego nadpisywania nośnika.
+  Wewnętrzne limity lub brak dostępu blokują operację.
+- To nadal kandydat; potrzebne są testy ręczne GNOME/KDE/Xfce,
+  decyzja właściciela o licencji oraz przegląd finalnego pakowania.
 
-## Local verification
+## Weryfikacja
 
 ```sh
 python3 -m unittest discover -s tests -q
-python3 scripts/benchmark_scan.py --count 500
+python3 scripts/smoke_quarantine_cycle.py --synthetic-inventory
 python3 scripts/build_archives.py --output-dir dist
 (cd dist && sha256sum -c SHA256SUMS)
 ```
 
-To enforce the CI checks as merge requirements, configure a GitHub repository ruleset under **Settings → Rules → Rulesets**. The current GitHub connection does not expose an administration action to enable or change branch protection.
+Dalsza kontrola jakości:
+[docs/release-readiness.md](docs/release-readiness.md).
+Rozwój wykrywania AUR / binarek / Flatpak / Snap / AppImage i później
+DEB/RPM:
+[docs/installation-source-support.md](docs/installation-source-support.md).

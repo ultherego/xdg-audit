@@ -2,6 +2,21 @@
 
 ## 1.7.0-rc2 (unreleased)
 
+- Finalize manual PURGE with v3 SHA-256 inventory, fail-closed preflight,
+  inode checking and resumable journal states.
+- Add GUI-guided `ACCESS → ADOPT → PURGE` recovery; no demo buttons in GUI
+  and no implicit privileged file operations.
+- Support explicit owner-only repairs for unreadable files, directories,
+  non-writable nonempty directories and missing directory-search permission;
+  preserve separate confirmation for each modification.
+- Add completed-history cleanup, optional user-scoped retention with default
+  auto-delete disabled, and async GTK/Qt/Tk PURGE previews.
+- Cover crashes immediately before and after destructive unlink with synthetic
+  journal-recovery regressions.
+- Document optional native Polkit CLI smoke separately from production file
+  authorization, and plan package-source detection beyond pacman.
+- Add an explicit release-readiness checklist; no release tag was created.
+
 - Add isolated end-to-end quarantine/restore validation against disposable XDG data, including SHA-256 integrity, collisions, inode substitution and failure-closed checks.
 - Require successful end-to-end verification before building release archives.
 
