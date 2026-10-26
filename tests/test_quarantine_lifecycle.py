@@ -6,6 +6,9 @@ from pathlib import Path
 import stat
 import tempfile
 import unittest
+from unittest.mock import patch
+
+import xdg_quarantine_lifecycle as lifecycle
 
 import xdg_audit as audit
 from xdg_quarantine_lifecycle import inspect_run, purge_run, expired_run_ids, capture_inventory, adopt_legacy_run, recover_manifest_temps
@@ -104,6 +107,41 @@ class LifecycleTests(unittest.TestCase):
         self.assertEqual(self.purge()["objects"], 0)
         self.purge(dry_run=False)
         self.assertEqual(json.loads((self.run / "manifest.json").read_text())["items"][0]["move_status"], "purged")
+
+    def test_failed_intent_write_before_deletion_keeps_bytes_and_can_resume(self):
+        # Simulate interruption after the purging intent is persisted but
+        # before any filesystem object has been unlinked.
+        with patch.object(lifecycle, "_delete_entry",
+                          side_effect=OSError("simulated interruption")):
+            with self.assertRaisesRegex(OSError, "simulated interruption"):
+                self.purge(dry_run=False)
+        self.assertTrue(self.dest.exists())
+        self.assertEqual((self.dest / "settings").read_text(), "preserve-me")
+        on_disk = json.loads((self.run / "manifest.json").read_text())
+        self.assertEqual(on_disk["items"][0]["move_status"], "purging")
+        self.purge(dry_run=False)
+        self.assertFalse(self.dest.exists())
+        self.assertEqual(json.loads((self.run / "manifest.json").read_text())
+                         ["items"][0]["move_status"], "purged")
+
+    def test_crash_after_unlink_before_purged_journal_write_is_resumable(self):
+        original_write = lifecycle._write_manifest
+
+        def interrupt_only_completion(fd, payload):
+            if payload["items"][0]["move_status"] == "purged":
+                raise OSError("simulated crash before final journal update")
+            return original_write(fd, payload)
+
+        with patch.object(lifecycle, "_write_manifest",
+                          side_effect=interrupt_only_completion):
+            with self.assertRaisesRegex(OSError, "simulated crash"):
+                self.purge(dry_run=False)
+        self.assertFalse(self.dest.exists())
+        self.assertEqual(json.loads((self.run / "manifest.json").read_text())
+                         ["items"][0]["move_status"], "purging")
+        self.purge(dry_run=False)
+        self.assertEqual(json.loads((self.run / "manifest.json").read_text())
+                         ["items"][0]["move_status"], "purged")
 
     def test_nested_symlink_not_followed(self):
         target = self.home / "outside"
