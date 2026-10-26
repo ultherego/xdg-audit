@@ -14,8 +14,17 @@ The application does not install or uninstall software.
 
 The native database is selected using `ID`, then `ID_LIKE`, from `os-release`.
 Installing a foreign package manager does not replace the native database.
-Unknown OS families remain read-only. The Python API retains compatibility
-with older eight-field pacman inventory tuples.
+Unknown OS families cannot authorize MOVE. Existing quarantine runs remain
+eligible for separately verified RESTORE/PURGE under the journal safeguards.
+The Python API retains compatibility with older eight-field pacman inventory tuples.
+
+Text reports identify the selected database as `NATIVE`, show its `PACKAGES`
+count and report `SOURCE_HEALTH` separately. JSON statistics add
+`native_packages` alongside `native_package_source` and `installed_sources`;
+the existing `pacman_packages` field remains available. Counts represent unique
+installed package names, so dpkg architecture qualifiers and protective aliases
+do not count the same name repeatedly. A count does not establish healthy
+inventory or permission to MOVE.
 
 Every MOVE reads the providers again. The native database must be read
 successfully and contain package records. Missing, failed, partial and
@@ -111,8 +120,13 @@ after scanning, Snap/Flatpak namespace isolation, static AppImage metadata,
 non-execution of binaries, and fixture-only MOVE/RESTORE/PURGE.
 
 Before archive building, CI requires regressions and
-`scripts/smoke_native_sources.py` to run as an unprivileged user on Ubuntu 24.04
-(dpkg) and Fedora 43 (RPM), using real native package inventories.
+`scripts/smoke_native_sources.py` to run as an unprivileged user on Arch Linux
+(pacman), Ubuntu 24.04 (dpkg) and Fedora 43 (RPM), using real native package
+inventories. Each run verifies that installed package data is ACTIVE and refuses
+MOVE, then checks explicit MOVE/RESTORE/PURGE on unrelated disposable data,
+including exact hashes, idempotence and an untouched sentinel.
+Arch coverage exercises the native package-manager family used by CachyOS;
+it does not claim a separate CachyOS desktop-session test.
 Snap parser and lifecycle coverage uses fixtures; it does not claim a live
 snapd installation inside the test container. AppImage tests use static fixture
 files, matching the non-execution contract.

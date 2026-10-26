@@ -5,6 +5,10 @@
 
 ## New since v1.7.0-rc1
 
+- Native database name, unique package-name count and health in CLI reports,
+  plus compatible JSON statistics without double-counting dpkg aliases.
+- Real Arch/pacman inventory and lifecycle coverage alongside Ubuntu and Fedora,
+  including ACTIVE protection of installed-package data before MOVE.
 - MIT license, included in source archives.
 - Native MOVE authorization on APT/dpkg and RPM systems, `ID`/`ID_LIKE`
   selection, dpkg removal history, and refusal when package configuration is incomplete.

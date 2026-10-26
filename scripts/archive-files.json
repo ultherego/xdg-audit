@@ -57,6 +57,7 @@
   "tests/test_layout.py",
   "tests/test_loading_layout.py",
   "tests/test_native_readonly.py",
+  "tests/test_native_reporting.py",
   "tests/test_npm_pipx_sources.py",
   "tests/test_packaging.py",
   "tests/test_patterns.py",

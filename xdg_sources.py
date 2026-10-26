@@ -92,6 +92,12 @@ def verified_native_source(inventory) -> str:
     return source
 
 
+def package_name_count(source: str | None, names) -> int:
+    """Count unique installed names, excluding dpkg architecture aliases."""
+    return (len({name.partition(':')[0] for name in names})
+            if source == 'dpkg' else len(names))
+
+
 def dpkg_removals(logs: list[Path] | None = None) -> dict[str, list[str]]:
     """Bounded historical dpkg actions, including APT-triggered removals.
 
