@@ -1287,9 +1287,13 @@ def main(argv=None):
     parser.add_argument("--polkit-test-status", action="store_true",
                         help="Check installed system Polkit helper (read-only)")
     parser.add_argument("--polkit-test-create", action="store_true",
-                        help="Create isolated root-owned Polkit test fixture after TEST confirmation")
+                        help="Create user-owned restricted ~/.config fixture (TEST), no administrator required")
     parser.add_argument("--polkit-test-delete", action="store_true",
-                        help="Remove only the isolated Polkit fixture after DELETE TEST confirmation")
+                        help="Remove only user-owned ~/.config test fixture (DELETE TEST)")
+    parser.add_argument("--polkit-test-auth", action="store_true",
+                        help="Request system Polkit authorization for trusted read-only id -u")
+    parser.add_argument("--polkit-test-repair", action="store_true",
+                        help="Repair only two fixed user-owned ~/.config test objects")
     parser.add_argument("--scope", choices=(*SCOPES, "all"), default="all", help="Scan one scope; default all")
     parser.add_argument("--all", action="store_true", help="Also show ACTIVE and PROTECTED entries")
     parser.add_argument("--quick", action="store_true", help="Skip disk usage calculation")
@@ -1350,6 +1354,7 @@ def main(argv=None):
                   args.cleanup_history, args.cleanup_expired_history,
                   args.cleanup_all_history,
                   args.polkit_test_status, args.polkit_test_create, args.polkit_test_delete,
+                  args.polkit_test_auth, args.polkit_test_repair,
                   args.adopt_quarantine, args.recover_journal, args.automatic_purge,
                   args.configure_retention is not None, args.enable_retention,
                   args.disable_retention)
@@ -1368,21 +1373,32 @@ def main(argv=None):
         parser.error("Lifecycle commands cannot be combined with GUI, scan or move")
     roots = xdg_roots(home)
     if lifecycle:
-        if args.polkit_test_status or args.polkit_test_create or args.polkit_test_delete:
+        if (args.polkit_test_status or args.polkit_test_create or args.polkit_test_delete
+                or args.polkit_test_auth or args.polkit_test_repair):
             from xdg_polkit import status as polkit_status, run_test
+            from xdg_config_selftest import create, diagnose, repair, cleanup
             if args.polkit_test_status:
                 print(json.dumps(polkit_status(), indent=2, ensure_ascii=False))
                 return 0
             if not sys.stdin.isatty():
-                raise SystemExit("ERROR: Polkit test requires an interactive terminal")
+                raise SystemExit("ERROR: interactive confirmation required for test action")
             if args.polkit_test_create:
-                if input("Type TEST to request system Polkit authorization to CREATE a test-only directory: ").strip() != "TEST":
-                    raise SystemExit("ERROR: Polkit create cancelled")
-                result = run_test("test-create")
+                if input("Type TEST to create restricted user-owned files under ~/.config: ").strip() != "TEST":
+                    raise SystemExit("ERROR: test fixture creation cancelled")
+                result = create(home)
+            elif args.polkit_test_auth:
+                if input("Type AUTH to request system Polkit authentication (read-only id -u): ").strip() != "AUTH":
+                    raise SystemExit("ERROR: authentication test cancelled")
+                result = run_test("test-auth")
+            elif args.polkit_test_repair:
+                print(json.dumps(diagnose(home), indent=2, ensure_ascii=False))
+                if input("Type ACCESS TEST to repair ONLY the fixture's owner-read bits: ").strip() != "ACCESS TEST":
+                    raise SystemExit("ERROR: test repair cancelled")
+                result = repair(home)
             else:
-                if input("Type DELETE TEST to request Polkit authorization to delete ONLY its isolated test directory: ").strip() != "DELETE TEST":
-                    raise SystemExit("ERROR: Polkit delete cancelled")
-                result = run_test("test-delete")
+                if input("Type DELETE TEST to clean up ONLY the ~/.config test fixture: ").strip() != "DELETE TEST":
+                    raise SystemExit("ERROR: test cleanup cancelled")
+                result = cleanup(home)
             print(json.dumps(result, indent=2, ensure_ascii=False))
             return 0
         from xdg_retention import load as load_retention, save as save_retention
