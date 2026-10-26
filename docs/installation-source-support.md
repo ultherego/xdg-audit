@@ -98,3 +98,5 @@ nie mogą być obowiązkowe. Etykieta w UI: „pacman (foreign / AUR lub lokalny
 - Flatpak list: https://man.archlinux.org/man/flatpak-list.1.en
 - Snap aplikacje i launchery: https://snapcraft.io/docs/commands-and-aliases/
 - AppImage integracja bez instalacji: https://docs.appimage.org/user-guide/run-appimages.html
+- dpkg-query — status bazy i format dla maszyn: https://man7.org/linux/man-pages/man1/dpkg-query.1.html
+- RPM — zapytania do zainstalowanych pakietów: https://rpm.org/docs/latest/man/rpm-queryformat.7
