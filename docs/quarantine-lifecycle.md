@@ -133,6 +133,20 @@ Incomplete, corrupted, inconsistent, or nonempty runs are always protected.
 History deletion uses only `rmdir` on empty run/scope directories and removes
 the manifest with an anchored `unlink`; it never recursively deletes files.
 
+## GUI responsiveness during PURGE
+
+GTK, Qt and Tk verify each selected quarantine run off the graphical event
+loop, including the recursive SHA-256 inventory. The confirmation prompt
+appears **after** verification. Slow checks must not freeze window rendering.
+For large directories, GTK displays a spinner while verification is running.
+The confirmed destructive operation also runs off the UI thread; a second
+click is ignored while another quarantine operation is in progress.
+All safety preflights are re-run before deletion, and failed operations
+surface an explicit error instead of silently deleting anything.
+
+When updating this software, restart the running application: an already
+open GTK/Qt/Tk window will not load new Python code dynamically.
+
 ## Fail-closed behavior and boundaries
 
 - Deletion is anchored to already-open directory descriptors.

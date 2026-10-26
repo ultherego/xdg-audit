@@ -9,6 +9,7 @@ from typing import Any
 
 from xdg_theme import Appearance, detect_appearance
 from xdg_inspector import details_text, open_item_location
+from xdg_gui_jobs import run_gui_job
 
 
 def import_qt():
@@ -125,6 +126,9 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
             except Exception as exc:
                 self.failed.emit(f"{type(exc).__name__}: {exc}")
 
+    class QuarantineSignals(QtCore.QObject):
+        finished = Signal(object, object)
+
     class MainWindow(QtWidgets.QMainWindow):
         def __init__(self):
             super().__init__()
@@ -136,6 +140,10 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
             self.items = []
             self.checked = set()
             self.scan_complete=False
+            self._quarantine_job_busy=False
+            self._quarantine_callback=None
+            self._quarantine_signals=QuarantineSignals(self)
+            self._quarantine_signals.finished.connect(self._quarantine_finished)
             self.roots = {}
             self.stats = {}
             self.thread = None
@@ -495,48 +503,79 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
                 QtWidgets.QMessageBox.warning(self,tr('Retencja'),
                     tf('Nie można zapisać retencji: {error}',error=exc))
 
+        @Slot(object, object)
+        def _quarantine_finished(self, ok, outcome):
+            """Qt delivers worker results to this QObject on the GUI thread."""
+            callback=self._quarantine_callback
+            self._quarantine_callback=None
+            self._quarantine_job_busy=False
+            if callback is not None:
+                try:
+                    callback(ok, outcome)
+                except Exception as exc:
+                    self.statusBar().showMessage(
+                        tf('Błąd operacji kwarantanny: {error}',error=exc))
+
+        def _quarantine_job(self, operation, callback, activity):
+            if self._quarantine_job_busy:
+                self.statusBar().showMessage(tr('Operacja kwarantanny jest już wykonywana.'))
+                return
+            self._quarantine_job_busy=True
+            self._quarantine_callback=callback
+            self.statusBar().showMessage(tr(activity))
+            run_gui_job(operation, lambda *_: None,
+                        lambda _done, ok, outcome:self._quarantine_signals.finished.emit(ok,outcome))
+
         def cleanup_history_dialog(self):
             selected=self.qtree.currentItem()
-            if selected is None:
-                return
-            self._cleanup_history_runs([selected.data(0,Role)])
+            if selected is not None:
+                self._cleanup_history_runs([selected.data(0,Role)])
 
         def cleanup_expired_history_dialog(self):
-            try:
-                ids=engine.expired_quarantine_history(home,engine.xdg_roots(home))
-                if not ids:
+            def completed(ok, outcome):
+                if not ok:
+                    QtWidgets.QMessageBox.critical(self,tr('Historia'),str(outcome))
+                elif outcome:
+                    self._cleanup_history_runs(outcome)
+                else:
                     QtWidgets.QMessageBox.information(self,tr('Historia'),
                         tr('Brak wygasłych manifestów.'))
-                    return
-                self._cleanup_history_runs(ids)
-            except (ValueError,OSError) as exc:
-                QtWidgets.QMessageBox.critical(self,tr('Historia'),str(exc))
+            self._quarantine_job(
+                lambda:engine.expired_quarantine_history(home,engine.xdg_roots(home)),
+                completed,'Sprawdzanie historii…')
 
         def _cleanup_history_runs(self,run_ids):
-            try:
-                plans=[engine.cleanup_quarantine_history(home,engine.xdg_roots(home),rid)
-                       for rid in run_ids]
-            except (ValueError,OSError) as exc:
-                QtWidgets.QMessageBox.critical(self,tr('Historia'),str(exc))
-                return
-            summary='\\n'.join(x['run_id']+' ('+x['status']+')' for x in plans)
-            if QtWidgets.QMessageBox.question(self,tr('Usuń historię'),
-                    summary+'\\n\\n'+tr('Zostaną usunięte tylko zakończone dzienniki.'),
-                    QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No,
-                    QtWidgets.QMessageBox.StandardButton.No) != QtWidgets.QMessageBox.StandardButton.Yes:
-                return
-            answer,ok=QtWidgets.QInputDialog.getText(self,tr('Potwierdzenie'),
-                                                     tr('Wpisz HISTORY:'))
-            if not ok or answer != 'HISTORY':
-                return
-            try:
-                for plan in plans:
-                    engine.cleanup_quarantine_history(home,engine.xdg_roots(home),
-                                                      plan['run_id'],dry_run=False)
-                self.refresh_quarantine()
-            except (ValueError,OSError) as exc:
-                QtWidgets.QMessageBox.critical(self,tr('Historia'),str(exc))
-                self.refresh_quarantine()
+            run_ids=tuple(run_ids)
+            def completed(ok, outcome):
+                if not ok:
+                    QtWidgets.QMessageBox.critical(self,tr('Historia'),str(outcome))
+                    return
+                summary='\\n'.join(x['run_id']+' ('+x['status']+')' for x in outcome)
+                if QtWidgets.QMessageBox.question(self,tr('Usuń historię'),
+                        summary+'\\n\\n'+tr('Zostaną usunięte tylko zakończone dzienniki.'),
+                        QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No,
+                        QtWidgets.QMessageBox.StandardButton.No) != QtWidgets.QMessageBox.StandardButton.Yes:
+                    return
+                answer,ok=QtWidgets.QInputDialog.getText(self,tr('Potwierdzenie'),
+                                                         tr('Wpisz HISTORY:'))
+                if not ok or answer != 'HISTORY':
+                    return
+                def delete():
+                    for plan in outcome:
+                        engine.cleanup_quarantine_history(
+                            home,engine.xdg_roots(home),plan['run_id'],dry_run=False)
+                    return len(outcome)
+                def after_delete(success, result):
+                    self.refresh_quarantine()
+                    if success:
+                        self.statusBar().showMessage(tr('Usunięto zakończone manifesty.'))
+                    else:
+                        QtWidgets.QMessageBox.critical(self,tr('Historia'),str(result))
+                self._quarantine_job(delete,after_delete,'Usuwanie historii…')
+            self._quarantine_job(
+                lambda:[engine.cleanup_quarantine_history(
+                    home,engine.xdg_roots(home),rid) for rid in run_ids],
+                completed,'Sprawdzanie historii…')
 
         def purge_dialog(self):
             entry=self.qtree.currentItem()
@@ -549,48 +588,54 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
             self._purge_runs([entry.data(0,Role)])
 
         def purge_expired_dialog(self):
-            try:
-                run_ids=engine.expired_quarantine_runs(home,engine.xdg_roots(home))
-            except (ValueError,OSError) as exc:
-                QtWidgets.QMessageBox.warning(self,tr('Kwarantanna'),str(exc))
-                return
-            if not run_ids:
-                QtWidgets.QMessageBox.information(self,tr('Kwarantanna'),
-                    tr('Nie znaleziono wygasłych kwarantann.'))
-                return
-            self._purge_runs(run_ids)
+            def completed(ok, outcome):
+                if not ok:
+                    QtWidgets.QMessageBox.warning(self,tr('Kwarantanna'),str(outcome))
+                elif outcome:
+                    self._purge_runs(outcome)
+                else:
+                    QtWidgets.QMessageBox.information(self,tr('Kwarantanna'),
+                        tr('Nie znaleziono wygasłych kwarantann.'))
+            self._quarantine_job(
+                lambda:engine.expired_quarantine_runs(home,engine.xdg_roots(home)),
+                completed,'Sprawdzanie kwarantanny…')
 
         def _purge_runs(self,run_ids):
-            plans=[]
-            try:
-                for run_id in run_ids:
-                    plans.append(engine.purge_quarantine_run(home,engine.xdg_roots(home),run_id))
-            except (ValueError,OSError) as exc:
-                QtWidgets.QMessageBox.critical(self,tr('Zablokowano PURGE'),str(exc))
-                return
-            description='\\n'.join(
-                str(plan['run_id'])+': '+str(plan['objects'])+' entries / '+str(plan['bytes'])+' B'
-                for plan in plans)
-            if QtWidgets.QMessageBox.question(self,tr('Trwałe usuwanie'),
-                    description+'\\n\\n'+tr('Tej operacji nie da się cofnąć. Kontynuować?'),
-                    QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No,
-                    QtWidgets.QMessageBox.StandardButton.No) != QtWidgets.QMessageBox.StandardButton.Yes:
-                return
-            answer, ok=QtWidgets.QInputDialog.getText(self,tr('Potwierdzenie PURGE'),tr('Wpisz PURGE:'))
-            if not ok or answer != 'PURGE':
-                return
-            removed=0
-            try:
-                for plan in plans:
-                    result=engine.purge_quarantine_run(home,engine.xdg_roots(home),
-                                                       plan['run_id'],dry_run=False)
-                    removed+=result['objects']
-                self.refresh_quarantine()
-                QtWidgets.QMessageBox.information(self,tr('Kwarantanna'),
-                    tr('Usunięto obiektów: ')+str(removed))
-            except (ValueError,OSError) as exc:
-                QtWidgets.QMessageBox.critical(self,tr('Zablokowano PURGE'),str(exc))
-                self.refresh_quarantine()
+            run_ids=tuple(run_ids)
+            def completed(ok, outcome):
+                if not ok:
+                    QtWidgets.QMessageBox.critical(self,tr('Zablokowano PURGE'),str(outcome))
+                    return
+                description='\\n'.join(
+                    str(plan['run_id'])+': '+str(plan['objects'])+' entries / '+str(plan['bytes'])+' B'
+                    for plan in outcome)
+                if QtWidgets.QMessageBox.question(self,tr('Trwałe usuwanie'),
+                        description+'\\n\\n'+tr('Tej operacji nie da się cofnąć. Kontynuować?'),
+                        QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No,
+                        QtWidgets.QMessageBox.StandardButton.No) != QtWidgets.QMessageBox.StandardButton.Yes:
+                    return
+                answer, ok=QtWidgets.QInputDialog.getText(self,tr('Potwierdzenie PURGE'),tr('Wpisz PURGE:'))
+                if not ok or answer != 'PURGE':
+                    return
+                def delete():
+                    removed=0
+                    for plan in outcome:
+                        result=engine.purge_quarantine_run(
+                            home,engine.xdg_roots(home),plan['run_id'],dry_run=False)
+                        removed+=result['objects']
+                    return removed
+                def after_delete(success, result):
+                    self.refresh_quarantine()
+                    if success:
+                        QtWidgets.QMessageBox.information(self,tr('Kwarantanna'),
+                            tr('Usunięto obiektów: ')+str(result))
+                    else:
+                        QtWidgets.QMessageBox.critical(self,tr('Zablokowano PURGE'),str(result))
+                self._quarantine_job(delete,after_delete,'Trwałe usuwanie z kwarantanny…')
+            self._quarantine_job(
+                lambda:[engine.purge_quarantine_run(
+                    home,engine.xdg_roots(home),run_id) for run_id in run_ids],
+                completed,'Sprawdzanie kwarantanny…')
 
         def compare_report_gui(self):
             if not self.scan_complete:return

@@ -110,6 +110,8 @@ jobs:
         run: xvfb-run -a /usr/bin/python3 scripts/gui_smoke.py --backend tk
       - name: GTK4 full application startup
         run: xvfb-run -a /usr/bin/python3 scripts/gui_app_smoke.py --backend gtk4
+      - name: GTK4 PURGE preview remains responsive
+        run: xvfb-run -a /usr/bin/python3 scripts/gui_async_purge_smoke.py
       - name: Qt6 full application startup
         run: xvfb-run -a /usr/bin/python3 scripts/gui_app_smoke.py --backend qt6
       - name: Tk full application startup
