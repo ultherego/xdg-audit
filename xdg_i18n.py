@@ -7,6 +7,11 @@ from __future__ import annotations
 
 LANGUAGES = {'pl': 'Polski', 'en': 'English'}
 EN = {
+    'Ustaw retencję…': 'Configure retention…',
+    'Retencja': 'Retention',
+    'Dni przechowywania:': 'Retention days:',
+    'Ustawiono retencję: {days} dni': 'Retention set to {days} days',
+    'Nie można zapisać retencji: {error}': 'Could not save retention: {error}',
     'Retencja: usuń wygasłe operacje': 'Retention: clean up expired runs',
     'Usuń wygasłe…': 'Purge expired…',
     'Usuń trwale…': 'Purge permanently…',
