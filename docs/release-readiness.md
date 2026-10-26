@@ -7,6 +7,9 @@ Nie publikować nowego wydania ani stabilnego tagu bez odrębnej decyzji.
 Dowody wymagane do zamknięcia otwartych pozycji: [protokół walidacji P0/P1](release-verification-evidence.md).
 Zaznaczenie checkboxa wymaga podlinkowanego wyniku; sam skrypt/test dodany do repozytorium nie jest dowodem jego uruchomienia.
 
+Wyniki prac i wykonanych kontroli z 2026-10-26:
+[rejestr weryfikacji](verification-2026-10-26.md).
+
 ## 1. Bezpieczeństwo (P0)
 
 - [x] Dostęp do kwarantanny, manifestu i podrzędnych katalogów oparty
@@ -17,8 +20,10 @@ Zaznaczenie checkboxa wymaga podlinkowanego wyniku; sam skrypt/test dodany do re
 - [x] Testy zapisu dziennika, wznowienia po częściowym usunięciu,
   podmiany ścieżek, kolizji i danych spoza kwarantanny.
 - [x] Regresje dla katalogów bez prawa odczytu, zapisu i przeszukiwania.
-- [ ] Testy ręczne przy awarii/przerwaniu procesu na żywym środowisku
-  z *wyłącznie sztucznymi danymi*.
+- [x] Rzeczywiste przerwanie procesu w ośmiu punktach MOVE/RESTORE/PURGE
+  przez `SIGKILL`, z *wyłącznie sztucznymi danymi*, oraz odzyskanie po
+  ponownym uruchomieniu — [wyniki i zakres](verification-2026-10-26.md).
+  Nie jest to test odcięcia zasilania ani awarii jądra.
 - [ ] Przegląd bezpieczeństwa ostatnich zmian przez drugą osobę.
 
 ## 2. CI i ochrona main (P0)
@@ -43,26 +48,36 @@ bezpośrednio na listę wymaganych kontekstów rulesetu.
 
 ## 3. Kompatybilność Linux i GUI (P0)
 
-**Potwierdzenie użytkownika (2026-10-26):** autor projektu testował GUI i zgłasza, że wszystkie sprawdzane funkcje działają. Środowiska GNOME/Wayland, KDE/Wayland i Xfce/X11 oraz oddzielny pełny przebieg każdego scenariusza nie zostały wskazane. Dlatego potwierdzenie zapisano, ale szczegółowe pola poniżej pozostają otwarte do czasu podania macierzy środowisk / dowodów.
+**Potwierdzenie użytkownika (2026-10-26):** autor projektu testował GUI
+i potwierdził działanie wszystkich sprawdzanych funkcji. Odbiór tego
+środowiska jest zakończony; nie wymaga ponownego wykonywania tych samych testów.
+Poniższa macierz dotyczy dodatkowego pokrycia osobnych środowisk, którego
+potwierdzenie użytkownika nie wymienia.
 
+- [x] Testy funkcjonalne GUI w środowisku autora — potwierdzenie użytkownika.
 
 - [ ] GNOME/Wayland — cały przepływ od skanu do przywrócenia i PURGE.
 - [ ] KDE Plasma/Wayland — analogicznie, z zachowaniem motywu.
 - [ ] Xfce/X11 — uruchomienie i przebieg na backendzie Tk/GTK.
-- [ ] Brak pacmana: skan działa, MOVE pozostaje zablokowany (obecnie).
+- [x] Brak pacmana: rzeczywisty odczyt dpkg i skan działają, MOVE pozostaje
+  zablokowany — [wykonany test](verification-2026-10-26.md).
 - [ ] Odporny UX dla pełnego/quasi-pełnego dysku oraz braku praw
-  do katalogów, zrozumiały błąd i bez nadpisywania danych.
+  do katalogów, zrozumiały błąd i bez nadpisywania danych. Testy silnika
+  ENOSPC/EACCES wykonane; natywny smoke błędu GTK musi przejść CI.
 
 ## 4. Publikacja (P1)
 
 - [ ] Wybrać **licencję** (MIT/Apache-2.0/GPL-3.0 lub inna) i dopiero
   po decyzji właściciela dodać jej pełny tekst. Nie zgadywać licencji.
-- [ ] Zaktualizować README, CHANGELOG i RELEASE_NOTES do kodu RC2.
-- [ ] Zweryfikować screenshoty, neutralne ścieżki, brak sekretów w
-  załącznikach/release artifacts.
-- [ ] Przygotować udokumentowany scenariusz instalacji użytkownika,
+- [x] Zaktualizować README, CHANGELOG i RELEASE_NOTES do kodu RC2.
+- [x] Zweryfikować bieżące screenshoty, neutralne ścieżki oraz wejścia do
+  archiwów źródeł; wykluczyć przypadkowe pliki z checkoutu —
+  [zakres i wyniki](verification-2026-10-26.md). Finalny opublikowany
+  artefakt wymaga jeszcze odbioru przed wydaniem.
+- [x] Przygotować i przetestować udokumentowany scenariusz instalacji użytkownika,
   aktualizacji i odinstalowania (obecnie `install_desktop.py`
-  wskazuje na aktualny katalog repozytorium).
+  wskazuje na aktualny katalog repozytorium) —
+  [opis i testy](desktop-installation.md).
 - [ ] Opublikować **nowy RC** po akceptacji, dopiero potem wersję stabilną.
 
 ## 5. Po stabilizacji: źródła instalacji aplikacji

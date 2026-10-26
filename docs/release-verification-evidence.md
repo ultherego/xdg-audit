@@ -38,8 +38,12 @@ must not be followed by real-user `--purge` or `--remove`.
    the test process at a known fixture checkpoint. Never intentionally interrupt
    actions against personal data.
 
-Automated coverage is necessary but does **not** substitute for the manual
-live-process interruption acceptance test.
+`tests/test_process_recovery.py` now executes eight real SIGKILL checkpoints
+in child processes, so Python cleanup/finally blocks cannot run. These tests
+exercise actual journal writes, renameat2, unlink, hashes and restart recovery
+on disposable filesystem fixtures. They provide reproducible process-crash
+evidence. They do not establish power-loss, kernel-crash or filesystem-failure
+durability. An interactive rehearsal remains optional additional evidence.
 
 ### Desktop session matrix
 
@@ -48,6 +52,11 @@ live-process interruption acceptance test.
 | GNOME / Wayland / GTK | pending | pending | pending | pending | pending | pending | — |
 | KDE Plasma / Wayland / Qt | pending | pending | pending | pending | pending | pending | — |
 | Xfce / X11 / Tk or GTK | pending | pending | pending | pending | pending | pending | — |
+
+The owner confirmed all tested GUI functions work on 2026-10-26. This closes
+acceptance for the tested owner environment; do not request the same tests
+again. The matrix records additional environments, not a retraction of that
+acceptance.
 
 For each session, launch with a disposable HOME and verify all confirmation
 tokens and visible error messages. Recording a successful Xvfb/Weston CI smoke
@@ -98,7 +107,7 @@ Author self-review cannot satisfy this P0 gate.
 
 ## Not automatically closeable from repository changes
 
-- Real GNOME/KDE/Xfce sessions, manual interruption tests, and independent
+- Real GNOME/KDE/Xfce sessions and independent
   second-person review require external verified evidence.
 - License choice and release publication require explicit owner decisions.
 - GitHub branch ruleset changes require a separate verified admin action;
@@ -108,3 +117,5 @@ Author self-review cannot satisfy this P0 gate.
 
 Only change a `pending` to `PASS` after a concrete, accessible evidence link
 is added next to the corresponding case. If no evidence exists, leave it open.
+
+Executed checks and findings: [2026-10-26 verification](verification-2026-10-26.md).

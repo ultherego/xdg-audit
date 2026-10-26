@@ -7,6 +7,7 @@ Uses fake quarantine metadata: it NEVER deletes real user data.
 from __future__ import annotations
 
 import os
+import errno
 from pathlib import Path
 import sys
 import tempfile
@@ -18,7 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 
-def main() -> None:
+def main(disk_full: bool = False) -> None:
     import gi
     gi.require_version("Gtk", "4.0")
     from gi.repository import Gtk, GLib, Gio
@@ -64,6 +65,8 @@ def main() -> None:
             preview_started.set()
             time.sleep(0.9)
             preview_done.set()
+            if disk_full:
+                raise OSError(errno.ENOSPC, 'No space left on device')
             return {"run_id": run_id, "objects": 2, "bytes": 123,
                     "dry_run": kwargs.get("dry_run", True)}
 
@@ -144,6 +147,14 @@ def main() -> None:
                     raise AssertionError("Slow file inspection ran on UI thread")
                 prompt = next((w for w in open_windows()
                                if w.get_title() == "Trwałe usunięcie"), None)
+                if disk_full:
+                    window = Gio.Application.get_default().get_active_window()
+                    labels = [w.get_text() for w in find_widgets(window) if isinstance(w, Gtk.Label)]
+                    if prompt is not None:
+                        raise AssertionError('Disk-full failure opened a PURGE confirmation')
+                    if not any('No space left on device' in text for text in labels):
+                        raise AssertionError('Disk-full reason was not visible in the interface')
+                    return False
                 if prompt is None:
                     raise AssertionError("PURGE confirmation dialog never appeared")
                 labels = [w for w in find_widgets(prompt) if isinstance(w, Gtk.Label)]
@@ -172,8 +183,12 @@ def main() -> None:
         launch_gui(engine, home, args, {}, runtime, "gtk4")
         if errors:
             raise AssertionError("; ".join(errors))
-        print("PASS: slow PURGE preview leaves GTK responsive and displays confirmation")
+        print("PASS: disk-full preview leaves GTK responsive and displays the blocking error"
+              if disk_full else "PASS: slow PURGE preview leaves GTK responsive and displays confirmation")
 
 
 if __name__ == "__main__":
-    main()
+    import argparse
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--disk-full', action='store_true')
+    main(parser.parse_args().disk_full)

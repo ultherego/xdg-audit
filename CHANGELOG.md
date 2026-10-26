@@ -2,6 +2,21 @@
 
 ## 1.7.0-rc2 (unreleased)
 
+- Verify interruption recovery with eight real SIGKILL checkpoints covering
+  MOVE, RESTORE, partial PURGE and abandoned journal temporary files.
+- Anchor all MOVE/RESTORE journal writes; preserve the original ENOSPC/EACCES
+  error instead of masking it with a duplicate descriptor close.
+- Reconcile an interrupted completed RESTORE only when the original inode is
+  present; keep counts accurate after a rename followed by a sync failure.
+- Build source archives from an explicit file manifest, excluding incidental
+  reports, credentials, symlink targets and custom output directories.
+- Harden per-user desktop registration against symlinked ancestors, linked
+  assets and interrupted writes; correctly escape special Exec path characters.
+- Add real dpkg scan/MOVE-refusal coverage and a real Gio fixture-launch smoke;
+  exercise the GTK disk-full error path without permitting deletion.
+- Validate complete Flatpak columns and dpkg status tuples, discarding partial
+  results on malformed records.
+
 - Fail closed on symlinked ancestor directories when inspecting manual binaries,
   AppImages, and /opt-style hints; cap large directory listings before relying
   on their evidence, without running any installed application.

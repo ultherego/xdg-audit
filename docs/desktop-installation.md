@@ -51,7 +51,7 @@ set -l data_home ~/.local/share
 if set -q XDG_DATA_HOME
     set data_home $XDG_DATA_HOME
 end
-printf '%s\\n' $data_home/applications/io.github.xdgaudit.desktop $data_home/icons/hicolor/256x256/apps/io.github.xdgaudit.png
+printf '%s\n' $data_home/applications/io.github.xdgaudit.desktop $data_home/icons/hicolor/256x256/apps/io.github.xdgaudit.png
 ```
 
 After confirming both displayed paths belong to your installation, remove
@@ -73,3 +73,9 @@ Record exact commands, resulting paths, before/after fixture hashes,
 environment and a redacted run log in the
 [release verification ledger](release-verification-evidence.md).
 Documenting the procedure does not mean a real desktop acceptance test passed.
+
+Automated evidence: `tests/test_install_desktop.py` exercises install, update,
+exact-file unregistration, preservation of quarantine data and failure paths.
+`scripts/desktop_entry_smoke.py` additionally uses Gio to launch an installed
+fixture whose checkout path contains spaces, quotes, percent, backslash and
+shell metacharacters. This smoke runs under the native GUI CI job.

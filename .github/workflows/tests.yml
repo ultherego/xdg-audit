@@ -112,10 +112,14 @@ jobs:
         run: xvfb-run -a /usr/bin/python3 scripts/gui_app_smoke.py --backend gtk4
       - name: GTK4 PURGE preview remains responsive
         run: xvfb-run -a /usr/bin/python3 scripts/gui_async_purge_smoke.py
+      - name: GTK4 shows disk-full error and refuses PURGE confirmation
+        run: xvfb-run -a /usr/bin/python3 scripts/gui_async_purge_smoke.py --disk-full
       - name: Qt6 full application startup
         run: xvfb-run -a /usr/bin/python3 scripts/gui_app_smoke.py --backend qt6
       - name: Tk full application startup
         run: xvfb-run -a /usr/bin/python3 scripts/gui_app_smoke.py --backend tk
+      - name: Desktop registration and real launcher path escaping
+        run: /usr/bin/python3 scripts/desktop_entry_smoke.py
 
   wayland-smoke:
     name: Native Wayland smoke (Weston)

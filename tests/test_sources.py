@@ -30,6 +30,31 @@ class SourceProviderTests(unittest.TestCase):
         self.assertFalse(empty.names)
         self.assertEqual(error.status, "failed")
 
+    def test_dpkg_rejects_malformed_status_without_partial_results(self):
+        for output in (
+            "safe-package\tinstall ok installed\n"
+            "broken-package\tgarbled\n",
+            "safe-package\tinstall ok installed\n"
+            "broken-package\tinstall invalid installed\n",
+            "safe-package\tinstall ok installed\n"
+            "broken-package\tinstall ok installed extra\n",
+        ):
+            with self.subTest(output=output), patch.object(sources, "_run", return_value=(
+                sources.Probe("dpkg", "ok"), output)):
+                probe = sources.dpkg_packages()
+            self.assertEqual(probe.status, "parse_error")
+            self.assertFalse(probe.names)
+
+    def test_dpkg_installed_and_residual_config_are_distinct(self):
+        output = ("active:amd64\tinstall ok installed\n"
+                  "retired\tdeinstall ok config-files\n"
+                  "waiting\tinstall ok unpacked\n")
+        with patch.object(sources, "_run", return_value=(
+            sources.Probe("dpkg", "ok"), output)):
+            probe = sources.dpkg_packages()
+        self.assertEqual(probe.status, "ok")
+        self.assertEqual(probe.names, {"active", "active:amd64"})
+
     def test_flatpak_lists_apps_not_runtimes(self):
         output = ("org.mozilla.Firefox\tFirefox\tuser\n"
                   "com.valvesoftware.Steam\tSteam\tsystem\n")
@@ -44,6 +69,20 @@ class SourceProviderTests(unittest.TestCase):
         with patch.object(sources, "_run", return_value=(
             sources.Probe("flatpak", "ok"), "broken-single-column")):
             self.assertEqual(sources.flatpak_apps().status, "parse_error")
+
+    def test_flatpak_incomplete_installation_column_fails_closed(self):
+        # A truncated successful command must not masquerade as a complete list.
+        for output in (
+            "org.example.App\tExample\n",
+            "org.example.App\tExample\t\n",
+            "org.example.App\tExample\tuser\textra\n",
+        ):
+            with self.subTest(output=output), patch.object(sources, "_run", return_value=(
+                sources.Probe("flatpak", "ok"), output)):
+                probe = sources.flatpak_apps()
+            self.assertEqual(probe.status, "parse_error")
+            self.assertFalse(probe.names)
+            self.assertFalse(probe.app_ids)
 
     def test_snap_list_parses_name_not_untrusted_header(self):
         content = "Name Version Rev Tracking Publisher Notes\nopera 4.1 42 stable somebody -\n"
@@ -155,7 +194,7 @@ class SourceProviderTests(unittest.TestCase):
             import io
             import json
             output = io.StringIO()
-            with contextlib.redirect_stdout(output):
+            with contextlib.redirect_stdout(output), patch.object(audit, "check_no_root"):
                 result = audit.main(["--home", str(Path(temp)), "--installed-sources"])
             self.assertEqual(result, 0)
             report = json.loads(output.getvalue())
