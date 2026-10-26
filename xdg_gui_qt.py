@@ -358,7 +358,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
             qlayout.setContentsMargins(0,0,0,0)
             qlayout.addWidget(QtWidgets.QLabel(tr('Historia przeniesień do kwarantanny')))
             self.qtree=QtWidgets.QTreeWidget()
-            self.qtree.setHeaderLabels(['Identyfikator operacji','W manifestie','Przeniesione'])
+            self.qtree.setHeaderLabels(['Identyfikator operacji','Status','W manifestie','Przeniesione'])
             self.qtree.setAlternatingRowColors(True)
             self.qtree.header().setStretchLastSection(True)
             qlayout.addWidget(self.qtree,1)
@@ -376,9 +376,15 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
             qpurge=QtWidgets.QPushButton(tr('Usuń trwale wybraną…'))
             qpurge.clicked.connect(self.purge_dialog)
             qb.addWidget(qpurge)
+            qhistory=QtWidgets.QPushButton(tr('Usuń historię…'))
+            qhistory.clicked.connect(self.cleanup_history_dialog)
+            qb.addWidget(qhistory)
             qexpired=QtWidgets.QPushButton(tr('Usuń wygasłe…'))
             qexpired.clicked.connect(self.purge_expired_dialog)
             qb.addWidget(qexpired)
+            qexpired_history=QtWidgets.QPushButton(tr('Wyczyść starą historię…'))
+            qexpired_history.clicked.connect(self.cleanup_expired_history_dialog)
+            qb.addWidget(qexpired_history)
             qretention=QtWidgets.QPushButton(tr('Ustaw retencję…'))
             qretention.clicked.connect(self.configure_retention_dialog)
             qb.addWidget(qretention)
@@ -460,7 +466,8 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
         def refresh_quarantine(self):
             self.qtree.clear()
             for entry in engine.quarantine_runs(home,engine.xdg_roots(home)):
-                record=QtWidgets.QTreeWidgetItem([entry['run_id'],str(len(entry['items'])),str(entry['moved'])])
+                record=QtWidgets.QTreeWidgetItem([entry['run_id'],entry['status'],
+                                                str(len(entry['items'])),str(entry['moved'])])
                 record.setData(0,Role,entry['run_id'])
                 self.qtree.addTopLevelItem(record)
 
@@ -488,9 +495,56 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
                 QtWidgets.QMessageBox.warning(self,tr('Retencja'),
                     tf('Nie można zapisać retencji: {error}',error=exc))
 
+        def cleanup_history_dialog(self):
+            selected=self.qtree.currentItem()
+            if selected is None:
+                return
+            self._cleanup_history_runs([selected.data(0,Role)])
+
+        def cleanup_expired_history_dialog(self):
+            try:
+                ids=engine.expired_quarantine_history(home,engine.xdg_roots(home))
+                if not ids:
+                    QtWidgets.QMessageBox.information(self,tr('Historia'),
+                        tr('Brak wygasłych manifestów.'))
+                    return
+                self._cleanup_history_runs(ids)
+            except (ValueError,OSError) as exc:
+                QtWidgets.QMessageBox.critical(self,tr('Historia'),str(exc))
+
+        def _cleanup_history_runs(self,run_ids):
+            try:
+                plans=[engine.cleanup_quarantine_history(home,engine.xdg_roots(home),rid)
+                       for rid in run_ids]
+            except (ValueError,OSError) as exc:
+                QtWidgets.QMessageBox.critical(self,tr('Historia'),str(exc))
+                return
+            summary='\\n'.join(x['run_id']+' ('+x['status']+')' for x in plans)
+            if QtWidgets.QMessageBox.question(self,tr('Usuń historię'),
+                    summary+'\\n\\n'+tr('Zostaną usunięte tylko zakończone dzienniki.'),
+                    QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No,
+                    QtWidgets.QMessageBox.StandardButton.No) != QtWidgets.QMessageBox.StandardButton.Yes:
+                return
+            answer,ok=QtWidgets.QInputDialog.getText(self,tr('Potwierdzenie'),
+                                                     tr('Wpisz HISTORY:'))
+            if not ok or answer != 'HISTORY':
+                return
+            try:
+                for plan in plans:
+                    engine.cleanup_quarantine_history(home,engine.xdg_roots(home),
+                                                      plan['run_id'],dry_run=False)
+                self.refresh_quarantine()
+            except (ValueError,OSError) as exc:
+                QtWidgets.QMessageBox.critical(self,tr('Historia'),str(exc))
+                self.refresh_quarantine()
+
         def purge_dialog(self):
             entry=self.qtree.currentItem()
             if entry is None:
+                return
+            if entry.text(1) in ("PURGED","RESTORED","COMPLETED"):
+                QtWidgets.QMessageBox.information(self,tr('Historia'),
+                    tr('Ta operacja jest zakończona. Użyj opcji Usuń historię.'))
                 return
             self._purge_runs([entry.data(0,Role)])
 
@@ -576,11 +630,16 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
                      f'{exc}\n'+tr('Istniejące pliki nie są nadpisywane.'))
 
         def restore_dialog(self):
-            runs = engine.quarantine_runs(home, engine.xdg_roots(home))
+            runs = [r for r in engine.quarantine_runs(home, engine.xdg_roots(home))
+                    if r['status'] not in ('PURGED','RESTORED','COMPLETED')]
             if not runs:
                 QtWidgets.QMessageBox.information(self, tr('Kwarantanna'), tr('Nie znaleziono operacji.'))
                 return
             chosen_row = self.qtree.currentItem() if self.content_stack.currentIndex() == 1 else None
+            if chosen_row and chosen_row.text(1) in ('PURGED','RESTORED','COMPLETED'):
+                QtWidgets.QMessageBox.information(self,tr('Historia'),
+                    tr('Ta operacja jest zakończona. Użyj opcji Usuń historię.'))
+                return
             labels = [x['run_id']+'  ('+tf('{count} przeniesionych / {total} zapisanych',count=x['moved'],total=len(x['items']))+')' for x in runs]
             if chosen_row:
                 label=next((key for key,run in zip(labels,runs) if run['run_id']==chosen_row.data(0,Role)),labels[0])

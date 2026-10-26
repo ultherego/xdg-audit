@@ -100,6 +100,39 @@ The installer writes user units at `~/.config/systemd/user/` (or under the
 configured XDG_CONFIG_HOME). It uses the absolute script path at installation
 time; reinstall if the repository is moved.
 
+## Completed history and privacy
+
+A successful full `PURGE` retains its small `manifest.json` audit tombstone
+and records a UTC `purged_at` timestamp. The GUI lists such runs explicitly
+as `PURGED`, distinct from `QUARANTINED`, `RESTORED` and `INCOMPLETE`.
+A run whose metadata cannot be validated is marked `ERROR`; it is never
+eligible for history cleanup.
+
+The manifest is eligible for automatic removal **30 days after PURGE**, not
+30 days after quarantine. Automatic history cleanup runs in the existing
+user-scoped retention timer only when the explicit automatic-retention policy
+has been enabled. Old tombstones without `purged_at` are **never** selected
+for automatic history removal.
+
+Manual metadata-only cleanup (the separate token is `HISTORY`):
+
+```fish
+python3 xdg_audit.py --cleanup-history RUN_ID --dry-run
+python3 xdg_audit.py --cleanup-history RUN_ID
+python3 xdg_audit.py --cleanup-expired-history
+python3 xdg_audit.py --cleanup-expired-history --execute
+```
+
+In GTK, Qt and Tk you can see a distinct status for purged runs, remove
+an individually completed operation's history, or clean up history past the
+30-day cutoff. Each destructive GUI history operation requires the exact
+`HISTORY` confirmation. Restored operations can have their histories
+removed **manually**, but never through age-based automatic cleanup.
+
+Incomplete, corrupted, inconsistent, or nonempty runs are always protected.
+History deletion uses only `rmdir` on empty run/scope directories and removes
+the manifest with an anchored `unlink`; it never recursively deletes files.
+
 ## Fail-closed behavior and boundaries
 
 - Deletion is anchored to already-open directory descriptors.
