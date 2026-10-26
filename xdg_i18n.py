@@ -7,6 +7,7 @@ from __future__ import annotations
 
 LANGUAGES = {'pl': 'Polski', 'en': 'English'}
 EN = {
+    'Ta operacja jest zakończona. Użyj opcji Usuń historię.': 'This run is complete. Use Clear history instead.',
     'PURGED': 'PURGED',
     'RESTORED': 'RESTORED',
     'COMPLETED': 'COMPLETED',
