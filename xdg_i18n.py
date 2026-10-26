@@ -7,6 +7,8 @@ from __future__ import annotations
 
 LANGUAGES = {'pl': 'Polski', 'en': 'English'}
 EN = {
+    'Wyczyść całą zakończoną historię…': 'Clear all completed history…',
+    'Brak zakończonych operacji do wyczyszczenia. Aktywne i niedokończone pozostają chronione.': 'No completed history to clear. Active and unfinished runs remain protected.',
     'Weryfikacja kwarantanny': 'Quarantine verification',
     'Operacja kwarantanny jest już wykonywana.': 'A quarantine operation is already running.',
     'Błąd operacji kwarantanny: {error}': 'Quarantine operation failed: {error}',
