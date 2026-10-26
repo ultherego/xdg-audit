@@ -1,0 +1,124 @@
+"""Regression tests for fail-closed quarantine lifecycle."""
+import datetime as dt
+import json
+import os
+from pathlib import Path
+import stat
+import tempfile
+import unittest
+
+import xdg_audit as audit
+from xdg_quarantine_lifecycle import inspect_run, purge_run, expired_run_ids
+
+
+class LifecycleTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.home = Path(self.temp.name)
+        self.roots = audit.xdg_roots(self.home)
+        self.source = self.home / ".config" / "purge-demo"
+        self.source.parent.mkdir(parents=True)
+        self.source.mkdir()
+        (self.source / "settings").write_text("preserve-me")
+        self.root = audit.quarantine_dir(self.home, self.roots)
+        self.run_id = "20261025-103000-123456"
+        self.run = self.root / self.run_id
+        (self.run / "config").mkdir(parents=True)
+        info = self.source.lstat()
+        self.dest = self.run / "config" / "purge-demo"
+        os.rename(self.source, self.dest)
+        self.row = {"source": str(self.source), "destination": str(self.dest),
+                    "scope": "config", "state": "CANDIDATE",
+                    "identity": [info.st_dev, info.st_ino, stat.S_IFDIR],
+                    "move_status": "moved"}
+        self.payload = {"format": "intent-journal-v3",
+                        "created": self.run_id, "items": [self.row]}
+        self.write()
+
+    def write(self):
+        (self.run / "manifest.json").write_text(json.dumps(self.payload))
+
+    def check_mounts(self, path):
+        return False
+
+    def purge(self, dry_run=True):
+        return purge_run(self.home, self.roots, self.run_id,
+                         self.check_mounts, dry_run=dry_run, emit=lambda *_: None)
+
+    def test_dry_run_does_not_change_data(self):
+        manifest = (self.run / "manifest.json").read_bytes()
+        report = self.purge()
+        self.assertEqual(report["objects"], 1)
+        self.assertTrue(self.dest.exists())
+        self.assertEqual((self.run / "manifest.json").read_bytes(), manifest)
+
+    def test_purge_and_idempotent_tombstone(self):
+        self.purge(dry_run=False)
+        self.assertFalse(self.dest.exists())
+        self.assertEqual(self.payload["format"], "intent-journal-v3")
+        self.assertEqual(json.loads((self.run / "manifest.json").read_text())["items"][0]["move_status"], "purged")
+        self.assertEqual(self.purge()["objects"], 0)
+        self.purge(dry_run=False)
+
+    def test_corrupted_identity_rejected(self):
+        self.row["identity"][1] += 1
+        self.write()
+        with self.assertRaises(ValueError):
+            self.purge(dry_run=False)
+        self.assertTrue(self.dest.exists())
+
+    def test_untracked_entry_rejected(self):
+        (self.run / "config" / "unexpected").write_text("keep")
+        with self.assertRaises(ValueError):
+            self.purge(dry_run=False)
+        self.assertTrue(self.dest.exists())
+
+    def test_symlink_swap_rejected(self):
+        original = self.dest.with_name("preserved")
+        self.dest.rename(original)
+        self.dest.symlink_to(self.home, target_is_directory=True)
+        with self.assertRaises(ValueError):
+            self.purge(dry_run=False)
+        self.assertTrue((original / "settings").exists())
+
+    def test_hardlink_rejected(self):
+        path = self.dest / "settings"
+        os.link(path, self.home / "external-link")
+        with self.assertRaises(ValueError):
+            self.purge(dry_run=False)
+        self.assertTrue(path.exists())
+
+    def test_invalid_legacy_format_rejected(self):
+        self.payload["format"] = "intent-journal-v2"
+        self.write()
+        with self.assertRaises(ValueError):
+            self.purge(dry_run=False)
+
+    def test_resume_after_deletion_before_journal_finish(self):
+        self.row["move_status"] = "purging"
+        self.write()
+        import shutil
+        shutil.rmtree(self.dest)
+        self.assertEqual(self.purge()["objects"], 0)
+        self.purge(dry_run=False)
+        self.assertEqual(json.loads((self.run / "manifest.json").read_text())["items"][0]["move_status"], "purged")
+
+    def test_nested_symlink_not_followed(self):
+        target = self.home / "outside"
+        target.write_text("do not erase")
+        (self.dest / "external").symlink_to(target)
+        self.purge(dry_run=False)
+        self.assertEqual(target.read_text(), "do not erase")
+
+    def test_retention_boundary(self):
+        now = dt.datetime(2026, 10, 26, 12, 0)
+        old = "20260925-103000-123456"
+        recent = "20261025-103000-123456"
+        self.assertEqual(expired_run_ids([{"run_id": old}, {"run_id": recent}], 30, now), [old])
+        with self.assertRaises(ValueError):
+            expired_run_ids([], 0, now)
+
+
+if __name__ == "__main__":
+    unittest.main()
