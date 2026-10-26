@@ -48,6 +48,115 @@ def _check_owner(info: os.stat_result, device: int) -> None:
         raise ValueError("Foreign owner or filesystem inside quarantine")
 
 
+def capture_inventory(path: Path) -> list[dict]:
+    """Capture complete inode/hash inventory without following symlinks."""
+    import hashlib
+    parent = _open_path(path.parent)
+    try:
+        initial = os.stat(path.name, dir_fd=parent, follow_symlinks=False)
+        device = initial.st_dev
+        result = []
+
+        def visit(fd, name, relative, depth):
+            if depth > 64 or len(result) >= 100000:
+                raise ValueError("Quarantine inventory limit exceeded")
+            before = os.stat(name, dir_fd=fd, follow_symlinks=False)
+            _check_owner(before, device)
+            kind = stat.S_IFMT(before.st_mode)
+            if kind not in (stat.S_IFREG, stat.S_IFDIR, stat.S_IFLNK):
+                raise ValueError("Unsafe special file in quarantine")
+            row = {"path": relative, "identity": list(_identity(before))}
+            if kind == stat.S_IFDIR:
+                child = _directory(fd, name)
+                try:
+                    if _identity(os.fstat(child)) != _identity(before):
+                        raise ValueError("Directory replaced during inventory")
+                    result.append(row)
+                    for part in sorted(os.listdir(child)):
+                        visit(child, part, part if relative == "." else relative + "/" + part, depth + 1)
+                finally:
+                    os.close(child)
+            elif kind == stat.S_IFREG:
+                if before.st_nlink != 1:
+                    raise ValueError("Hard linked file in quarantine")
+                filefd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0), dir_fd=fd)
+                try:
+                    start = os.fstat(filefd)
+                    if _identity(start) != _identity(before):
+                        raise ValueError("File replaced during inventory")
+                    sha = hashlib.sha256()
+                    with os.fdopen(os.dup(filefd), "rb") as stream:
+                        for block in iter(lambda: stream.read(1024 * 1024), b""):
+                            sha.update(block)
+                    after = os.fstat(filefd)
+                    if (_identity(after) != _identity(start) or
+                            after.st_mtime_ns != start.st_mtime_ns or after.st_size != start.st_size):
+                        raise ValueError("File modified during hashing")
+                    row.update({"size": after.st_size, "sha256": sha.hexdigest()})
+                    result.append(row)
+                finally:
+                    os.close(filefd)
+            else:
+                row["link"] = os.readlink(name, dir_fd=fd)
+                if _identity(os.stat(name, dir_fd=fd, follow_symlinks=False)) != _identity(before):
+                    raise ValueError("Symlink replaced during inventory")
+                result.append(row)
+
+        visit(parent, path.name, ".", 0)
+        if _identity(os.stat(path.name, dir_fd=parent, follow_symlinks=False)) != _identity(initial):
+            raise ValueError("Quarantine entry changed during inventory")
+        return result
+    finally:
+        os.close(parent)
+
+
+def _validated_inventory(value, root_identity):
+    if not isinstance(value, list) or not value or len(value) > 100000:
+        raise ValueError("Missing recursive inventory; legacy run requires adoption")
+    nodes = {}
+    for row in value:
+        if not isinstance(row, dict) or not isinstance(row.get("path"), str):
+            raise ValueError("Invalid inventory row")
+        name = row["path"]
+        if (name != "." and (name.startswith("/") or
+                any(part in ("", ".", "..") for part in name.split("/")))):
+            raise ValueError("Unsafe inventory relative path")
+        ident = row.get("identity")
+        if (not isinstance(ident, list) or len(ident) != 3 or
+                any(type(n) is not int or n < 0 for n in ident) or
+                ident[2] not in (stat.S_IFREG, stat.S_IFDIR, stat.S_IFLNK)):
+            raise ValueError("Invalid nested identity")
+        if name in nodes:
+            raise ValueError("Duplicate inventory entry")
+        nodes[name] = row
+        if ident[2] == stat.S_IFREG:
+            if (type(row.get("size")) is not int or row["size"] < 0 or
+                    not isinstance(row.get("sha256"), str) or
+                    re.fullmatch(r"[0-9a-f]{64}", row["sha256"]) is None):
+                raise ValueError("Missing SHA-256 in inventory")
+        if ident[2] == stat.S_IFLNK and not isinstance(row.get("link"), str):
+            raise ValueError("Missing symlink target")
+    if "." not in nodes or tuple(nodes["."]["identity"]) != root_identity:
+        raise ValueError("Quarantine root identity differs from inventory")
+    for name in nodes:
+        if name != ".":
+            parent = name.rpartition("/")[0] or "."
+            if parent not in nodes or nodes[parent]["identity"][2] != stat.S_IFDIR:
+                raise ValueError("Orphan inventory path")
+    return nodes
+
+
+def _match_inventory(expected, current, *, partial=False):
+    found = {row["path"]: row for row in current}
+    if not set(found).issubset(expected):
+        raise ValueError("Unexpected new file in quarantine")
+    if not partial and set(found) != set(expected):
+        raise ValueError("Quarantined content missing or changed")
+    for name, actual in found.items():
+        if actual != expected[name]:
+            raise ValueError("Quarantined contents or inode changed: " + name)
+
+
 def _load_manifest(fd: int, device: int) -> dict:
     filefd = os.open("manifest.json", os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0), dir_fd=fd)
     try:
@@ -248,26 +357,19 @@ def inspect_run(home: Path, roots: dict[str, Path], run_id: str, mounts_checker)
                             raise ValueError("Quarantine inode substitution")
                         if entry["status"] in ("purged", "restored"):
                             raise ValueError("Journal claims object absent, but it exists")
-                        if stat.S_ISDIR(info.st_mode):
-                            if mounts_checker(entry["destination"]) is not False:
-                                raise ValueError("Nested mounts or unavailable mount inventory")
-                            fd = _directory(scopefd, entry["name"])
-                            try:
-                                if _identity(os.fstat(fd)) != entry["identity"]:
-                                    raise ValueError("Quarantine changed during inspection")
-                                size, _ = _walk(fd, run_stat.st_dev)
-                            finally:
-                                os.close(fd)
-                        elif stat.S_ISREG(info.st_mode) and info.st_nlink == 1:
-                            size = info.st_size
-                        else:
-                            raise ValueError("Unsafe quarantined object")
+                        expected = _validated_inventory(row.get("tree_inventory"), entry["identity"])
+                        if stat.S_ISDIR(info.st_mode) and mounts_checker(entry["destination"]) is not False:
+                            raise ValueError("Nested mounts or unavailable mount inventory")
+                        current = capture_inventory(entry["destination"])
+                        _match_inventory(expected, current, partial=(entry["status"] == "purging"))
+                        size = sum(node.get("size", 0) for node in current)
                         entry["present"] = True
                         entry["bytes"] = size
                         total += size
                 finally:
                     os.close(scopefd)
             return {"run_id": run_id, "payload": payload, "entries": entries,
+                    "run_identity": _identity(run_stat),
                     "bytes": total, "present": sum(e["present"] for e in entries)}
         finally:
             os.close(runfd)
@@ -289,6 +391,8 @@ def purge_run(home: Path, roots: dict[str, Path], run_id: str, mounts_checker,
         runfd = _directory(basefd, run_id)
         try:
             device = os.fstat(runfd).st_dev
+            if _identity(os.fstat(runfd)) != report["run_identity"]:
+                raise ValueError("Quarantine run substituted")
             payload = report["payload"]
             # Refuse manifest substitutions between inspection and execution.
             if _load_manifest(runfd, device) != payload:
