@@ -92,7 +92,7 @@ class SourceProviderTests(unittest.TestCase):
             self.assertEqual(names, {"brave-bin"})
 
     def test_source_health_cli_report_contains_no_user_files(self):
-        with patch.object(audit, "read_active_names",
+        with tempfile.TemporaryDirectory() as temp, patch.object(audit, "read_active_names",
                           return_value=sources.ActiveInventory((
                               {"python"}, {"org.example.App"}, set(), set(),
                               set(), set(), set(), set()),
@@ -103,7 +103,7 @@ class SourceProviderTests(unittest.TestCase):
             import json
             output = io.StringIO()
             with contextlib.redirect_stdout(output):
-                result = audit.main(["--home", str(self.home), "--installed-sources"])
+                result = audit.main(["--home", str(Path(temp)), "--installed-sources"])
             self.assertEqual(result, 0)
             report = json.loads(output.getvalue())
             self.assertEqual(report["health"]["pacman"], "ok")
