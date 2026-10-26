@@ -1225,6 +1225,11 @@ def adopt_quarantine_inventory(home: Path, roots: dict[str, Path], run_id: str) 
     return adopt_legacy_run(home, roots, run_id, nested_mounts_status)
 
 
+def quarantine_access_recoverable_error(error: BaseException) -> bool:
+    from xdg_access import needs_access_recovery
+    return needs_access_recovery(error)
+
+
 def diagnose_quarantine_access(home: Path, roots: dict[str, Path], run_id: str) -> dict:
     from xdg_access import diagnose_access
     return diagnose_access(home, roots, run_id)
