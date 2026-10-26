@@ -2,6 +2,14 @@
 
 ## 1.7.0-rc2 (unreleased)
 
+- Introduce health-aware installed-application providers: pacman and foreign
+  packages (AUR or local), Flatpak, Snap, AppImage, manual binaries and
+  shallow /opt installation hints. Failed probes never imply uninstallation.
+- Expose read-only `--installed-sources` health/count diagnostics.
+- Add installed-only dpkg-query and RPM probes to keep currently installed
+  applications ACTIVE on Debian/Fedora-derived systems. Non-Arch MOVE stays
+  blocked pending separate security validation.
+
 - Finalize manual PURGE with v3 SHA-256 inventory, fail-closed preflight,
   inode checking and resumable journal states.
 - Add GUI-guided `ACCESS → ADOPT → PURGE` recovery; no demo buttons in GUI
