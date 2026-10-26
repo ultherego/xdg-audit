@@ -639,13 +639,16 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
                     return
                 issue=issues[0]
                 message=(tf('Użytkownik: {user}',user=report['identity']['user'])+
+                         '\n'+tf('Polkit dostępny: {state}',
+                                   state=tr('tak') if report['identity']['pkexec_installed'] else tr('nie'))+
                          '\n'+tf('Problem: {code}',code=issue['code'])+
                          '\n'+issue['path']+
                          '\n'+tf('Uprawnienia: {mode}',mode=issue['mode']))
                 if not issue['repairable']:
                     QtWidgets.QMessageBox.warning(
                         self,tr('Diagnostyka dostępu'),message+'\n'+
-                        tr('Nie można automatycznie naprawić. Nie podnoszę uprawnień ani nie omijam kontroli PURGE.'))
+                        tr('Nie można automatycznie naprawić. Nie podnoszę uprawnień ani nie omijam kontroli PURGE.')+
+                        '\n'+tr('Naprawa tego obiektu wymaga dodatkowej analizy. Zasady Polkit określa system; xdg-audit nie uruchamia kodu użytkownika jako root.'))
                     return
                 message+='\n'+tf('Proponowana zmiana: {before} → {after}',
                                  before=issue['mode'],after=issue['suggested_mode'])
