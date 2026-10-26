@@ -1,64 +1,161 @@
 <p align="center">
-  <img src="assets/xdg-audit-128.png" alt="xdg-audit icon" width="76">
+  <img src="assets/xdg-audit-128.png" alt="xdg-audit icon" width="88">
 </p>
+
 <h1 align="center">xdg-audit</h1>
-<p align="center"><strong>Review leftover Linux application files without blindly deleting your data.</strong></p>
-<p align="center">Native GTK, Qt and Tk interfaces · Python 3.10+ · Read-only by default</p>
+<p align="center"><strong>Find leftover Linux application files. Keep control of your data.</strong></p>
+<p align="center">Read-only by default · Recoverable quarantine · Native GTK / Qt / Tk desktop UI</p>
 
 <p align="center">
-  <img src="docs/screenshots/overview.webp" alt="xdg-audit showing the All audit results view" width="100%">
+  <a href="https://github.com/ultherego/xdg-audit/actions/workflows/tests.yml"><img alt="Build and tests" src="https://github.com/ultherego/xdg-audit/actions/workflows/tests.yml/badge.svg?branch=main"></a>
+  <a href="https://github.com/ultherego/xdg-audit/releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/ultherego/xdg-audit?include_prereleases&style=flat-square&color=fab387&labelColor=1e1e2e"></a>
+  <img alt="Python 3.10 and newer" src="https://img.shields.io/badge/Python-3.10%2B-fab387?style=flat-square&labelColor=1e1e2e">
+  <img alt="Linux" src="https://img.shields.io/badge/platform-Linux-89b4fa?style=flat-square&labelColor=1e1e2e">
+  <img alt="No automatic deletion" src="https://img.shields.io/badge/deletion-manual%20only-a6e3a1?style=flat-square&labelColor=1e1e2e">
 </p>
-<p align="center"><sub>GTK4 on Niri · Representative screenshot with anonymized user paths</sub></p>
+
+xdg-audit scans user-scoped configuration, data, state, cache, Flatpak directories and selected dotfiles. It highlights **possible leftovers** while distinguishing active, protected and uncertain application data. **Nothing is deleted automatically.**
+
+## 🖥️ Preview
 
 <details>
-<summary>More screenshots — Data and State views</summary>
-<p><strong>Data</strong></p>
-<p><img src="docs/screenshots/data.webp" alt="xdg-audit Data scope"></p>
-<p><strong>State</strong></p>
-<p><img src="docs/screenshots/state.webp" alt="xdg-audit State scope"></p>
+<summary><strong>🔎 Overview</strong> — click the screenshot to expand inside this README
+
+<img src="docs/screenshots/overview.webp" alt="xdg-audit overview screenshot; click to expand" width="760">
+</summary>
+
+<img src="docs/screenshots/overview.webp" alt="Full-size xdg-audit overview screenshot" width="100%">
+
 </details>
 
-xdg-audit scans per-user Linux configuration, data, state, cache, Flatpak data and selected dotfiles. It helps identify files that **may** belong to removed applications while keeping uncertain or active application data out of automatic cleanup.
+<details>
+<summary><strong>📸 Browse all 8 other screenshots</strong> — click any thumbnail to expand it below</summary>
 
-## Features
+<details>
+<summary><strong>Configuration</strong> — View configuration leftovers · click to enlarge
 
-- **Review before changing anything.** Entries are classified as `CANDIDATE`, `REVIEW`, `UNKNOWN`, `ACTIVE` or `PROTECTED`, with reasons available in the inspector.
-- **Recoverable quarantine.** Selected files are moved, never permanently deleted by the app; restore is available with explicit confirmation.
-- **Native desktop GUI.** Automatically detects available GTK4/GTK3, Qt6 or Tk support, follows the system theme where possible, and keeps the CLI independent.
-- **Useful audit workflow.** Scope tabs, search, filtering, sorting, incremental scan results, progress, cancellation and directory-size reporting.
-- **Personal preferences.** Keep rules, package aliases and instant English/Polish language switching without rescanning.
-- **Reports.** Export an audit to JSON and compare it with a previous scan.
+<img src="docs/screenshots/configuration.webp" alt="xdg-audit Configuration screenshot thumbnail" width="480">
+</summary>
 
-## Quick start
+<img src="docs/screenshots/configuration.webp" alt="xdg-audit Configuration full-size screenshot" width="100%">
 
-```sh
+</details>
+
+<details>
+<summary><strong>Data</strong> — Review application data · click to enlarge
+
+<img src="docs/screenshots/data.webp" alt="xdg-audit Data screenshot thumbnail" width="480">
+</summary>
+
+<img src="docs/screenshots/data.webp" alt="xdg-audit Data full-size screenshot" width="100%">
+
+</details>
+
+<details>
+<summary><strong>State</strong> — Inspect state directories · click to enlarge
+
+<img src="docs/screenshots/state.webp" alt="xdg-audit State screenshot thumbnail" width="480">
+</summary>
+
+<img src="docs/screenshots/state.webp" alt="xdg-audit State full-size screenshot" width="100%">
+
+</details>
+
+<details>
+<summary><strong>Cache</strong> — Inspect caches · click to enlarge
+
+<img src="docs/screenshots/cache.webp" alt="xdg-audit Cache screenshot thumbnail" width="480">
+</summary>
+
+<img src="docs/screenshots/cache.webp" alt="xdg-audit Cache full-size screenshot" width="100%">
+
+</details>
+
+<details>
+<summary><strong>Flatpak</strong> — Review Flatpak application data · click to enlarge
+
+<img src="docs/screenshots/flatpak.webp" alt="xdg-audit Flatpak screenshot thumbnail" width="480">
+</summary>
+
+<img src="docs/screenshots/flatpak.webp" alt="xdg-audit Flatpak full-size screenshot" width="100%">
+
+</details>
+
+<details>
+<summary><strong>Dotfiles</strong> — Inspect selected home-level entries · click to enlarge
+
+<img src="docs/screenshots/dotfiles.webp" alt="xdg-audit Dotfiles screenshot thumbnail" width="480">
+</summary>
+
+<img src="docs/screenshots/dotfiles.webp" alt="xdg-audit Dotfiles full-size screenshot" width="100%">
+
+</details>
+
+<details>
+<summary><strong>Quarantine</strong> — Preview and restore quarantined entries · click to enlarge
+
+<img src="docs/screenshots/quarantine.webp" alt="xdg-audit Quarantine screenshot thumbnail" width="480">
+</summary>
+
+<img src="docs/screenshots/quarantine.webp" alt="xdg-audit Quarantine full-size screenshot" width="100%">
+
+</details>
+
+<details>
+<summary><strong>Settings</strong> — Choose scan scope, language and keep rules · click to enlarge
+
+<img src="docs/screenshots/settings.webp" alt="xdg-audit Settings screenshot thumbnail" width="480">
+</summary>
+
+<img src="docs/screenshots/settings.webp" alt="xdg-audit Settings full-size screenshot" width="100%">
+
+</details>
+
+</details>
+
+<sub>Screenshots: GTK4 on Niri / Wayland. User paths are replaced with neutral, illustrative paths; pointer and individual quarantine run identifiers have been removed. These are real application screens, not UI mock-ups.</sub>
+
+## ✨ Features
+
+| | Capability | Details |
+|:--:|---|---|
+| 🔍 | **Evidence-based audit** | `CANDIDATE`, `REVIEW`, `UNKNOWN`, `ACTIVE`, `PROTECTED` with explanations and package/process evidence |
+| 🛡️ | **Safety-first cleanup** | Explicit selection, protected data, fail-closed inventory checks, no-overwrite moves |
+| ♻️ | **Recoverable quarantine** | Manifest-backed moves and restores, inode/device/type verification for new manifests |
+| 🖥️ | **Native interfaces** | GTK4/GTK3, Qt6 and Tk; automatically chooses an already installed backend |
+| 🌐 | **English & Polish** | Change UI language without rescanning |
+| 📂 | **Focused workflow** | Scope tabs, search, sorting, quick scan, progress, cancellation and directory sizes |
+| 📊 | **Portable reports** | JSON export and comparison against a prior audit |
+| 🧩 | **Personal controls** | Keep rules and app/package aliases |
+
+## 🚀 Get started
+
+**Linux + Python 3.10+**. The command-line engine uses the Python standard library. There is no `pip install` step or automatic dependency installer.
+
+```bash
 git clone https://github.com/ultherego/xdg-audit.git
 cd xdg-audit
 python3 xdg_audit.py
 ```
 
-Running without arguments launches the first compatible **already installed** GUI backend. Nothing is installed automatically. To run a read-only CLI scan:
+The command launches an available GUI backend. To scan read-only in a terminal:
 
-```sh
+```bash
 python3 xdg_audit.py --scope all
 ```
 
-## Requirements
+### 🧰 Native GUI backends
 
-**Core:** Linux and **Python 3.10+**. The CLI uses Python’s standard library; no `pip install` is required.
+Install **one** backend using your distribution's package manager (Arch Linux / CachyOS names):
 
-Choose **one** available GUI backend (Arch Linux / CachyOS package names):
-
-| Backend | Packages |
-| --- | --- |
-| GTK4 (GNOME, Niri) | `python-gobject gtk4` |
+| GUI | Packages |
+|---|---|
+| GTK4 (Niri, GNOME) | `python-gobject gtk4` |
 | GTK3 fallback | `python-gobject gtk3` |
-| Qt6 (KDE, LXQt) | `pyside6` **or** `python-pyqt6` |
-| Tk fallback (X11/XWayland) | `tk` |
+| Qt6 (KDE Plasma, LXQt) | `pyside6` **or** `python-pyqt6` |
+| Tk (X11 / XWayland fallback) | `tk` |
 
-For example, on Arch Linux or CachyOS:
-
-```sh
+```bash
 # GTK4
 sudo pacman -S --needed python python-gobject gtk4
 
@@ -66,46 +163,50 @@ sudo pacman -S --needed python python-gobject gtk4
 sudo pacman -S --needed python pyside6
 ```
 
-**Additional system tools:** `coreutils` (`du`) supplies directory sizes; `procps-ng` (`ps`) supplies process evidence. `pacman` is used to verify installed packages and is **required before quarantine moves**, which fail closed without a verifiable inventory. Optional integrations: `flatpak`, `snapd` (`snap`), `systemd` (`systemctl --user`) and `xdg-utils` (`xdg-open`, to open folders).
+**System tools:** `coreutils` (`du`) for directory sizes, `procps-ng` (`ps`) for process evidence. `pacman` verifies installed packages on Arch/CachyOS and is **required before quarantine moves** (fail closed if the inventory cannot be verified). Optional integrations: `flatpak`, `snap`, `systemctl --user`, and `xdg-open`.
 
-## Safety first
+## 🛡️ Safety model
 
-| Classification | What it means |
-| --- | --- |
-| `CANDIDATE` | Possible leftover — **not a guarantee** that removal is safe |
-| `REVIEW` / `UNKNOWN` | Requires manual inspection and additional confirmation |
+| Status | Meaning |
+|---|---|
+| `CANDIDATE` | Possible leftover — **not a guarantee of safe removal** |
+| `REVIEW` / `UNKNOWN` | Uncertain ownership; additional manual confirmation is required |
 | `ACTIVE` / `PROTECTED` | Cannot be moved to quarantine |
 
-- A scan is **read-only**. Moving any entry requires an explicit user action and confirmation.
-- Quarantined items live under `~/.local/share/xdg-audit-quarantine/` and can be restored.
-- The app rechecks relevant filesystem and package information before moving, refuses cross-filesystem relocation and uses no-overwrite operations.
-- New v3 quarantine manifests record device, inode and file type; restore rejects a substituted object while remaining compatible with older manifests.
-- Cancelled or unfinished scans cannot be used to move files.
+- Scans do not modify data. The user must explicitly select and confirm every move.
+- Selected entries are **moved, never permanently deleted by xdg-audit**, into `~/.local/share/xdg-audit-quarantine/`.
+- Before a move the application revalidates filesystem and package evidence, refuses cross-filesystem moves, and never overwrites the destination.
+- New v3 manifests bind restores to the original device, inode and file type. Earlier manifests remain supported with their original safeguards.
+- Cancelled and unfinished scans cannot authorize quarantine operations.
 
-> **Important:** Application ownership cannot always be determined reliably. Review every selection and keep backups of important files. Quarantine reduces risk; it does not replace a backup.
+> [!CAUTION]
+> File ownership is inherently ambiguous. Inspect each candidate and keep backups of anything important. Quarantine is **not** a replacement for a backup.
 
-## Command-line usage
+## ⌨️ CLI
 
-```sh
+```bash
 python3 xdg_audit.py --help
 python3 xdg_audit.py --scope config --json > audit.json
 python3 xdg_audit.py --scope config --compare audit.json
-python3 xdg_audit.py --scope config --remove   # Interactive confirmation
+python3 xdg_audit.py --scope config --remove  # Interactive confirmation
 python3 xdg_audit.py --list-quarantine
-python3 xdg_audit.py --restore RUN_ID          # Interactive confirmation
+python3 xdg_audit.py --restore RUN_ID         # Interactive confirmation
 ```
 
-Scopes: `all`, `config`, `data`, `state`, `cache`, `flatpak`, `dotfiles`.
+Available scopes: `all`, `config`, `data`, `state`, `cache`, `flatpak`, `dotfiles`.
 
-## Development status
+## 🧪 Testing & release status
 
-**Unreleased v1.7.0-rc2 development branch.** The latest published prerelease is [v1.7.0-rc1](https://github.com/ultherego/xdg-audit/releases/tag/v1.7.0-rc1). Automated tests cover Python 3.10–3.14 and build source ZIP/tar.gz archives in [GitHub Actions](https://github.com/ultherego/xdg-audit/actions). GTK4/Niri and Qt6/KDE still need broader real-session integration testing before a stable release.
+The unreleased development version on `main` is **`1.7.0-rc2`**. The most recent tagged prerelease is **[v1.7.0-rc1](https://github.com/ultherego/xdg-audit/releases/tag/v1.7.0-rc1)**.
 
-```sh
+GitHub Actions runs Python 3.10–3.14 tests, GTK4/Qt6/Tk GUI startup under Xvfb, native GTK4/Qt6 Wayland startup with headless Weston, a synthetic benchmark, the isolated end-to-end quarantine/restore test, and source ZIP/tar.gz integrity checks. **Real-session Niri and KDE Plasma usage still deserves separate validation before a stable release.**
+
+```bash
 python3 -m unittest discover -s tests -v
+python3 scripts/smoke_quarantine_cycle.py
 python3 scripts/build_archives.py --output-dir dist
 ```
 
-For an isolated quarantine/restore test without touching real user files, see [Quarantine integration testing](docs/testing-quarantine.md).
+The quarantine test creates a disposable `HOME`, performs real moves and restores, verifies file hashes and handles simulated conflicts without writing into your real XDG directories. Details: [Safe integration testing](docs/testing-quarantine.md).
 
-Desktop-menu installation and distribution packaging are intentionally deferred. See [CHANGELOG.md](CHANGELOG.md) for release history.
+Desktop-menu installation and distribution packaging are intentionally deferred. See the [changelog](CHANGELOG.md) for version history.
