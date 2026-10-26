@@ -29,6 +29,7 @@ def main() -> None:
     main_thread = threading.get_ident()
     errors = []
     ticks = []
+    ticks_before_click = [0]
     work_threads = []
     preview_started = threading.Event()
     preview_done = threading.Event()
@@ -74,7 +75,7 @@ def main() -> None:
 
         GLib.timeout_add(40, tick)
 
-        def click_purge():
+        def switch_to_quarantine():
             try:
                 app = Gio.Application.get_default()
                 window = app.get_active_window()
@@ -86,18 +87,29 @@ def main() -> None:
                 if stack is None:
                     raise AssertionError("Quarantine stack not found")
                 stack.set_visible_child_name("quarantine")
+                # Allow GTK to map the newly selected stack page and recreate
+                # quarantine rows before interacting with the live button.
+                GLib.timeout_add(180, click_purge)
+            except BaseException as exc:
+                errors.append(str(exc))
+                Gio.Application.get_default().quit()
+            return False
+
+        def click_purge():
+            try:
+                window = Gio.Application.get_default().get_active_window()
                 button = next((w for w in find_widgets(window)
                                if isinstance(w, Gtk.Button) and
-                               w.get_label() == "Usuń trwale…"), None)
+                               w.get_label() == "Usuń trwale…" and w.get_mapped()), None)
                 if button is None:
-                    raise AssertionError("PURGE button not found")
-                print("DEBUG button",button.get_sensitive(),button.get_visible(),
-                      button.get_mapped(),flush=True)
+                    raise AssertionError("PURGE button was not mapped in active quarantine tab")
+                ticks_before_click[0] = len(ticks)
                 start = time.monotonic()
                 button.emit("clicked")
-                print("DEBUG clicked",preview_started.is_set(),flush=True)
                 if time.monotonic() - start > 0.3:
                     raise AssertionError("PURGE click blocked GTK event loop")
+                GLib.timeout_add(460, check_progress)
+                GLib.timeout_add(1400, check_confirm)
             except BaseException as exc:
                 errors.append(str(exc))
                 Gio.Application.get_default().quit()
@@ -106,12 +118,10 @@ def main() -> None:
         def check_progress():
             try:
                 if not preview_started.is_set():
-                    print("DEBUG windows:",[w.get_title() for w in open_windows()],
-                          "ticks:",len(ticks),flush=True)
                     raise AssertionError("PURGE worker never started")
                 if preview_done.is_set():
                     raise AssertionError("Preview finished too quickly for test")
-                if len(ticks) < 6:
+                if len(ticks) - ticks_before_click[0] < 4:
                     raise AssertionError("GTK main-loop heartbeat stopped")
                 if not any(w.get_title() == "Weryfikacja kwarantanny"
                            for w in open_windows()):
@@ -135,10 +145,8 @@ def main() -> None:
                 Gio.Application.get_default().quit()
             return False
 
-        GLib.timeout_add(300, click_purge)
-        GLib.timeout_add(700, check_progress)
-        GLib.timeout_add(1700, check_confirm)
-        GLib.timeout_add(4000, lambda: (errors.append("GTK smoke timeout"),
+        GLib.timeout_add(300, switch_to_quarantine)
+        GLib.timeout_add(6000, lambda: (errors.append("GTK smoke timeout"),
                                        Gio.Application.get_default().quit(), False)[-1])
         args = SimpleNamespace(saved_prefs=defaults(), keep=[], quick=True,
                                scope="all", all=False)
