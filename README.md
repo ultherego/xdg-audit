@@ -214,14 +214,19 @@ their manifest is cleaned up; that history may be automatically removed 30
 days after full PURGE, but only with explicit opt-in to automatic retention.
 Incomplete or corrupted journals are never auto-removed.
 
-**Polkit requires no xdg-audit installation.** The GUI's **Test Polkit…**
-button requests the existing system Polkit agent to authorize the fixed
-read-only command `/usr/bin/id -u`. The separate **Test uprawnień ~/.config…**
-button creates a user-owned restricted directory `pkg` (mode 111) and
-file (mode 000) under `~/.config/xdg-audit-polkit-test`, tests owner-only
-permission repair and offers isolated cleanup. These are **independent tests**.
-No new policy, privileged helper, sudo password form, or root-owned file
-is needed. Neither test enables root access for the actual quarantine/PURGE.
+**Normal operation:** In GTK, Qt and Tk, **Usuń trwale…** checks the
+quarantine and, when needed, automatically opens **Sprawdź dostęp…**.
+For user-owned files/directories with restricted permissions it offers
+an individually confirmed `ACCESS` change. If the original inventory was
+unsealed, it then requires separate `ADOPT` confirmation, followed by a
+fresh preflight and the usual independent `PURGE` confirmation.
+
+For advanced/manual checks, the **CLI** still offers isolated, optional
+Polkit and ~/.config test fixtures (see
+[Polkit and access self-tests](docs/polkit-selftest.md)). These test controls
+are intentionally **not present in the GUI**. Polkit does not elevate
+quarantine operations: root-owned files remain blocked until a separately
+audited and packaged privileged helper is available.
 
 See [Quarantine lifecycle](docs/quarantine-lifecycle.md) for recovery,
 history-only cleanup, manual/automatic retention, user-scoped systemd
