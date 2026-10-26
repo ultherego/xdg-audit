@@ -14,6 +14,7 @@ from typing import Any
 
 from xdg_theme import detect_appearance
 from xdg_inspector import details_text, open_item_location
+from xdg_gui_jobs import run_gui_job
 
 SCOPE_LABELS = [('Wszystko', 'all'), ('Konfiguracja', 'config'),
                 ('Dane aplikacji', 'data'), ('Stan', 'state'),
@@ -60,6 +61,8 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
             self.views = {}
             self.active_scope = args.scope
             self.busy = False
+            self._quarantine_job_busy=False
+            self._quarantine_callback=None
             self.scan_complete=False
             self.jobs = queue.Queue()
             self.query = tk.StringVar()
@@ -525,6 +528,16 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
             try:
                 while True:
                     kind,result = self.jobs.get_nowait()
+                    if kind == 'quarantine-job':
+                        self._quarantine_job_busy=False
+                        callback=self._quarantine_callback
+                        self._quarantine_callback=None
+                        if callback is not None:
+                            try:
+                                callback(*result)
+                            except Exception as exc:
+                                self.status.set(tf('Błąd operacji kwarantanny: {error}',error=exc))
+                        continue
                     if kind == 'phase':
                         self.status.set(('Scanning: ' if _language=='en' else 'Skanowanie: ') + tr(result))
                         continue
@@ -694,15 +707,28 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
             except (ValueError,OSError,KeyError) as exc:messagebox.showerror(tr('Błąd'),str(exc),parent=root)
             self.start_scan()
 
+        def _quarantine_job(self, operation, callback, activity):
+            if self._quarantine_job_busy:
+                self.status.set(tr('Operacja kwarantanny jest już wykonywana.'))
+                return
+            self._quarantine_job_busy=True
+            self._quarantine_callback=callback
+            self.status.set(tr(activity))
+            run_gui_job(operation, lambda *_:None,
+                        lambda _cb, ok, value:self.jobs.put(
+                            ('quarantine-job',(ok,value))))
+
         def cleanup_expired_history(self):
-            try:
-                ids=engine.expired_quarantine_history(home,engine.xdg_roots(home))
-                if ids:
-                    self._cleanup_history_runs(ids)
+            def done(ok, result):
+                if not ok:
+                    messagebox.showerror(tr('Historia'),str(result),parent=root)
+                elif result:
+                    self._cleanup_history_runs(result)
                 else:
                     messagebox.showinfo(tr('Historia'),tr('Brak wygasłych manifestów.'),parent=root)
-            except (ValueError,OSError) as exc:
-                messagebox.showerror(tr('Historia'),str(exc),parent=root)
+            self._quarantine_job(
+                lambda:engine.expired_quarantine_history(home,engine.xdg_roots(home)),
+                done,'Sprawdzanie historii…')
 
         def cleanup_history(self):
             selected=self.qtree.selection()
@@ -710,28 +736,35 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                 self._cleanup_history_runs([selected[0]])
 
         def _cleanup_history_runs(self,ids):
-            try:
-                plans=[engine.cleanup_quarantine_history(home,engine.xdg_roots(home),rid)
-                       for rid in ids]
-            except (ValueError,OSError) as exc:
-                messagebox.showerror(tr('Historia'),str(exc),parent=root)
-                return
-            summary='\\n'.join(p['run_id']+' ('+p['status']+')' for p in plans)
-            if not messagebox.askyesno(tr('Usuń historię'),
-                summary+'\\n\\n'+tr('Zostaną usunięte tylko zakończone dzienniki.'),
-                parent=root):
-                return
-            if simpledialog.askstring(tr('Potwierdzenie'),tr('Wpisz HISTORY:'),
-                                      parent=root) != 'HISTORY':
-                return
-            try:
-                for plan in plans:
-                    engine.cleanup_quarantine_history(home,engine.xdg_roots(home),
-                                                      plan['run_id'],dry_run=False)
-                self._refresh_quarantine()
-            except (ValueError,OSError) as exc:
-                self._refresh_quarantine()
-                messagebox.showerror(tr('Historia'),str(exc),parent=root)
+            ids=tuple(ids)
+            def preview_ready(ok, result):
+                if not ok:
+                    messagebox.showerror(tr('Historia'),str(result),parent=root)
+                    return
+                summary='\\n'.join(p['run_id']+' ('+p['status']+')' for p in result)
+                if not messagebox.askyesno(tr('Usuń historię'),
+                    summary+'\\n\\n'+tr('Zostaną usunięte tylko zakończone dzienniki.'),
+                    parent=root):
+                    return
+                if simpledialog.askstring(tr('Potwierdzenie'),tr('Wpisz HISTORY:'),
+                                          parent=root) != 'HISTORY':
+                    return
+                def execute():
+                    for plan in result:
+                        engine.cleanup_quarantine_history(
+                            home,engine.xdg_roots(home),plan['run_id'],dry_run=False)
+                    return len(result)
+                def done(success, outcome):
+                    self._refresh_quarantine()
+                    if success:
+                        self.status.set(tr('Usunięto zakończone manifesty.'))
+                    else:
+                        messagebox.showerror(tr('Historia'),str(outcome),parent=root)
+                self._quarantine_job(execute,done,'Usuwanie historii…')
+            self._quarantine_job(
+                lambda:[engine.cleanup_quarantine_history(
+                    home,engine.xdg_roots(home),rid) for rid in ids],
+                preview_ready,'Sprawdzanie historii…')
 
         def configure_retention(self):
             from xdg_retention import load, save
@@ -749,15 +782,16 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                     tf('Nie można zapisać retencji: {error}',error=exc),parent=root)
 
         def purge_expired(self):
-            try:
-                ids=engine.expired_quarantine_runs(home,engine.xdg_roots(home))
-            except (ValueError,OSError) as exc:
-                messagebox.showerror(tr('Błąd'),str(exc),parent=root)
-                return
-            if not ids:
-                messagebox.showinfo(tr('Kwarantanna'),tr('Nie ma wygasłych operacji.'),parent=root)
-                return
-            self._purge_runs(ids)
+            def done(ok, result):
+                if not ok:
+                    messagebox.showerror(tr('Kwarantanna'),str(result),parent=root)
+                elif result:
+                    self._purge_runs(result)
+                else:
+                    messagebox.showinfo(tr('Kwarantanna'),tr('Nie ma wygasłych operacji.'),parent=root)
+            self._quarantine_job(
+                lambda:engine.expired_quarantine_runs(home,engine.xdg_roots(home)),
+                done,'Sprawdzanie kwarantanny…')
 
         def purge_quarantine(self):
             selected=self.qtree.selection()
@@ -769,31 +803,39 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                 self._purge_runs([selected[0]])
 
         def _purge_runs(self,run_ids):
-            plans=[]
-            try:
-                for run_id in run_ids:
-                    plans.append(engine.purge_quarantine_run(home,engine.xdg_roots(home),run_id))
-            except (ValueError,OSError) as exc:
-                messagebox.showerror(tr('Zablokowano PURGE'),str(exc),parent=root)
-                return
-            details='\\n'.join(str(p['run_id'])+': '+str(p['objects'])+' entries / '+str(p['bytes'])+' B'
-                              for p in plans)
-            if not messagebox.askyesno(tr('Trwałe usunięcie'),
-                    details+'\\n\\n'+tr('Ta operacja jest nieodwracalna. Kontynuować?'),
-                    parent=root):
-                return
-            if simpledialog.askstring(tr('Potwierdzenie'),tr('Wpisz PURGE:'),parent=root)!='PURGE':
-                return
-            try:
-                deleted=0
-                for plan in plans:
-                    deleted+=engine.purge_quarantine_run(home,engine.xdg_roots(home),
-                                            plan['run_id'],dry_run=False)['objects']
-                self._refresh_quarantine()
-                messagebox.showinfo(tr('Kwarantanna'),tr('Usunięto obiektów: ')+str(deleted),parent=root)
-            except (ValueError,OSError) as exc:
-                self._refresh_quarantine()
-                messagebox.showerror(tr('Zablokowano PURGE'),str(exc),parent=root)
+            run_ids=tuple(run_ids)
+            def preview_ready(ok, result):
+                if not ok:
+                    messagebox.showerror(tr('Zablokowano PURGE'),str(result),parent=root)
+                    return
+                details='\\n'.join(
+                    str(p['run_id'])+': '+str(p['objects'])+' entries / '+str(p['bytes'])+' B'
+                    for p in result)
+                if not messagebox.askyesno(tr('Trwałe usunięcie'),
+                        details+'\\n\\n'+tr('Ta operacja jest nieodwracalna. Kontynuować?'),
+                        parent=root):
+                    return
+                if simpledialog.askstring(tr('Potwierdzenie'),tr('Wpisz PURGE:'),parent=root)!='PURGE':
+                    return
+                def execute():
+                    deleted=0
+                    for plan in result:
+                        deleted+=engine.purge_quarantine_run(
+                            home,engine.xdg_roots(home),plan['run_id'],
+                            dry_run=False)['objects']
+                    return deleted
+                def done(success, outcome):
+                    self._refresh_quarantine()
+                    if success:
+                        messagebox.showinfo(tr('Kwarantanna'),
+                            tr('Usunięto obiektów: ')+str(outcome),parent=root)
+                    else:
+                        messagebox.showerror(tr('Zablokowano PURGE'),str(outcome),parent=root)
+                self._quarantine_job(execute,done,'Trwałe usuwanie z kwarantanny…')
+            self._quarantine_job(
+                lambda:[engine.purge_quarantine_run(
+                    home,engine.xdg_roots(home),run_id) for run_id in run_ids],
+                preview_ready,'Sprawdzanie kwarantanny…')
 
         def close(self):
             if self.busy and not messagebox.askyesno(tr('Skanowanie'),tr('Skanowanie trwa. Zamknąć okno?'),parent=root):return
