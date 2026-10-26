@@ -7,6 +7,10 @@ from __future__ import annotations
 
 LANGUAGES = {'pl': 'Polski', 'en': 'English'}
 EN = {
+    "Polkit dostępny: {state}": "Polkit available: {state}",
+    "tak": "yes",
+    "nie": "no",
+    "Naprawa tego obiektu wymaga dodatkowej analizy. Zasady Polkit określa system; xdg-audit nie uruchamia kodu użytkownika jako root.": "This object requires further analysis. The system controls Polkit authorization; xdg-audit never runs user-owned code as root.",
     "Pliki przeniesiono, ale nie można było sprawdzić całej zawartości. Przed PURGE użyj „Sprawdź dostęp…”, następnie osobno „Zatwierdź stan…” (ADOPT).": "Files were moved, but their full contents could not be inspected. Before PURGE use Check access, then separately approve the current state (ADOPT).",
     "Zatwierdź stan…": "Approve current state…",
     "Zatwierdź aktualny stan": "Approve current state",
