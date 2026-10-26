@@ -21,7 +21,7 @@ class PolkitClientTests(unittest.TestCase):
         with patch("xdg_polkit.status", return_value={"ready": True}), \
              patch("xdg_polkit.shutil.which", return_value="/usr/bin/pkexec"), \
              patch("xdg_polkit.subprocess.run", return_value=SimpleNamespace(
-                 returncode=0, stdout="0\\n", stderr="")) as command:
+                 returncode=0, stdout="0\n", stderr="")) as command:
             result = xdg_polkit.run_test("test-auth", graphical=True)
             self.assertEqual(result["effective_uid"], 0)
             self.assertFalse(result["file_operations"])
