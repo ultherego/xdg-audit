@@ -201,6 +201,9 @@ def cleanup(home: Path) -> dict:
                     raise UnsafeFixture("Test marker changed: cleanup refused")
             finally:
                 os.close(f)
+            # Directory mode 511 permits reading but not unlinking children.
+            # Restore owner write on this exact verified test directory only.
+            os.fchmod(child, stat.S_IMODE(os.fstat(child).st_mode) | stat.S_IWUSR)
             os.unlink(FILE, dir_fd=child)
             os.fsync(child)
         finally:
