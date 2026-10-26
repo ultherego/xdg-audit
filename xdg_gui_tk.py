@@ -259,8 +259,6 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
             ttk.Button(qbuttons,text=tr('Usuń wygasłe…'),command=self.purge_expired).pack(side='right',padx=6)
             ttk.Button(qbuttons,text=tr('Ustaw retencję…'),command=self.configure_retention).pack(side='right',padx=6)
             ttk.Button(qbuttons,text=tr('Usuń historię…'),command=self.cleanup_history).pack(side='right',padx=6)
-            ttk.Button(qbuttons,text=tr('Test Polkit…'),
-                       command=self.polkit_selftest).pack(side='right',padx=6)
             ttk.Button(qbuttons,text=tr('Wyczyść całą zakończoną historię…'),
                        command=self.cleanup_all_history).pack(side='right',padx=6)
             idx=next((i for i,(_,scope) in enumerate(SCOPE_LABELS) if scope==args.scope),0)
@@ -729,45 +727,6 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                         lambda _cb, ok, value:self.jobs.put(
                             ('quarantine-job',(ok,value))))
 
-        def polkit_selftest(self):
-            from xdg_polkit import status as polkit_status, run_test
-            if not polkit_status()['ready']:
-                messagebox.showwarning(
-                    tr('Test Polkit'),
-                    tr('Test Polkit wymaga instalacji systemowego helpera. Instrukcja: packaging/polkit/README.md'),
-                    parent=root)
-                return
-            if not messagebox.askyesno(tr('Test Polkit'),
-                tr('Poproszę system Polkit o autoryzację i utworzę odizolowany katalog testowy, bez dotykania danych kwarantanny.'),
-                parent=root):
-                return
-            if simpledialog.askstring(tr('Test Polkit'),tr('Wpisz TEST:'),parent=root)!='TEST':
-                return
-            def created(ok,result):
-                if not ok:
-                    messagebox.showerror(tr('Test Polkit'),str(result),parent=root)
-                    return
-                if not messagebox.askyesno(tr('Usuń katalog testowy Polkit'),
-                    tr('Polkit utworzył katalog testowy. Usunę tylko ten katalog, nigdy kwarantannę użytkownika.')+
-                    '\n'+result['fixture'],parent=root):
-                    return
-                if simpledialog.askstring(tr('Usuń katalog testowy Polkit'),
-                    tr('Wpisz DELETE TEST:'),parent=root)!='DELETE TEST':
-                    return
-                def deleted(ok,outcome):
-                    if ok:
-                        messagebox.showinfo(tr('Test Polkit'),
-                            tr('Test Polkit zakończony: usunięto wyłącznie odizolowany katalog testowy.')+
-                            '\n'+outcome['fixture'],parent=root)
-                    else:
-                        messagebox.showerror(tr('Test Polkit'),str(outcome),parent=root)
-                self._quarantine_job(
-                    lambda:run_test('test-delete',graphical=True),
-                    deleted,'Uwierzytelnianie Polkit…')
-            self._quarantine_job(
-                lambda:run_test('test-create',graphical=True),
-                created,'Uwierzytelnianie Polkit…')
-
         def cleanup_all_history(self):
             def done(ok, result):
                 if not ok:
@@ -845,10 +804,11 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                 messagebox.showerror(tr('Retencja'),
                     tf('Nie można zapisać retencji: {error}',error=exc),parent=root)
 
-        def adopt_inventory(self):
-            selected=self.qtree.selection()
-            if not selected:return
-            run_id=selected[0]
+        def adopt_inventory(self, run_id=None, resume_purge=False):
+            if run_id is None:
+                selected=self.qtree.selection()
+                if not selected:return
+                run_id=selected[0]
             message=(tf('Operacja: {run_id}',run_id=run_id)+'\n'+
                 tr('Zatwierdzisz stan plików widoczny TERAZ. Nie oznacza to, że zawartość jest identyczna jak w dniu przeniesienia. PURGE nadal wymaga osobnej zgody.'))
             if not messagebox.askyesno(tr('Zatwierdź aktualny stan'),message,parent=root):return
@@ -858,16 +818,19 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                     messagebox.showerror(tr('Zatwierdź aktualny stan'),str(result),parent=root)
                 else:
                     self._refresh_quarantine()
-                    messagebox.showinfo(tr('Zatwierdź aktualny stan'),
-                        tf('Zatwierdzono aktualny stan: {count} obiektów.',count=result['adopted'])+
-                        '\n'+tr('Nie wykonano PURGE. Ponownie sprawdź dostęp i osobno potwierdź usunięcie.'),
-                        parent=root)
+                    if resume_purge:
+                        self._purge_runs([run_id])
+                    else:
+                        messagebox.showinfo(tr('Zatwierdź aktualny stan'),
+                            tf('Zatwierdzono aktualny stan: {count} obiektów.',count=result['adopted'])+
+                            '\n'+tr('Nie wykonano PURGE. Ponownie sprawdź dostęp i osobno potwierdź usunięcie.'),
+                            parent=root)
             self._quarantine_job(
                 lambda:engine.adopt_quarantine_inventory(
                     home,engine.xdg_roots(home),run_id),
                 done,'Weryfikacja kwarantanny')
 
-        def access_diagnostics(self,run_id=None):
+        def access_diagnostics(self,run_id=None, resume_purge=False, repaired=False):
             if run_id is None:
                 selected=self.qtree.selection()
                 if not selected:return
@@ -878,6 +841,12 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                     return
                 issues=report['issues']
                 if not issues:
+                    if resume_purge and (repaired or report['unsealed']):
+                        if report['unsealed']:
+                            self.adopt_inventory(run_id, resume_purge=True)
+                        else:
+                            self._purge_runs([run_id])
+                        return
                     note=tr('Nie znaleziono problemów z odczytem. Sprawdź pozostałe komunikaty PURGE.')
                     if report['unsealed']:
                         note+='\n'+tr('Brak kompletnego spisu plików. Wymagane osobne zatwierdzenie aktualnej zawartości (ADOPT).')
@@ -898,7 +867,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                     return
                 msg+='\n'+tf('Proponowana zmiana: {before} → {after}',
                               before=issue['mode'],after=issue['suggested_mode'])
-                msg+='\n'+tr('Zmienię tylko prawo odczytu właściciela. Bez sudo i bez usuwania plików.')
+                msg+='\n'+tr('Zmienię tylko wskazane uprawnienia właściciela w kwarantannie. Bez sudo i bez usuwania plików.')
                 if not messagebox.askyesno(tr('Napraw dostęp'),msg,parent=root):return
                 if simpledialog.askstring(tr('Napraw dostęp'),tr('Wpisz ACCESS:'),
                                           parent=root) != 'ACCESS':return
@@ -911,7 +880,10 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                           '\n'+tr('Nie wykonano PURGE. Ponownie sprawdź dostęp i osobno potwierdź usunięcie.'))
                     if report['unsealed']:
                         note+='\n'+tr('Brak kompletnego spisu plików. Wymagane osobne zatwierdzenie aktualnej zawartości (ADOPT).')
-                    messagebox.showinfo(tr('Napraw dostęp'),note,parent=root)
+                    if resume_purge:
+                        self.access_diagnostics(run_id, resume_purge=True, repaired=True)
+                    else:
+                        messagebox.showinfo(tr('Napraw dostęp'),note,parent=root)
                 self._quarantine_job(
                     lambda:engine.repair_quarantine_access(
                         home,engine.xdg_roots(home),run_id,issue['relative']),
@@ -947,8 +919,8 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
             def preview_ready(ok, result):
                 if not ok:
                     messagebox.showerror(tr('Zablokowano PURGE'),str(result),parent=root)
-                    if isinstance(result,PermissionError) and len(run_ids)==1:
-                        self.access_diagnostics(run_ids[0])
+                    if len(run_ids)==1 and engine.quarantine_access_recoverable_error(result):
+                        self.access_diagnostics(run_ids[0], resume_purge=True)
                     return
                 details='\\n'.join(
                     str(p['run_id'])+': '+str(p['objects'])+' entries / '+str(p['bytes'])+' B'

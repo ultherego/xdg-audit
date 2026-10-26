@@ -6,6 +6,7 @@ tombstone. Legacy journals can be restored, but cannot authorize deletion.
 from __future__ import annotations
 
 import datetime as dt
+import errno
 import json
 import os
 from pathlib import Path
@@ -48,7 +49,7 @@ def _check_owner(info: os.stat_result, device: int) -> None:
         raise ValueError("Foreign owner or filesystem inside quarantine")
 
 
-def capture_inventory(path: Path) -> list[dict]:
+def capture_inventory(path: Path, *, require_deletable: bool = False) -> list[dict]:
     """Capture complete inode/hash inventory without following symlinks."""
     import hashlib
     parent = _open_path(path.parent)
@@ -72,7 +73,14 @@ def capture_inventory(path: Path) -> list[dict]:
                     if _identity(os.fstat(child)) != _identity(before):
                         raise ValueError("Directory replaced during inventory")
                     result.append(row)
-                    for part in sorted(os.listdir(child)):
+                    children = sorted(os.listdir(child))
+                    # A readable directory may still refuse unlinking its
+                    # descendants. Reject that before any destructive PURGE.
+                    if (require_deletable and children and
+                            not stat.S_IMODE(before.st_mode) & stat.S_IWUSR):
+                        raise PermissionError(errno.EACCES,
+                            "Cannot delete children of a non-writable directory", relative)
+                    for part in children:
                         visit(child, part, part if relative == "." else relative + "/" + part, depth + 1)
                 finally:
                     os.close(child)
@@ -286,7 +294,8 @@ def _delete_entry(scopefd: int, name: str, expected_identity: tuple[int, int, in
     os.fsync(scopefd)
 
 
-def inspect_run(home: Path, roots: dict[str, Path], run_id: str, mounts_checker, *, allow_unsealed=False) -> dict:
+def inspect_run(home: Path, roots: dict[str, Path], run_id: str, mounts_checker, *,
+                allow_unsealed=False, require_deletable=False) -> dict:
     """Strictly preflight the complete run, including untracked files."""
     if not RUN_ID.fullmatch(run_id):
         raise ValueError("Invalid quarantine run ID")
@@ -374,7 +383,8 @@ def inspect_run(home: Path, roots: dict[str, Path], run_id: str, mounts_checker,
                             raise ValueError("Journal claims object absent, but it exists")
                         if stat.S_ISDIR(info.st_mode) and mounts_checker(entry["destination"]) is not False:
                             raise ValueError("Nested mounts or unavailable mount inventory")
-                        current = capture_inventory(entry["destination"])
+                        current = capture_inventory(entry["destination"],
+                                                    require_deletable=require_deletable)
                         if allow_unsealed and row.get("tree_inventory") is None:
                             if entry["status"] not in ("moved", "moving"):
                                 raise ValueError("Cannot adopt an interrupted destructive operation")
@@ -436,7 +446,7 @@ def adopt_legacy_run(home: Path, roots: dict[str, Path], run_id: str, mounts_che
 def purge_run(home: Path, roots: dict[str, Path], run_id: str, mounts_checker,
               *, dry_run: bool = True, emit=print) -> dict:
     """Full preflight before deleting anything; resume after interrupted purge."""
-    report = inspect_run(home, roots, run_id, mounts_checker)
+    report = inspect_run(home, roots, run_id, mounts_checker, require_deletable=True)
     result = {"run_id": run_id, "objects": report["present"],
               "bytes": report["bytes"], "dry_run": dry_run}
     if dry_run:
@@ -465,7 +475,7 @@ def purge_run(home: Path, roots: dict[str, Path], run_id: str, mounts_checker,
                     if mounts_checker(entry["destination"]) is not False and entry["identity"][2] == stat.S_IFDIR:
                         raise ValueError("Mount inventory changed during purge")
                     expected = _validated_inventory(row.get("tree_inventory"), entry["identity"])
-                    current = capture_inventory(entry["destination"])
+                    current = capture_inventory(entry["destination"], require_deletable=True)
                     _match_inventory(expected, current, partial=(row["move_status"] == "purging"))
                     row["move_status"] = "purging"
                     _write_manifest(runfd, payload)

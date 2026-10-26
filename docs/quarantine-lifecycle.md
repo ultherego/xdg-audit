@@ -48,33 +48,43 @@ a read while xdg-audit was inventorying quarantine data. The path may refer
 to a directory with mode `111`: it can be entered but not listed.
 Failure to inspect **blocks deletion**, not restoration.
 
-GTK, Qt and Tk now have **Check access…** beside a quarantine run. They
-report the invoking user's UID and username, the precise inaccessible path,
-the existing permissions and whether it can be repaired without escalation.
-A failed PURGE preview with `PermissionError` directs the user to that
-diagnostic flow. Nothing is modified by simply opening diagnosis.
+The normal GUI path starts at **Usuń trwale…**. When the verified
+PURGE preview finds an inaccessible user-owned object, GTK/Qt/Tk run
+**Sprawdź dostęp…** automatically and explain its exact path, owner,
+current permissions and proposed change. No test buttons are shown in
+the application.
 
-Equivalent CLI commands:
+After each approved `ACCESS` change, the GUI diagnoses the run again,
+offering another individually approved correction if a different object
+still blocks access. This includes:
+
+- directories without owner-read (`111 → 511`),
+- user-owned, single-linked regular files without owner-read (`000 → 400`),
+- **nonempty** directories that can be read but lack owner-write, required
+  to unlink their children (`511 → 711`).
+
+The last case is checked **before permanent deletion**, so a readable
+but undeletable tree never silently proceeds into a partially completed
+PURGE. All changes apply only to the exact diagnosed inode inside a
+validated quarantine journal, never arbitrarily chosen paths. Every
+change requires a separate `ACCESS` confirmation.
+
+If the original post-MOVE SHA-256 inventory was unavailable, the same GUI
+flow next asks for a separate `ADOPT` confirmation. This binds **current**
+contents, which might differ from the original snapshot. The GUI then
+repeats the PURGE preflight and requests its original, independent `PURGE`
+confirmation before deleting anything. Rejecting any confirmation stops
+the sequence without continuing on its own.
+
+Equivalent CLI actions remain available:
 
 ```fish
 python3 xdg_audit.py --diagnose-access RUN_ID
-# From issues[].relative choose the exact diagnosed directory:
 python3 xdg_audit.py --repair-access RUN_ID --repair-target cache/Shelly/lib32-gstreamer/pkg
+python3 xdg_audit.py --adopt-quarantine RUN_ID  # Only if inventory is unsealed
+python3 xdg_audit.py --purge RUN_ID --dry-run
+python3 xdg_audit.py --purge RUN_ID
 ```
-
-Repair is deliberately limited to **one user-owned directory** whose
-inaccessible mode has just been verified against the journal. It adds only
-the owner's read bit (`111` -> `511`), never changes ownership, never
-traverses a symlink, and requires the separate token `ACCESS`. No root
-password is collected; no `sudo` or `pkexec` is invoked. Neither repair
-nor diagnostic authorizes or triggers PURGE.
-
-If the original post-MOVE SHA-256 inventory could not be recorded, fixing
-permissions alone is insufficient. You must separately bind and approve
-the **current** contents with `ADOPT` (available as **Approve current
-state…** in GTK/Qt/Tk), then repeat PURGE inspection and its own `PURGE`
-confirmation. Current contents may differ from those present at the time
-of the original quarantine operation.
 
 The diagnostic identity comes from `os.getuid()` and the OS account
 database; it also reports `XDG_SESSION_ID`, session type, user groups and

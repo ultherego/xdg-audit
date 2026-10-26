@@ -385,10 +385,10 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
             qpurge.clicked.connect(self.purge_dialog)
             qb.addWidget(qpurge)
             qaccess=QtWidgets.QPushButton(tr('Sprawdź dostęp…'))
-            qaccess.clicked.connect(self.access_diagnostics_dialog)
+            qaccess.clicked.connect(lambda: self.access_diagnostics_dialog())
             qb.addWidget(qaccess)
             qadopt=QtWidgets.QPushButton(tr('Zatwierdź stan…'))
-            qadopt.clicked.connect(self.adopt_inventory_dialog)
+            qadopt.clicked.connect(lambda: self.adopt_inventory_dialog())
             qb.addWidget(qadopt)
             qhistory=QtWidgets.QPushButton(tr('Usuń historię…'))
             qhistory.clicked.connect(self.cleanup_history_dialog)
@@ -396,9 +396,6 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
             qexpired=QtWidgets.QPushButton(tr('Usuń wygasłe…'))
             qexpired.clicked.connect(self.purge_expired_dialog)
             qb.addWidget(qexpired)
-            qpolkit=QtWidgets.QPushButton(tr('Test Polkit…'))
-            qpolkit.clicked.connect(self.polkit_selftest_dialog)
-            qb.addWidget(qpolkit)
             qexpired_history=QtWidgets.QPushButton(tr('Wyczyść całą zakończoną historię…'))
             qexpired_history.clicked.connect(self.cleanup_all_history_dialog)
             qb.addWidget(qexpired_history)
@@ -535,50 +532,6 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
             run_gui_job(operation, lambda *_: None,
                         lambda _done, ok, outcome:self._quarantine_signals.finished.emit(ok,outcome))
 
-        def polkit_selftest_dialog(self):
-            from xdg_polkit import status as polkit_status, run_test
-            if not polkit_status()['ready']:
-                QtWidgets.QMessageBox.warning(
-                    self,tr('Test Polkit'),
-                    tr('Test Polkit wymaga instalacji systemowego helpera. Instrukcja: packaging/polkit/README.md'))
-                return
-            if QtWidgets.QMessageBox.question(self,tr('Test Polkit'),
-                    tr('Poproszę system Polkit o autoryzację i utworzę odizolowany katalog testowy, bez dotykania danych kwarantanny.'),
-                    QtWidgets.QMessageBox.StandardButton.Yes |
-                    QtWidgets.QMessageBox.StandardButton.No,
-                    QtWidgets.QMessageBox.StandardButton.No) != QtWidgets.QMessageBox.StandardButton.Yes:
-                return
-            token,ok=QtWidgets.QInputDialog.getText(self,tr('Test Polkit'),tr('Wpisz TEST:'))
-            if not ok or token!='TEST':return
-
-            def created(success, result):
-                if not success:
-                    QtWidgets.QMessageBox.warning(self,tr('Test Polkit'),str(result))
-                    return
-                if QtWidgets.QMessageBox.question(self,tr('Usuń katalog testowy Polkit'),
-                        tr('Polkit utworzył katalog testowy. Usunę tylko ten katalog, nigdy kwarantannę użytkownika.')+
-                        '\n'+result['fixture'],
-                        QtWidgets.QMessageBox.StandardButton.Yes |
-                        QtWidgets.QMessageBox.StandardButton.No,
-                        QtWidgets.QMessageBox.StandardButton.No) != QtWidgets.QMessageBox.StandardButton.Yes:
-                    return
-                token,ok=QtWidgets.QInputDialog.getText(
-                    self,tr('Usuń katalog testowy Polkit'),tr('Wpisz DELETE TEST:'))
-                if not ok or token!='DELETE TEST':return
-                def deleted(success, outcome):
-                    if success:
-                        QtWidgets.QMessageBox.information(self,tr('Test Polkit'),
-                            tr('Test Polkit zakończony: usunięto wyłącznie odizolowany katalog testowy.')+
-                            '\n'+outcome['fixture'])
-                    else:
-                        QtWidgets.QMessageBox.warning(self,tr('Test Polkit'),str(outcome))
-                self._quarantine_job(
-                    lambda:run_test('test-delete',graphical=True),
-                    deleted,'Uwierzytelnianie Polkit…')
-            self._quarantine_job(
-                lambda:run_test('test-create',graphical=True),
-                created,'Uwierzytelnianie Polkit…')
-
         def cleanup_history_dialog(self):
             selected=self.qtree.currentItem()
             if selected is not None:
@@ -643,10 +596,11 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
                     home,engine.xdg_roots(home),rid) for rid in run_ids],
                 completed,'Sprawdzanie historii…')
 
-        def adopt_inventory_dialog(self):
-            entry=self.qtree.currentItem()
-            if entry is None:return
-            run_id=entry.data(0,Role)
+        def adopt_inventory_dialog(self, run_id=None, resume_purge=False):
+            if run_id is None:
+                entry=self.qtree.currentItem()
+                if entry is None:return
+                run_id=entry.data(0,Role)
             explanation=(tf('Operacja: {run_id}',run_id=run_id)+'\n'+
                 tr('Zatwierdzisz stan plików widoczny TERAZ. Nie oznacza to, że zawartość jest identyczna jak w dniu przeniesienia. PURGE nadal wymaga osobnej zgody.'))
             if QtWidgets.QMessageBox.question(self,tr('Zatwierdź aktualny stan'),explanation,
@@ -659,15 +613,18 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
                     QtWidgets.QMessageBox.warning(self,tr('Zatwierdź aktualny stan'),str(outcome))
                 else:
                     self.refresh_quarantine()
-                    QtWidgets.QMessageBox.information(self,tr('Zatwierdź aktualny stan'),
-                        tf('Zatwierdzono aktualny stan: {count} obiektów.',count=outcome['adopted'])+
-                        '\n'+tr('Nie wykonano PURGE. Ponownie sprawdź dostęp i osobno potwierdź usunięcie.'))
+                    if resume_purge:
+                        self._purge_runs([run_id])
+                    else:
+                        QtWidgets.QMessageBox.information(self,tr('Zatwierdź aktualny stan'),
+                            tf('Zatwierdzono aktualny stan: {count} obiektów.',count=outcome['adopted'])+
+                            '\n'+tr('Nie wykonano PURGE. Ponownie sprawdź dostęp i osobno potwierdź usunięcie.'))
             self._quarantine_job(
                 lambda:engine.adopt_quarantine_inventory(
                     home,engine.xdg_roots(home),run_id),
                 done,'Weryfikacja kwarantanny')
 
-        def access_diagnostics_dialog(self, run_id=None):
+        def access_diagnostics_dialog(self, run_id=None, resume_purge=False, repaired=False):
             if run_id is None:
                 current=self.qtree.currentItem()
                 if current is None:return
@@ -679,6 +636,12 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
                     return
                 issues=report['issues']
                 if not issues:
+                    if resume_purge and (repaired or report['unsealed']):
+                        if report['unsealed']:
+                            self.adopt_inventory_dialog(run_id, resume_purge=True)
+                        else:
+                            self._purge_runs([run_id])
+                        return
                     note=tr('Nie znaleziono problemów z odczytem. Sprawdź pozostałe komunikaty PURGE.')
                     if report['unsealed']:
                         note+='\n'+tr('Brak kompletnego spisu plików. Wymagane osobne zatwierdzenie aktualnej zawartości (ADOPT).')
@@ -699,7 +662,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
                     return
                 message+='\n'+tf('Proponowana zmiana: {before} → {after}',
                                  before=issue['mode'],after=issue['suggested_mode'])
-                message+='\n'+tr('Zmienię tylko prawo odczytu właściciela. Bez sudo i bez usuwania plików.')
+                message+='\n'+tr('Zmienię tylko wskazane uprawnienia właściciela w kwarantannie. Bez sudo i bez usuwania plików.')
                 if QtWidgets.QMessageBox.question(self,tr('Napraw dostęp'),message,
                         QtWidgets.QMessageBox.StandardButton.Yes |
                         QtWidgets.QMessageBox.StandardButton.No,
@@ -718,7 +681,10 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
                             '\n'+tr('Nie wykonano PURGE. Ponownie sprawdź dostęp i osobno potwierdź usunięcie.'))
                     if report['unsealed']:
                         result+='\n'+tr('Brak kompletnego spisu plików. Wymagane osobne zatwierdzenie aktualnej zawartości (ADOPT).')
-                    QtWidgets.QMessageBox.information(self,tr('Napraw dostęp'),result)
+                    if resume_purge:
+                        self.access_diagnostics_dialog(run_id, resume_purge=True, repaired=True)
+                    else:
+                        QtWidgets.QMessageBox.information(self,tr('Napraw dostęp'),result)
                 self._quarantine_job(
                     lambda:engine.repair_quarantine_access(
                         home,engine.xdg_roots(home),run_id,issue['relative']),
@@ -756,8 +722,8 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
             def completed(ok, outcome):
                 if not ok:
                     QtWidgets.QMessageBox.critical(self,tr('Zablokowano PURGE'),str(outcome))
-                    if isinstance(outcome,PermissionError) and len(run_ids)==1:
-                        self.access_diagnostics_dialog(run_ids[0])
+                    if len(run_ids)==1 and engine.quarantine_access_recoverable_error(outcome):
+                        self.access_diagnostics_dialog(run_ids[0], resume_purge=True)
                     return
                 description='\\n'.join(
                     str(plan['run_id'])+': '+str(plan['objects'])+' entries / '+str(plan['bytes'])+' B'

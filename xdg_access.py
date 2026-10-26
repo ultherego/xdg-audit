@@ -23,6 +23,18 @@ MAX_DEPTH = 64
 MAX_ISSUES = 30
 
 
+def needs_access_recovery(exc: BaseException) -> bool:
+    """Only trigger guided ACCESS/ADOPT for known recoverable preflight errors.
+
+    Other manifest/inode/hash failures must remain blocked without adoption.
+    """
+    return (isinstance(exc, PermissionError) or
+            (isinstance(exc, ValueError) and str(exc) in {
+                "Missing recursive inventory; legacy run requires adoption",
+                "Foreign owner or filesystem inside quarantine",
+            }))
+
+
 def authority_context() -> dict:
     """Describe the invoking identity; never guess Polkit authorization."""
     uid = os.getuid()
@@ -99,7 +111,7 @@ def diagnose_access(home: Path, roots: dict[str, Path], run_id: str) -> dict:
     seen_nodes = 0
     unsealed = False
 
-    def problem(code, path, info=None, repairable=False):
+    def problem(code, path, info=None, repairable=False, add_bits=stat.S_IRUSR):
         if len(findings) >= MAX_ISSUES:
             return
         findings.append({
@@ -108,7 +120,7 @@ def diagnose_access(home: Path, roots: dict[str, Path], run_id: str) -> dict:
             "mode": format(stat.S_IMODE(info.st_mode), "03o") if info else None,
             "owner_uid": info.st_uid if info else None,
             "repairable": bool(repairable),
-            "suggested_mode": (format(stat.S_IMODE(info.st_mode) | stat.S_IRUSR, "03o")
+            "suggested_mode": (format(stat.S_IMODE(info.st_mode) | add_bits, "03o")
                                if repairable else None),
         })
 
@@ -138,6 +150,11 @@ def diagnose_access(home: Path, roots: dict[str, Path], run_id: str) -> dict:
                     problem("DIRECTORY_UNREADABLE", path, info,
                             repairable=(stat.S_IMODE(info.st_mode) & stat.S_IRUSR == 0))
                     return
+                if names and not stat.S_IMODE(info.st_mode) & stat.S_IWUSR:
+                    # Empty dirs can be rmdir'd by their parent. Non-empty
+                    # dirs require owner-write to unlink verified children.
+                    problem("DIRECTORY_NOT_WRITABLE", path, info, repairable=True,
+                            add_bits=stat.S_IWUSR)
                 for part in names:
                     if len(findings) >= MAX_ISSUES:
                         break
@@ -151,7 +168,8 @@ def diagnose_access(home: Path, roots: dict[str, Path], run_id: str) -> dict:
             try:
                 fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=parentfd)
             except PermissionError:
-                problem("FILE_UNREADABLE", path, info)
+                problem("FILE_UNREADABLE", path, info,
+                        repairable=(stat.S_IMODE(info.st_mode) & stat.S_IRUSR == 0))
             else:
                 try:
                     if _identity(os.fstat(fd)) != _identity(info):
@@ -196,7 +214,8 @@ def repair_owner_directory(home: Path, roots: dict[str, Path], run_id: str,
     report = diagnose_access(home, roots, run_id)
     match = next((item for item in report["issues"]
                   if item["relative"] == relative and item["repairable"]
-                  and item["code"] == "DIRECTORY_UNREADABLE"), None)
+                  and item["code"] in ("DIRECTORY_UNREADABLE", "FILE_UNREADABLE",
+                                       "DIRECTORY_NOT_WRITABLE")), None)
     if match is None:
         raise ValueError("Target is no longer eligible for owner-only repair")
     base = roots.get("data", home / ".local/share") / "xdg-audit-quarantine"
@@ -204,12 +223,17 @@ def repair_owner_directory(home: Path, roots: dict[str, Path], run_id: str,
     parentfd = _open_path(target.parent)
     try:
         before = os.stat(target.name, dir_fd=parentfd, follow_symlinks=False)
-        if not stat.S_ISDIR(before.st_mode) or before.st_uid != os.getuid():
-            raise ValueError("Target is not a directory owned by this user")
+        expected_kind = (stat.S_IFREG if match["code"] == "FILE_UNREADABLE"
+                         else stat.S_IFDIR)
+        if (stat.S_IFMT(before.st_mode) != expected_kind or before.st_uid != os.getuid()
+                or (expected_kind == stat.S_IFREG and before.st_nlink != 1)):
+            raise ValueError("Target is not a safely repairable user-owned object")
+        missing_bit = (stat.S_IWUSR if match["code"] == "DIRECTORY_NOT_WRITABLE"
+                       else stat.S_IRUSR)
         if (stat.S_IMODE(before.st_mode) != int(match["mode"], 8) or
-            stat.S_IMODE(before.st_mode) & stat.S_IRUSR):
+                stat.S_IMODE(before.st_mode) & missing_bit):
             raise ValueError("Target permissions changed after diagnosis")
-        os.chmod(target.name, stat.S_IMODE(before.st_mode) | stat.S_IRUSR,
+        os.chmod(target.name, stat.S_IMODE(before.st_mode) | missing_bit,
                  dir_fd=parentfd, follow_symlinks=False)
         after = os.stat(target.name, dir_fd=parentfd, follow_symlinks=False)
         if _identity(before) != _identity(after):

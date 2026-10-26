@@ -1170,9 +1170,6 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
             retention=Gtk.Button(label=tr('Ustaw retencję…'))
             retention.connect('clicked',lambda *_:self.configure_retention())
             append(tools_box,retention)
-            polkit=Gtk.Button(label=tr('Test Polkit…'))
-            polkit.connect('clicked',lambda *_:self.polkit_selftest())
-            append(tools_box,polkit)
             history=Gtk.Button(label=tr('Wyczyść całą zakończoną historię…'))
             history.connect('clicked',lambda *_:self.cleanup_all_history())
             append(tools_box,history)
@@ -1292,45 +1289,6 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
 
             run_gui_job(operation, finish, GLib.idle_add)
 
-        def polkit_selftest(self):
-            from xdg_polkit import status as polkit_status, run_test
-            info=polkit_status()
-            if not info['ready']:
-                self._quarantine_notice(
-                    tr('Test Polkit wymaga instalacji systemowego helpera. Instrukcja: packaging/polkit/README.md'))
-                return
-
-            def delete_fixture():
-                def completed(ok, result):
-                    if ok:
-                        self._quarantine_notice(
-                            tr('Test Polkit zakończony: usunięto wyłącznie odizolowany katalog testowy.')+
-                            '\n'+result['fixture'])
-                    else:
-                        self._quarantine_notice(tf('Błąd testu Polkit: {error}',error=result))
-                self._quarantine_job(
-                    lambda:run_test('test-delete',graphical=True),
-                    completed,'Uwierzytelnianie Polkit…')
-
-            def create_fixture():
-                def completed(ok, result):
-                    if not ok:
-                        self._quarantine_notice(tf('Błąd testu Polkit: {error}',error=result))
-                        return
-                    self.prompt(
-                        tr('Usuń katalog testowy Polkit'),
-                        tr('Polkit utworzył katalog testowy. Usunę tylko ten katalog, nigdy kwarantannę użytkownika.')+
-                        '\n'+result['fixture'],
-                        'DELETE TEST',delete_fixture)
-                self._quarantine_job(
-                    lambda:run_test('test-create',graphical=True),
-                    completed,'Uwierzytelnianie Polkit…')
-
-            self.prompt(
-                tr('Test Polkit'),
-                tr('Poproszę system Polkit o autoryzację i utworzę odizolowany katalog testowy, bez dotykania danych kwarantanny.'),
-                'TEST',create_fixture)
-
         def _quarantine_notice(self, message):
             """Show a visible GTK notice instead of a hard-to-see footer update."""
             dialog=Gtk.Window(title=tr('Historia'),transient_for=self.win,modal=True)
@@ -1348,7 +1306,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
             dialog.present() if GTK4 else dialog.show_all()
             close.grab_focus()
 
-        def adopt_inventory(self, run_id):
+        def adopt_inventory(self, run_id, resume_purge=False):
             explanation=(tf('Operacja: {run_id}',run_id=run_id)+'\n'+
                          tr('Zatwierdzisz stan plików widoczny TERAZ. Nie oznacza to, że zawartość jest identyczna jak w dniu przeniesienia. PURGE nadal wymaga osobnej zgody.'))
             def commit():
@@ -1357,16 +1315,20 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                         self._quarantine_notice(tf('Naprawa zablokowana: {error}',error=result))
                     else:
                         self.refresh_quarantine()
-                        self._quarantine_notice(
-                            tf('Zatwierdzono aktualny stan: {count} obiektów.',count=result['adopted'])+
-                            '\n'+tr('Nie wykonano PURGE. Ponownie sprawdź dostęp i osobno potwierdź usunięcie.'))
+                        if resume_purge:
+                            # New preflight and a distinct PURGE confirmation follow.
+                            self.purge_runs([run_id])
+                        else:
+                            self._quarantine_notice(
+                                tf('Zatwierdzono aktualny stan: {count} obiektów.',count=result['adopted'])+
+                                '\n'+tr('Nie wykonano PURGE. Ponownie sprawdź dostęp i osobno potwierdź usunięcie.'))
                 self._quarantine_job(
                     lambda:engine.adopt_quarantine_inventory(
                         home,engine.xdg_roots(home),run_id),
                     done,'Weryfikacja kwarantanny')
             self.prompt(tr('Zatwierdź aktualny stan'),explanation,'ADOPT',commit)
 
-        def access_diagnostics(self, run_id):
+        def access_diagnostics(self, run_id, resume_purge=False, repaired=False):
             """Investigate one run without granting elevated privileges."""
             def ready(ok, result):
                 if not ok:
@@ -1377,6 +1339,12 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                 polkit_text=tf('pkexec zainstalowany: {state}',
                                state=tr('tak') if result['identity']['pkexec_installed'] else tr('nie'))
                 if not issues:
+                    if resume_purge and (repaired or result['unsealed']):
+                        if result['unsealed']:
+                            self.adopt_inventory(run_id, resume_purge=True)
+                        else:
+                            self.purge_runs([run_id])
+                        return
                     note=tr('Nie znaleziono problemów z odczytem. Sprawdź pozostałe komunikaty PURGE.')
                     if result['unsealed']:
                         note+='\n'+tr('Brak kompletnego spisu plików. Wymagane osobne zatwierdzenie aktualnej zawartości (ADOPT).')
@@ -1396,7 +1364,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                     return
                 summary+=('\n'+tf('Proponowana zmiana: {before} → {after}',
                                    before=issue['mode'],after=issue['suggested_mode'])+
-                          '\n'+tr('Zmienię tylko prawo odczytu właściciela. Bez sudo i bez usuwania plików.'))
+                          '\n'+tr('Zmienię tylko wskazane uprawnienia właściciela w kwarantannie. Bez sudo i bez usuwania plików.'))
                 def approved():
                     def operation():
                         return engine.repair_quarantine_access(
@@ -1411,7 +1379,11 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                               '\n'+tr('Nie wykonano PURGE. Ponownie sprawdź dostęp i osobno potwierdź usunięcie.'))
                         if result['unsealed']:
                             info+='\n'+tr('Brak kompletnego spisu plików. Wymagane osobne zatwierdzenie aktualnej zawartości (ADOPT).')
-                        self._quarantine_notice(info)
+                        if resume_purge:
+                            # Continue diagnosis until all inaccessible items are resolved.
+                            self.access_diagnostics(run_id, resume_purge=True, repaired=True)
+                        else:
+                            self._quarantine_notice(info)
                     self._quarantine_job(operation,completed,'Naprawianie dostępu…')
                 self.prompt(tr('Napraw dostęp'),summary,'ACCESS',approved)
             self._quarantine_job(
@@ -1481,8 +1453,8 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
             def preview_ready(ok, outcome):
                 if not ok:
                     self.status.set_text(tf('Zablokowano PURGE: {error}',error=outcome))
-                    if isinstance(outcome,PermissionError) and len(run_ids)==1:
-                        self.access_diagnostics(run_ids[0])
+                    if len(run_ids)==1 and engine.quarantine_access_recoverable_error(outcome):
+                        self.access_diagnostics(run_ids[0], resume_purge=True)
                     return
                 details='\\n'.join(
                     f"{p['run_id']}: {p['objects']} entries, {p['bytes']} B"
