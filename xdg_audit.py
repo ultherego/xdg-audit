@@ -1040,6 +1040,15 @@ def commit_quarantine(chosen: list[Item], roots: dict[str, Path], home: Path,
             _sync_directory(source.parent)
             _sync_directory(destination.parent)
             moved.append(str(source))
+            from xdg_quarantine_lifecycle import capture_inventory
+            try:
+                row['tree_inventory'] = capture_inventory(destination)
+            except (OSError, ValueError) as exc:
+                # The move already happened. Preserve a restorable journal but
+                # never make an unverified tree eligible for purge.
+                _write_manifest_atomic(manifest, payload)
+                emit(f"MOVED, but purge inventory unavailable (restore-only): {destination}: {exc}")
+                continue
             row['move_status'] = 'moved'
             _write_manifest_atomic(manifest, payload)
             emit(f"MOVED {source} -> {destination}")
