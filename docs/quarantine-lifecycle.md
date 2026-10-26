@@ -119,14 +119,22 @@ Manual metadata-only cleanup (the separate token is `HISTORY`):
 ```fish
 python3 xdg_audit.py --cleanup-history RUN_ID --dry-run
 python3 xdg_audit.py --cleanup-history RUN_ID
-python3 xdg_audit.py --cleanup-expired-history
+python3 xdg_audit.py --cleanup-all-history               # Preview ALL terminal runs
+python3 xdg_audit.py --cleanup-all-history --execute      # Requires HISTORY
+python3 xdg_audit.py --cleanup-expired-history            # Only PURGED 30+ days ago
 python3 xdg_audit.py --cleanup-expired-history --execute
 ```
 
 In GTK, Qt and Tk you can see a distinct status for purged runs, remove
-an individually completed operation's history, or clean up history past the
-30-day cutoff. Each destructive GUI history operation requires the exact
-`HISTORY` confirmation. Restored operations can have their histories
+an individually completed operation's history, or use **Clear all completed
+history…** for *all* verified `PURGED`, `RESTORED` and `COMPLETED` runs,
+regardless of age. Each destructive GUI history operation requires the exact
+`HISTORY` confirmation.
+
+This manual all-history operation intentionally differs from the scheduled
+30-day retention task. It does not alter the timer or enable automation.
+If no history is eligible, the GUI explicitly explains that active and
+incomplete runs are protected. Restored operations can have their histories
 removed **manually**, but never through age-based automatic cleanup.
 
 Incomplete, corrupted, inconsistent, or nonempty runs are always protected.
