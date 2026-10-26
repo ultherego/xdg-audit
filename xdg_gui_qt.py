@@ -1145,7 +1145,12 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
                 result = engine.commit_quarantine(chosen, self.roots, home,
                         allow_uncertain=bool(uncertain), emit=output.append, extra_aliases=aliases,keep_names=args.keep)
                 text = "\n".join(output[-12:])
-                QtWidgets.QMessageBox.information(self, tr('Kwarantanna'), tf('Run ID: {run_id}',run_id=result['run_id'])+'\n'+tf('Przeniesiono {moved}/{total}.',moved=len(result['moved']),total=len(chosen)))
+                message=tf('Run ID: {run_id}',run_id=result['run_id'])+'\n'+tf('Przeniesiono {moved}/{total}.',moved=len(result['moved']),total=len(chosen))
+                if any('purge inventory unavailable' in line for line in output):
+                    QtWidgets.QMessageBox.warning(self,tr('Kwarantanna'),message+'\n\n'+
+                        tr('Pliki przeniesiono, ale nie można było sprawdzić całej zawartości. Przed PURGE użyj „Sprawdź dostęp…”, następnie osobno „Zatwierdź stan…” (ADOPT).'))
+                else:
+                    QtWidgets.QMessageBox.information(self,tr('Kwarantanna'),message)
             except Exception as exc:
                 QtWidgets.QMessageBox.critical(self, tr('Błąd'), tf('Nie udało się przeprowadzić operacji:\n{error}',error=exc))
             self.scan_async()
