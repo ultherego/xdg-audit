@@ -1147,6 +1147,9 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
             expired=Gtk.Button(label=tr('Usuń wygasłe…'))
             expired.connect('clicked',lambda *_:self.purge_expired())
             append(tools_box,expired)
+            retention=Gtk.Button(label=tr('Ustaw retencję…'))
+            retention.connect('clicked',lambda *_:self.configure_retention())
+            append(tools_box,retention)
             tools_row.set_child(tools_box) if GTK4 else tools_row.add(tools_box)
             append(self.qlist,tools_row)
             for run in engine.quarantine_runs(home,engine.xdg_roots(home)):
@@ -1165,6 +1168,41 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                 row.set_child(box) if GTK4 else row.add(box)
                 append(self.qlist,row)
             if not GTK4:self.qlist.show_all()
+
+        def configure_retention(self):
+            from xdg_retention import load, save
+            try:
+                current=load(home,engine.xdg_roots(home))
+            except (ValueError,OSError) as exc:
+                self.status.set_text(tf('Nie można zapisać retencji: {error}',error=exc))
+                return
+            dialog=Gtk.Window(title=tr('Retencja'),transient_for=self.win,modal=True)
+            dialog.set_default_size(370,160)
+            content=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=12)
+            for side in ('top','bottom','start','end'):
+                getattr(content,'set_margin_'+side)(15)
+            append(content,label(tr('Dni przechowywania:')))
+            days=Gtk.SpinButton.new_with_range(1,3650,1)
+            days.set_value(current['days'])
+            append(content,days)
+            actions=Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL,spacing=8)
+            append(content,actions)
+            cancel=Gtk.Button(label=tr('Anuluj'))
+            cancel.connect('clicked',lambda *_:dialog.destroy())
+            append(actions,cancel)
+            button=Gtk.Button(label=tr('Zapisz'))
+            def accept(*_):
+                current['days']=days.get_value_as_int()
+                try:
+                    save(home,engine.xdg_roots(home),current)
+                    self.status.set_text(tf('Ustawiono retencję: {days} dni',days=current['days']))
+                    dialog.destroy()
+                except (ValueError,OSError) as exc:
+                    self.status.set_text(tf('Nie można zapisać retencji: {error}',error=exc))
+            button.connect('clicked',accept)
+            append(actions,button)
+            set_child(dialog,content)
+            dialog.present() if GTK4 else dialog.show_all()
 
         def purge_runs(self,run_ids):
             plans=[]
