@@ -8,7 +8,7 @@ import tempfile
 import unittest
 
 import xdg_audit as audit
-from xdg_quarantine_lifecycle import inspect_run, purge_run, expired_run_ids
+from xdg_quarantine_lifecycle import inspect_run, purge_run, expired_run_ids, capture_inventory
 
 
 class LifecycleTests(unittest.TestCase):
@@ -32,6 +32,7 @@ class LifecycleTests(unittest.TestCase):
                     "scope": "config", "state": "CANDIDATE",
                     "identity": [info.st_dev, info.st_ino, stat.S_IFDIR],
                     "move_status": "moved"}
+        self.row["tree_inventory"] = capture_inventory(self.dest)
         self.payload = {"format": "intent-journal-v3",
                         "created": self.run_id, "items": [self.row]}
         self.write()
@@ -108,8 +109,29 @@ class LifecycleTests(unittest.TestCase):
         target = self.home / "outside"
         target.write_text("do not erase")
         (self.dest / "external").symlink_to(target)
-        self.purge(dry_run=False)
+        with self.assertRaises(ValueError):
+            self.purge(dry_run=False)
         self.assertEqual(target.read_text(), "do not erase")
+        self.assertTrue(self.dest.exists())
+
+    def test_new_nested_file_blocks_purge(self):
+        (self.dest / "unexpected").write_text("keep me")
+        with self.assertRaises(ValueError):
+            self.purge(dry_run=False)
+        self.assertTrue((self.dest / "unexpected").exists())
+
+    def test_mutated_nested_file_blocks_purge(self):
+        (self.dest / "settings").write_text("changed")
+        with self.assertRaises(ValueError):
+            self.purge(dry_run=False)
+        self.assertTrue((self.dest / "settings").exists())
+
+    def test_inventory_missing_blocks_purge(self):
+        del self.row["tree_inventory"]
+        self.write()
+        with self.assertRaises(ValueError):
+            self.purge(dry_run=False)
+        self.assertTrue(self.dest.exists())
 
     def test_retention_boundary(self):
         now = dt.datetime(2026, 10, 26, 12, 0)
