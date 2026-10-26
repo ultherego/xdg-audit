@@ -7,6 +7,7 @@ from __future__ import annotations
 
 LANGUAGES = {'pl': 'Polski', 'en': 'English'}
 EN = {
+    'Audyt tylko do odczytu · MOVE i PURGE wymagają potwierdzenia': 'Read-only scan · MOVE and PURGE require separate confirmation',
     'Ustaw retencję…': 'Configure retention…',
     'Retencja': 'Retention',
     'Dni przechowywania:': 'Retention days:',
