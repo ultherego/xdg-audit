@@ -196,11 +196,20 @@ python3 xdg_audit.py --quarantine-info RUN_ID
 python3 xdg_audit.py --purge RUN_ID --dry-run
 python3 xdg_audit.py --purge RUN_ID           # Explicit PURGE confirmation
 python3 xdg_audit.py --purge-expired          # Retention preview
+python3 xdg_audit.py --cleanup-history RUN_ID --dry-run
+python3 xdg_audit.py --cleanup-expired-history # 30 days after PURGE
 ```
 
 Available scopes: `all`, `config`, `data`, `state`, `cache`, `flatpak`, `dotfiles`.
 
-See [Quarantine lifecycle](docs/quarantine-lifecycle.md) for recovery, manual/automatic retention, user-scoped systemd timer, legacy adoption, and safeguards.
+Completed PURGE operations remain visible in the GUI as **PURGED** until
+their manifest is cleaned up; that history may be automatically removed 30
+days after full PURGE, but only with explicit opt-in to automatic retention.
+Incomplete or corrupted journals are never auto-removed.
+
+See [Quarantine lifecycle](docs/quarantine-lifecycle.md) for recovery,
+history-only cleanup, manual/automatic retention, user-scoped systemd
+timer, legacy adoption, and safeguards.
 
 ## 🧪 Testing & release status
 
