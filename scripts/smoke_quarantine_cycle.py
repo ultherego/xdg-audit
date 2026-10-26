@@ -202,6 +202,10 @@ def run(synthetic_inventory: bool) -> None:
                         for path in main_paths]
             purged = audit.commit_quarantine(selected, roots, home, emit=log_messages.append)
             check(len(purged['moved']) == 2, 'purge cycle quarantine failed')
+            for inspected in json.loads(Path(purged['manifest']).read_text())['items']:
+                check(inspected['identity'] == inspected.get('tree_inventory', [{}])[0].get('identity'),
+                      'quarantine root inode inconsistent: journal=%r snapshot=%r' %
+                      (inspected['identity'], inspected.get('tree_inventory', [{}])[0].get('identity')))
             before = Path(purged['manifest']).read_bytes()
             preview = audit.purge_quarantine_run(home, roots, purged['run_id'], dry_run=True)
             check(preview['objects'] == 2, 'purge preview expected two entries')
