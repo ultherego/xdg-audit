@@ -61,9 +61,10 @@ potwierdzenie użytkownika nie wymienia.
 - [ ] Xfce/X11 — uruchomienie i przebieg na backendzie Tk/GTK.
 - [x] Brak pacmana: rzeczywisty odczyt dpkg i skan działają, MOVE pozostaje
   zablokowany — [wykonany test](verification-2026-10-26.md).
-- [ ] Odporny UX dla pełnego/quasi-pełnego dysku oraz braku praw
-  do katalogów, zrozumiały błąd i bez nadpisywania danych. Testy silnika
-  ENOSPC/EACCES wykonane; natywny smoke błędu GTK musi przejść CI.
+- [x] Obsługa pełnego dysku i braku praw: testy silnika ENOSPC/EACCES,
+  brak nadpisywania danych oraz natywny smoke komunikatu ENOSPC w GTK —
+  [wyniki](verification-2026-10-26.md). Nie oznacza to testu fizycznego
+  zapełnienia nośnika ani osobnego odbioru błędów na każdym pulpicie.
 
 ## 4. Publikacja (P1)
 

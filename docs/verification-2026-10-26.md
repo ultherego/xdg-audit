@@ -16,20 +16,32 @@ launchera w CI wymaga zwykłego użytkownika.
 
 | Kontrola | Wynik i zakres |
 | --- | --- |
-| `python3 -m unittest discover -s tests -q` | PASS lokalnie; szczegółowe przypadki poniżej |
+| `python3 -m unittest discover -s tests -q` | PASS: 297 testów lokalnie i zielona macierz Python 3.10–3.14 w CI; szczegółowe przypadki poniżej |
 | Osiem rzeczywistych SIGKILL | PASS: przed/po rename MOVE, przed/po rename RESTORE, przed usuwaniem, po pierwszym unlink, po usunięciu przed zapisem końcowym oraz podczas wymiany dziennika |
 | Powrót po przerwaniu | PASS: identyczne bajty przy RESTORE, kontynuacja częściowego PURGE, jawne odzyskanie wyłącznie tymczasowego dziennika, plik kontrolny poza operacją nietknięty |
 | ENOSPC / EACCES / EIO | PASS: zachowany właściwy kod błędu i poprzedni dziennik; brak niezatwierdzonych zmian; poprawne liczniki po wykonanym rename; ponowienie po usunięciu błędu |
 | Rzeczywisty dpkg bez pacmana | PASS: odczyt bazy dpkg, skan fixture i jawna odmowa MOVE; bajty fixture niezmienione |
 | Instalacja / aktualizacja / usunięcie rejestracji | PASS: dziewięć regresji; brak zmian cudzych wpisów i kwarantanny; odmowa symlinków i hardlinków, zachowanie wpisu po nieudanym zapisie |
-| Archiwa ZIP i tar.gz | PASS lokalnie: budowanie, integralność i powtarzalność; wyłącznie jawna lista `scripts/archive-files.json` |
+| Archiwa ZIP i tar.gz | PASS lokalnie i w CI: budowanie, integralność, powtarzalność oraz identyczne odtworzenie z rozpakowanych źródeł bez Git; wyłącznie jawna lista `scripts/archive-files.json` |
 | Prywatność wejść archiwum | PASS: dodatkowe `.env`, raport JSON, prywatny plik Python i PEM nie trafiają do archiwum; zadeklarowany symlink lub wyjście poza projekt blokuje budowanie |
-| Natywny Gio / błąd ENOSPC w GTK | Nowe smoke testy w zadaniu GUI; ich wynik należy odczytać z powiązanego CI, nie z lokalnych testów bez display servera |
+| Natywny Gio / błąd ENOSPC w GTK | PASS w [zadaniu GUI 121701281841](https://github.com/ultherego/xdg-audit/actions/runs/40359634579/job/121701281841): uruchomienie ścieżki ze znakami specjalnymi, responsywność GTK, widoczny błąd ENOSPC i brak potwierdzenia PURGE |
 
 PR #27, commit `8d7a70535134fce903f470fca7a8a9098af78999`, przeszedł
 Python 3.10–3.14, Xvfb, Weston, E2E, benchmark i archiwa:
 [run 40356697307](https://github.com/ultherego/xdg-audit/actions/runs/40356697307).
 Po tym wyniku PR został scalony.
+
+Kod PR #28, commit `9b389f6776d69eabc71b0c673d83a2667e31c222`, przeszedł
+macierz Python, Xvfb (w tym nowe kontrole Gio/ENOSPC), Weston, E2E, benchmark i archiwa:
+[run 40359634579](https://github.com/ultherego/xdg-audit/actions/runs/40359634579).
+Zależności zadania Xvfb mają teraz limity czasu, ograniczone ponowienia
+i tryb nieinteraktywny; instalacja pakietów nie może blokować zadania bez końca.
+
+Pobrano również rzeczywisty artefakt CI `12666463359` z tego uruchomienia.
+Zweryfikowano digest z metadanych GitHuba, wewnętrzne SHA256SUMS, dokładną
+listę 93 plików, zgodność zawartości ZIP z tar.gz oraz zgodność wszystkich
+plików Python z lokalnie testowanymi źródłami. Nie wykryto dodatkowych
+plików spoza jawnego manifestu.
 
 ## Poprawione usterki
 
