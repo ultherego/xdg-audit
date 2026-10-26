@@ -2,6 +2,10 @@
 
 ## 1.7.0-rc2 (unreleased)
 
+- Hide unavailable Flatpak/Snap tabs only when no leftover data was found;
+  retain failed-source visibility and stable scope selection after rescanning.
+- Fit GTK/Qt/Tk dialogs to content with 20 px internal padding, screen bounds,
+  scrollable long messages and visible actions; preserve cancellation and tokens.
 - Distinguish a healthy empty pacman foreign filter from failed queries while
   keeping native package database authorization strict.
 - Validate raw package/Flatpak identifiers before case folding and reject

@@ -10,6 +10,8 @@ from typing import Any
 from xdg_theme import Appearance, detect_appearance
 from xdg_inspector import details_text, open_item_location
 from xdg_gui_jobs import run_gui_job
+from xdg_gui_layout import visible_optional_scopes
+from xdg_gui_dialogs import qt_dialog_helpers, fit_qt_dialog
 
 
 def import_qt():
@@ -39,6 +41,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
     Qt = QtCore.Qt
     Slot = QtCore.Slot if hasattr(QtCore, "Slot") else QtCore.pyqtSlot
     Role = Qt.ItemDataRole.UserRole
+    messages, inputs = qt_dialog_helpers(QtWidgets, QtCore, tr)
 
     class AuditModel(QtCore.QAbstractTableModel):
         HEADERS = ('Wybór', 'Nazwa', 'Status', 'Rozmiar', 'Lokalizacja')
@@ -491,14 +494,14 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
             run_id=entry.data(0,Role)
             run=next((r for r in engine.quarantine_runs(home,engine.xdg_roots(home)) if r['run_id']==run_id),None)
             if run:
-                QtWidgets.QMessageBox.information(self,tr('Zawartość kwarantanny'),
+                messages.information(self,tr('Zawartość kwarantanny'),
                     '\n'.join(x.get('source','?') for x in run['items'][:45]) or tr('(brak danych)'))
 
         def configure_retention_dialog(self):
             from xdg_retention import load, save
             try:
                 current=load(home,engine.xdg_roots(home))
-                days,ok=QtWidgets.QInputDialog.getInt(self,tr('Retencja'),
+                days,ok=inputs.getInt(self,tr('Retencja'),
                     tr('Dni przechowywania:'),current['days'],1,3650,1)
                 if ok:
                     current['days']=days
@@ -506,7 +509,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
                     self.statusBar().showMessage(
                         tf('Ustawiono retencję: {days} dni',days=days))
             except (ValueError,OSError) as exc:
-                QtWidgets.QMessageBox.warning(self,tr('Retencja'),
+                messages.warning(self,tr('Retencja'),
                     tf('Nie można zapisać retencji: {error}',error=exc))
 
         @Slot(object, object)
@@ -540,11 +543,11 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
         def cleanup_all_history_dialog(self):
             def completed(ok, outcome):
                 if not ok:
-                    QtWidgets.QMessageBox.critical(self,tr('Historia'),str(outcome))
+                    messages.critical(self,tr('Historia'),str(outcome))
                 elif outcome:
                     self._cleanup_history_runs(outcome)
                 else:
-                    QtWidgets.QMessageBox.information(self,tr('Historia'),
+                    messages.information(self,tr('Historia'),
                         tr('Brak zakończonych operacji do wyczyszczenia. Aktywne i niedokończone pozostają chronione.'))
             self._quarantine_job(
                 lambda:engine.completed_quarantine_history(home,engine.xdg_roots(home)),
@@ -553,11 +556,11 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
         def cleanup_expired_history_dialog(self):
             def completed(ok, outcome):
                 if not ok:
-                    QtWidgets.QMessageBox.critical(self,tr('Historia'),str(outcome))
+                    messages.critical(self,tr('Historia'),str(outcome))
                 elif outcome:
                     self._cleanup_history_runs(outcome)
                 else:
-                    QtWidgets.QMessageBox.information(self,tr('Historia'),
+                    messages.information(self,tr('Historia'),
                         tr('Brak wygasłych manifestów.'))
             self._quarantine_job(
                 lambda:engine.expired_quarantine_history(home,engine.xdg_roots(home)),
@@ -567,15 +570,15 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
             run_ids=tuple(run_ids)
             def completed(ok, outcome):
                 if not ok:
-                    QtWidgets.QMessageBox.critical(self,tr('Historia'),str(outcome))
+                    messages.critical(self,tr('Historia'),str(outcome))
                     return
                 summary='\\n'.join(x['run_id']+' ('+x['status']+')' for x in outcome)
-                if QtWidgets.QMessageBox.question(self,tr('Usuń historię'),
+                if messages.question(self,tr('Usuń historię'),
                         summary+'\\n\\n'+tr('Zostaną usunięte tylko zakończone dzienniki.'),
                         QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No,
                         QtWidgets.QMessageBox.StandardButton.No) != QtWidgets.QMessageBox.StandardButton.Yes:
                     return
-                answer,ok=QtWidgets.QInputDialog.getText(self,tr('Potwierdzenie'),
+                answer,ok=inputs.getText(self,tr('Potwierdzenie'),
                                                          tr('Wpisz HISTORY:'))
                 if not ok or answer != 'HISTORY':
                     return
@@ -589,7 +592,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
                     if success:
                         self.statusBar().showMessage(tr('Usunięto zakończone manifesty.'))
                     else:
-                        QtWidgets.QMessageBox.critical(self,tr('Historia'),str(result))
+                        messages.critical(self,tr('Historia'),str(result))
                 self._quarantine_job(delete,after_delete,'Usuwanie historii…')
             self._quarantine_job(
                 lambda:[engine.cleanup_quarantine_history(
@@ -603,20 +606,20 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
                 run_id=entry.data(0,Role)
             explanation=(tf('Operacja: {run_id}',run_id=run_id)+'\n'+
                 tr('Zatwierdzisz stan plików widoczny TERAZ. Nie oznacza to, że zawartość jest identyczna jak w dniu przeniesienia. PURGE nadal wymaga osobnej zgody.'))
-            if QtWidgets.QMessageBox.question(self,tr('Zatwierdź aktualny stan'),explanation,
+            if messages.question(self,tr('Zatwierdź aktualny stan'),explanation,
                 QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No,
                 QtWidgets.QMessageBox.StandardButton.No) != QtWidgets.QMessageBox.StandardButton.Yes:return
-            token,ok=QtWidgets.QInputDialog.getText(self,tr('Zatwierdź aktualny stan'),tr('Wpisz ADOPT:'))
+            token,ok=inputs.getText(self,tr('Zatwierdź aktualny stan'),tr('Wpisz ADOPT:'))
             if not ok or token!='ADOPT':return
             def done(success,outcome):
                 if not success:
-                    QtWidgets.QMessageBox.warning(self,tr('Zatwierdź aktualny stan'),str(outcome))
+                    messages.warning(self,tr('Zatwierdź aktualny stan'),str(outcome))
                 else:
                     self.refresh_quarantine()
                     if resume_purge:
                         self._purge_runs([run_id])
                     else:
-                        QtWidgets.QMessageBox.information(self,tr('Zatwierdź aktualny stan'),
+                        messages.information(self,tr('Zatwierdź aktualny stan'),
                             tf('Zatwierdzono aktualny stan: {count} obiektów.',count=outcome['adopted'])+
                             '\n'+tr('Nie wykonano PURGE. Ponownie sprawdź dostęp i osobno potwierdź usunięcie.'))
             self._quarantine_job(
@@ -631,7 +634,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
                 run_id=current.data(0,Role)
             def finished(ok, report):
                 if not ok:
-                    QtWidgets.QMessageBox.warning(
+                    messages.warning(
                         self,tr('Diagnostyka dostępu'),str(report))
                     return
                 issues=report['issues']
@@ -645,7 +648,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
                     note=tr('Nie znaleziono problemów z odczytem. Sprawdź pozostałe komunikaty PURGE.')
                     if report['unsealed']:
                         note+='\n'+tr('Brak kompletnego spisu plików. Wymagane osobne zatwierdzenie aktualnej zawartości (ADOPT).')
-                    QtWidgets.QMessageBox.information(self,tr('Diagnostyka dostępu'),note)
+                    messages.information(self,tr('Diagnostyka dostępu'),note)
                     return
                 issue=issues[0]
                 message=(tf('Użytkownik: {user}',user=report['identity']['user'])+
@@ -655,7 +658,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
                          '\n'+issue['path']+
                          '\n'+tf('Uprawnienia: {mode}',mode=issue['mode']))
                 if not issue['repairable']:
-                    QtWidgets.QMessageBox.warning(
+                    messages.warning(
                         self,tr('Diagnostyka dostępu'),message+'\n'+
                         tr('Nie można automatycznie naprawić. Nie podnoszę uprawnień ani nie omijam kontroli PURGE.')+
                         '\n'+tr('Naprawa tego obiektu wymaga dodatkowej analizy. Zasady Polkit określa system; xdg-audit nie uruchamia kodu użytkownika jako root.'))
@@ -663,17 +666,17 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
                 message+='\n'+tf('Proponowana zmiana: {before} → {after}',
                                  before=issue['mode'],after=issue['suggested_mode'])
                 message+='\n'+tr('Zmienię tylko wskazane uprawnienia właściciela w kwarantannie. Bez sudo i bez usuwania plików.')
-                if QtWidgets.QMessageBox.question(self,tr('Napraw dostęp'),message,
+                if messages.question(self,tr('Napraw dostęp'),message,
                         QtWidgets.QMessageBox.StandardButton.Yes |
                         QtWidgets.QMessageBox.StandardButton.No,
                         QtWidgets.QMessageBox.StandardButton.No) != QtWidgets.QMessageBox.StandardButton.Yes:
                     return
-                token,accepted=QtWidgets.QInputDialog.getText(
+                token,accepted=inputs.getText(
                     self,tr('Napraw dostęp'),tr('Wpisz ACCESS:'))
                 if not accepted or token!='ACCESS':return
                 def after_repair(success,outcome):
                     if not success:
-                        QtWidgets.QMessageBox.warning(
+                        messages.warning(
                             self,tr('Napraw dostęp'),str(outcome))
                         return
                     result=(tf('Zmieniono uprawnienia: {before} → {after}',
@@ -684,7 +687,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
                     if resume_purge:
                         self.access_diagnostics_dialog(run_id, resume_purge=True, repaired=True)
                     else:
-                        QtWidgets.QMessageBox.information(self,tr('Napraw dostęp'),result)
+                        messages.information(self,tr('Napraw dostęp'),result)
                 self._quarantine_job(
                     lambda:engine.repair_quarantine_access(
                         home,engine.xdg_roots(home),run_id,issue['relative']),
@@ -699,7 +702,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
             if entry is None:
                 return
             if entry.text(1) in ("PURGED","RESTORED","COMPLETED"):
-                QtWidgets.QMessageBox.information(self,tr('Historia'),
+                messages.information(self,tr('Historia'),
                     tr('Ta operacja jest zakończona. Użyj opcji Usuń historię.'))
                 return
             self._purge_runs([entry.data(0,Role)])
@@ -707,11 +710,11 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
         def purge_expired_dialog(self):
             def completed(ok, outcome):
                 if not ok:
-                    QtWidgets.QMessageBox.warning(self,tr('Kwarantanna'),str(outcome))
+                    messages.warning(self,tr('Kwarantanna'),str(outcome))
                 elif outcome:
                     self._purge_runs(outcome)
                 else:
-                    QtWidgets.QMessageBox.information(self,tr('Kwarantanna'),
+                    messages.information(self,tr('Kwarantanna'),
                         tr('Nie znaleziono wygasłych kwarantann.'))
             self._quarantine_job(
                 lambda:engine.expired_quarantine_runs(home,engine.xdg_roots(home)),
@@ -721,19 +724,19 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
             run_ids=tuple(run_ids)
             def completed(ok, outcome):
                 if not ok:
-                    QtWidgets.QMessageBox.critical(self,tr('Zablokowano PURGE'),str(outcome))
+                    messages.critical(self,tr('Zablokowano PURGE'),str(outcome))
                     if len(run_ids)==1 and engine.quarantine_access_recoverable_error(outcome):
                         self.access_diagnostics_dialog(run_ids[0], resume_purge=True)
                     return
                 description='\\n'.join(
                     str(plan['run_id'])+': '+str(plan['objects'])+' entries / '+str(plan['bytes'])+' B'
                     for plan in outcome)
-                if QtWidgets.QMessageBox.question(self,tr('Trwałe usuwanie'),
+                if messages.question(self,tr('Trwałe usuwanie'),
                         description+'\\n\\n'+tr('Tej operacji nie da się cofnąć. Kontynuować?'),
                         QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No,
                         QtWidgets.QMessageBox.StandardButton.No) != QtWidgets.QMessageBox.StandardButton.Yes:
                     return
-                answer, ok=QtWidgets.QInputDialog.getText(self,tr('Potwierdzenie PURGE'),tr('Wpisz PURGE:'))
+                answer, ok=inputs.getText(self,tr('Potwierdzenie PURGE'),tr('Wpisz PURGE:'))
                 if not ok or answer != 'PURGE':
                     return
                 def delete():
@@ -746,10 +749,10 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
                 def after_delete(success, result):
                     self.refresh_quarantine()
                     if success:
-                        QtWidgets.QMessageBox.information(self,tr('Kwarantanna'),
+                        messages.information(self,tr('Kwarantanna'),
                             tr('Usunięto obiektów: ')+str(result))
                     else:
-                        QtWidgets.QMessageBox.critical(self,tr('Zablokowano PURGE'),str(result))
+                        messages.critical(self,tr('Zablokowano PURGE'),str(result))
                 self._quarantine_job(delete,after_delete,'Trwałe usuwanie z kwarantanny…')
             self._quarantine_job(
                 lambda:[engine.purge_quarantine_run(
@@ -767,14 +770,14 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
                 differences = engine.compare_report(self.items, Path(path), list(engine.SCOPES))
                 content=summary(differences, _language)
             except (OSError, SystemExit, ValueError) as exc:
-                QtWidgets.QMessageBox.warning(self, tr('Błąd porównania'), str(exc));return
+                messages.warning(self, tr('Błąd porównania'), str(exc));return
             dialog=QtWidgets.QDialog(self);dialog.setWindowTitle(tr('Porównanie raportów'))
-            dialog.resize(750,500)
             box=QtWidgets.QVBoxLayout(dialog)
             view=QtWidgets.QPlainTextEdit(content);view.setReadOnly(True)
             box.addWidget(view)
             close=QtWidgets.QPushButton('Close' if _language=='en' else 'Zamknij')
             close.clicked.connect(dialog.accept);box.addWidget(close)
+            fit_qt_dialog(dialog, QtWidgets, QtCore, tr)
             dialog.exec()
 
         def export_json(self):
@@ -790,18 +793,18 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
                               file, indent=2, ensure_ascii=False)
                 self.statusBar().showMessage(tf('Zapisano: {path}',path=file_name))
             except OSError as exc:
-                QtWidgets.QMessageBox.warning(self, tr('Błąd zapisu'),
+                messages.warning(self, tr('Błąd zapisu'),
                      f'{exc}\n'+tr('Istniejące pliki nie są nadpisywane.'))
 
         def restore_dialog(self):
             runs = [r for r in engine.quarantine_runs(home, engine.xdg_roots(home))
                     if r['status'] not in ('PURGED','RESTORED','COMPLETED')]
             if not runs:
-                QtWidgets.QMessageBox.information(self, tr('Kwarantanna'), tr('Nie znaleziono operacji.'))
+                messages.information(self, tr('Kwarantanna'), tr('Nie znaleziono operacji.'))
                 return
             chosen_row = self.qtree.currentItem() if self.content_stack.currentIndex() == 1 else None
             if chosen_row and chosen_row.text(1) in ('PURGED','RESTORED','COMPLETED'):
-                QtWidgets.QMessageBox.information(self,tr('Historia'),
+                messages.information(self,tr('Historia'),
                     tr('Ta operacja jest zakończona. Użyj opcji Usuń historię.'))
                 return
             labels = [x['run_id']+'  ('+tf('{count} przeniesionych / {total} zapisanych',count=x['moved'],total=len(x['items']))+')' for x in runs]
@@ -809,29 +812,29 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
                 label=next((key for key,run in zip(labels,runs) if run['run_id']==chosen_row.data(0,Role)),labels[0])
                 ok=True
             else:
-                label,ok=QtWidgets.QInputDialog.getItem(self,tr('Kwarantanna'),
+                label,ok=inputs.getItem(self,tr('Kwarantanna'),
                     tr('Wybierz operację do przywrócenia:'),labels,0,False)
             if not ok:
                 return
             selected = runs[labels.index(label)]
             details = '\n'.join(f"{x.get('move_status', '?')}: {x.get('source', '?')}" for x in selected['items'][:22])
-            if QtWidgets.QMessageBox.question(self, tr('Plan przywracania'),
+            if messages.question(self, tr('Plan przywracania'),
                      tf('Operacja {run_id}',run_id=selected['run_id'])+'\n\n'+details+'\n\n'+tr('Istniejące pliki NIE zostaną nadpisane. Kontynuować?'),
                      QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No,
                      QtWidgets.QMessageBox.StandardButton.No) != QtWidgets.QMessageBox.StandardButton.Yes:
                 return
-            answer, confirmed = QtWidgets.QInputDialog.getText(self, tr('Potwierdzenie'), tr('Wpisz RESTORE:'))
+            answer, confirmed = inputs.getText(self, tr('Potwierdzenie'), tr('Wpisz RESTORE:'))
             if not confirmed or answer != 'RESTORE':
                 return
             output = []
             try:
                 result = engine.restore_quarantine_run(home, engine.xdg_roots(home),
                            selected['run_id'], emit=output.append)
-                QtWidgets.QMessageBox.information(self, tr('Przywracanie'),
+                messages.information(self, tr('Przywracanie'),
                    tf('Przywrócono: {count}',count=result['restored'])+'\n'+tf('Pominięto: {count}',count=result['skipped']))
                 self.scan_async()
             except (ValueError, OSError, KeyError) as exc:
-                QtWidgets.QMessageBox.critical(self, tr('Błąd przywracania'), str(exc))
+                messages.critical(self, tr('Błąd przywracania'), str(exc))
 
         def open_settings(self):
             from xdg_prefs import (defaults, load, save, validate, parse_alias_lines,
@@ -839,7 +842,6 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
             current, warning = load(home, engine.xdg_roots(home))
             dialog = QtWidgets.QDialog(self)
             dialog.setWindowTitle(tr('Ustawienia xdg-audit'))
-            dialog.resize(600, 540)
             layout = QtWidgets.QVBoxLayout(dialog)
             layout.addWidget(QtWidgets.QLabel(tr('Zakres początkowy')))
             scope = QtWidgets.QComboBox()
@@ -901,6 +903,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
                 else:
                     self.statusBar().showMessage(tr('Ustawienia zapisane. Wyniki audytu zachowane.'))
             buttons.accepted.connect(commit)
+            fit_qt_dialog(dialog, QtWidgets, QtCore, tr)
             dialog.exec()
 
         def apply_language(self, language: str):
@@ -1034,9 +1037,18 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
             source = self.proxy_model.mapToSource(index)
             return self.audit_model.rows[source.row()] if source.isValid() else None
 
+        def _update_optional_tabs(self):
+            visible = visible_optional_scopes(self.items, self.stats)
+            current = self.scope_tabs.currentIndex()
+            if current < len(self.scope_values) and self.scope_values[current] in {'flatpak', 'snap'} - visible:
+                self.scope_tabs.setCurrentIndex(0)
+            for scope in ('flatpak', 'snap'):
+                self.scope_tabs.setTabVisible(self.scope_values.index(scope), scope in visible)
+
         def scan_done(self, items, roots, stats):
             self.scan_complete=True
             self.items, self.roots, self.stats = items, roots, stats
+            self._update_optional_tabs()
             self.hide_inspector()
             self.refresh_table()
             self.refresh_quarantine()
@@ -1045,7 +1057,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
         def scan_error(self, message):
             self.scan_complete=False
             self.statusBar().showMessage(tr('Błąd skanowania'))
-            QtWidgets.QMessageBox.critical(self, tr('Błąd skanowania'), message)
+            messages.critical(self, tr('Błąd skanowania'), message)
 
         def display_items(self):
             query = self.search_box.text().strip().casefold()
@@ -1123,7 +1135,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
         def open_quarantine(self):
             root = engine.quarantine_dir(home, engine.xdg_roots(home))
             if not root.is_dir():
-                QtWidgets.QMessageBox.information(self, tr('Kwarantanna'), tr('Brak operacji kwarantanny.'))
+                messages.information(self, tr('Kwarantanna'), tr('Brak operacji kwarantanny.'))
                 return
             QtGui.QDesktopServices.openUrl(QtCore.QUrl.fromLocalFile(str(root)))
 
@@ -1135,7 +1147,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
             chosen = [it for it in selected_items if (it.state == "CANDIDATE" or
                       (self.allow_uncertain_box.isChecked() and it.state in {"REVIEW", "UNKNOWN"})) and not it.protected]
             if not chosen:
-                QtWidgets.QMessageBox.information(self, tr('Brak wyboru'), tr('Nie zaznaczono pozycji dostępnych do kwarantanny.'))
+                messages.information(self, tr('Brak wyboru'), tr('Nie zaznaczono pozycji dostępnych do kwarantanny.'))
                 return
             uncertain = [it for it in chosen if it.state in {"REVIEW", "UNKNOWN"}]
             details = "\n".join(f"{it.state:10} {engine.human(it.bytes):>9}  {it.path}" for it in chosen[:30])
@@ -1143,17 +1155,17 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
                 details += '\n'+tf('... i {count} kolejnych',count=len(chosen)-30)
             total = engine.human(sum(it.bytes for it in chosen))
             message = tf('Przenieść {count} ({size}) do kwarantanny?',count=entries_count(len(chosen),_language),size=total)+'\n'+tr('Żadne pliki nie zostaną trwale usunięte.')+'\n\n'+details
-            if QtWidgets.QMessageBox.question(self, tr('Plan kwarantanny'), message,
+            if messages.question(self, tr('Plan kwarantanny'), message,
                    QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No,
                    QtWidgets.QMessageBox.StandardButton.No) != QtWidgets.QMessageBox.StandardButton.Yes:
                 return
             if uncertain:
-                answer, ok = QtWidgets.QInputDialog.getText(self, tr('Niepewne pozycje'),
+                answer, ok = inputs.getText(self, tr('Niepewne pozycje'),
                     tf('Wybierasz {count} REVIEW/UNKNOWN.',count=len(uncertain))+'\n'+
                     tr('Nie ustalono, czy są niepotrzebne. Wpisz UNCERTAIN:'))
                 if not ok or answer != "UNCERTAIN":
                     return
-            answer, ok = QtWidgets.QInputDialog.getText(self, tr('Ostateczne potwierdzenie'),
+            answer, ok = inputs.getText(self, tr('Ostateczne potwierdzenie'),
                       tr('Zamknij powiązane aplikacje. Aby zatwierdzić przeniesienie wpisz MOVE:'))
             if not ok or answer != "MOVE":
                 return
@@ -1164,12 +1176,12 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
                 text = "\n".join(output[-12:])
                 message=tf('Run ID: {run_id}',run_id=result['run_id'])+'\n'+tf('Przeniesiono {moved}/{total}.',moved=len(result['moved']),total=len(chosen))
                 if any('purge inventory unavailable' in line for line in output):
-                    QtWidgets.QMessageBox.warning(self,tr('Kwarantanna'),message+'\n\n'+
+                    messages.warning(self,tr('Kwarantanna'),message+'\n\n'+
                         tr('Pliki przeniesiono, ale nie można było sprawdzić całej zawartości. Przed PURGE użyj „Sprawdź dostęp…”, następnie osobno „Zatwierdź stan…” (ADOPT).'))
                 else:
-                    QtWidgets.QMessageBox.information(self,tr('Kwarantanna'),message)
+                    messages.information(self,tr('Kwarantanna'),message)
             except Exception as exc:
-                QtWidgets.QMessageBox.critical(self, tr('Błąd'), tf('Nie udało się przeprowadzić operacji:\n{error}',error=exc))
+                messages.critical(self, tr('Błąd'), tf('Nie udało się przeprowadzić operacji:\n{error}',error=exc))
             self.scan_async()
 
         def apply_system_theme(self, force=False):
@@ -1236,7 +1248,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
 
         def closeEvent(self, event):
             if self.thread is not None and self.thread.isRunning():
-                QtWidgets.QMessageBox.information(self, tr('Skanowanie'), tr('Skanowanie jeszcze trwa. Zamknij okno po zakończeniu.'))
+                messages.information(self, tr('Skanowanie'), tr('Skanowanie jeszcze trwa. Zamknij okno po zakończeniu.'))
                 event.ignore()
                 return
             event.accept()

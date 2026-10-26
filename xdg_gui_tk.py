@@ -15,6 +15,8 @@ from typing import Any
 from xdg_theme import detect_appearance
 from xdg_inspector import details_text, open_item_location
 from xdg_gui_jobs import run_gui_job
+from xdg_gui_layout import visible_optional_scopes
+from xdg_gui_dialogs import tk_dialog_helpers, new_tk_dialog, fit_tk_dialog
 
 SCOPE_LABELS = [('Wszystko', 'all'), ('Konfiguracja', 'config'),
                 ('Dane aplikacji', 'data'), ('Stan', 'state'),
@@ -40,9 +42,12 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
     except tk.TclError as exc:
         raise RuntimeError(f'Tk nie może połączyć się z ekranem X11/XWayland: {exc}') from exc
 
+    messagebox, simpledialog = tk_dialog_helpers(tk, ttk, root, tr)
+
     class Window:
         def __init__(self):
             self.root = root
+            root._xdg_controller = self
             root.title('xdg-audit · Audit' if _language=='en' else 'xdg-audit · Audyt konfiguracji')
             self.prefs = dict(getattr(args, 'saved_prefs', {}))
             try:
@@ -59,6 +64,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
             self.stats = {}
             self.checked: set[str] = set()
             self.views = {}
+            self.scope_frames = {}
             self.active_scope = args.scope
             self.busy = False
             self._quarantine_job_busy=False
@@ -218,6 +224,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
             self.tabs.pack(fill='both',expand=True)
             for scope_label,scope in SCOPE_LABELS:
                 tab=ttk.Frame(self.tabs,padding=(0,7))
+                self.scope_frames[scope] = tab
                 self.tabs.add(tab,text=tr(scope_label))
                 table_frame=ttk.Frame(tab)
                 table_frame.pack(fill='both',expand=True)
@@ -342,11 +349,22 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
             if str(self.inspector) not in self.workspace.panes():
                 self.workspace.add(self.inspector,weight=1)
 
+        def _update_optional_tabs(self):
+            visible = visible_optional_scopes(self.items, self.stats)
+            current = self.tabs.select()
+            if any(current == str(self.scope_frames[scope]) for scope in {'flatpak', 'snap'} - visible):
+                self.active_scope = 'all'
+                self.tabs.select(self.scope_frames['all'])
+            for scope in ('flatpak', 'snap'):
+                self.tabs.tab(self.scope_frames[scope], state='normal' if scope in visible else 'hidden')
+
         def _on_tab_changed(self,_=None):
             self.hide_inspector()
-            selected = self.tabs.index(self.tabs.select())
-            if selected < len(SCOPE_LABELS):
-                self.active_scope = SCOPE_LABELS[selected][1]
+            selected = self.tabs.select()
+            scope = next((value for value, frame in self.scope_frames.items()
+                          if str(frame) == selected), None)
+            if scope is not None:
+                self.active_scope = scope
                 self._refresh_tables()
             else:
                 self.move_button.state(['disabled'])
@@ -396,12 +414,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
         def open_settings(self):
             from xdg_prefs import load, save, validate, parse_alias_lines, format_aliases, SCOPES
             current, warning = load(home,engine.xdg_roots(home))
-            dialog=tk.Toplevel(root)
-            dialog.title(tr('Ustawienia xdg-audit'))
-            dialog.geometry('600x550')
-            dialog.transient(root)
-            dialog.grab_set()
-            frame=ttk.Frame(dialog,padding=18);frame.pack(fill='both',expand=True)
+            dialog, frame, actions = new_tk_dialog(tk, ttk, root, tr('Ustawienia xdg-audit'))
             ttk.Label(frame,text=tr('Zakres przy starcie')).pack(anchor='w')
             scope=tk.StringVar(value=current['startup_scope'])
             ttk.Combobox(frame,textvariable=scope,values=SCOPES,state='readonly').pack(fill='x',pady=(3,12))
@@ -420,7 +433,6 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
             alias.pack(fill='x');alias.insert('1.0',format_aliases(current['aliases']))
             feedback=tk.StringVar(value=warning or tr('Zapis dopiero po kliknięciu Zapisz.'))
             ttk.Label(frame,textvariable=feedback,wraplength=530).pack(fill='x',pady=(10,6))
-            actions=ttk.Frame(frame);actions.pack(fill='x')
             ttk.Button(actions,text=tr('Anuluj'),command=dialog.destroy).pack(side='right')
             def commit():
                 try:
@@ -430,7 +442,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                          'aliases':parse_alias_lines(alias.get('1.0','end'))})
                     save(home,new,engine.xdg_roots(home))
                 except (OSError,ValueError) as exc:
-                    feedback.set(tf('Błąd: {error}',error=exc));return
+                    feedback.set(tf('Błąd: {error}',error=exc));fit_tk_dialog(dialog);return
                 from xdg_prefs import scan_inputs_changed
                 needs_scan=scan_inputs_changed(current,new)
                 self.prefs=new
@@ -454,6 +466,9 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                     self.status.set('Settings saved. Scan results preserved.' if new['language']=='en'
                                     else 'Ustawienia zapisane. Wyniki audytu zachowane.')
             ttk.Button(actions,text=tr('Zapisz'),command=commit).pack(side='right',padx=(0,8))
+            fit_tk_dialog(dialog)
+            dialog.wait_visibility()
+            dialog.grab_set()
 
         def apply_language(self, language: str):
             """Apply translation to existing Tk widgets without rebuilding scans."""
@@ -563,6 +578,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                     if kind=='scan':
                         self.scan_complete=True
                         self.items,self.roots,self.stats = result
+                        self._update_optional_tabs()
                         self.checked.clear()
                         self.hide_inspector()
                         self._refresh_tables()
@@ -666,12 +682,12 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                 content=summary(diffs,_language)
             except (OSError,SystemExit,ValueError) as exc:
                 messagebox.showerror(tr('Błąd porównania'),str(exc),parent=root);return
-            dialog=tk.Toplevel(root);dialog.title(tr('Porównanie raportów'))
-            dialog.geometry('720x490')
-            textbox=tk.Text(dialog,wrap='word')
-            textbox.pack(fill='both',expand=True,padx=12,pady=12)
+            dialog, body, actions = new_tk_dialog(tk, ttk, root, tr('Porównanie raportów'))
+            textbox=tk.Text(body,wrap='word',height=min(24,max(2,len(content.splitlines()))))
+            textbox.pack(fill='both',expand=True)
             textbox.insert('1.0',content);textbox.configure(state='disabled')
-            ttk.Button(dialog,text='Close' if _language=='en' else 'Zamknij',command=dialog.destroy).pack(pady=(0,10))
+            ttk.Button(actions,text=tr('Zamknij'),command=dialog.destroy).pack(side='right')
+            fit_tk_dialog(dialog)
 
         def export(self):
             from xdg_history import suggested_export_path

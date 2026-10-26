@@ -13,6 +13,8 @@ from typing import Any
 from xdg_inspector import details_text, click_is_inside_control, open_item_location
 from xdg_theme import detect_appearance
 from xdg_gui_jobs import run_gui_job
+from xdg_gui_layout import visible_optional_scopes
+from xdg_gui_dialogs import configure_gtk_dialog
 
 def align_header_edges(header: Any, left: Any, right: Any, gtk: Any) -> None:
     """Anchor desktop/session information at the far right in GTK3 and GTK4.
@@ -146,6 +148,14 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
         else:
             for w in box.get_children(): box.remove(w)
 
+    def wrap_label(widget):
+        if GTK4:
+            widget.set_wrap(True)
+            widget.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
+        else:
+            widget.set_line_wrap(True)
+            widget.set_line_wrap_mode(Pango.WrapMode.WORD_CHAR)
+
     def label(text, xalign=0):
         obj=Gtk.Label(label=text,xalign=xalign)
         obj.set_selectable(False)
@@ -155,6 +165,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
         def __init__(self,app):
             self.app=app
             self.win=Gtk.ApplicationWindow(application=app)
+            self.win._xdg_controller = self
             self.win.set_title('xdg-audit · Audit' if _language=='en' else 'xdg-audit · Audyt konfiguracji')
             self.win.set_default_size(1320,820)
             self.prefs = dict(getattr(args, 'saved_prefs', {}))
@@ -301,6 +312,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
             self.stack.set_hexpand(True);self.stack.set_vexpand(True)
             self.stack.set_transition_type(Gtk.StackTransitionType.SLIDE_LEFT_RIGHT)
             switcher=Gtk.StackSwitcher(stack=self.stack)
+            self.scope_switcher = switcher
             append(outer,switcher)
 
             self.results_or_loading = Gtk.Stack()
@@ -327,7 +339,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
             append(self.loading_card, loading_title)
             loading_note = label(tr('Trwa zbieranie i analizowanie wpisów. Tabela pojawi się po zakończeniu skanowania.'), 0.5)
             self.loading_note = loading_note
-            loading_note.set_wrap(True)
+            wrap_label(loading_note)
             loading_note.set_justify(Gtk.Justification.CENTER)
             loading_note.set_max_width_chars(42)
             append(self.loading_card, loading_note)
@@ -390,7 +402,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
             detailed_scroll=Gtk.ScrolledWindow()
             detailed_scroll.set_hexpand(True);detailed_scroll.set_vexpand(True)
             self.details=label('')
-            self.details.set_selectable(True);self.details.set_wrap(True)
+            self.details.set_selectable(True);wrap_label(self.details)
             self.details.set_valign(Gtk.Align.START)
             self.details.set_max_width_chars(38)
             self.details.set_margin_top(10);self.details.set_margin_bottom(10)
@@ -398,7 +410,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
             set_child(detailed_scroll,self.details)
             append(inspector,detailed_scroll,True)
             note=label(tr('CANDIDATE to sugestia, nie dowód. REVIEW i UNKNOWN wymagają dodatkowej zgody.'))
-            note.set_wrap(True);note.set_max_width_chars(38)
+            wrap_label(note);note.set_max_width_chars(38)
             self.inspector_note=note
             append(inspector,note)
             self.open_location_button = Gtk.Button(label=tr('Otwórz lokalizację'))
@@ -496,7 +508,6 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
             """Explicit-save preferences; cancelling does not modify the disk."""
             from xdg_prefs import save as save_prefs, parse_alias_lines, format_aliases, SCOPES as scopes
             dialog=Gtk.Window(title=tr('Ustawienia xdg-audit'), transient_for=self.win, modal=True)
-            dialog.set_default_size(590, 540)
             box=Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
             for side in ('top','bottom','start','end'):
                 getattr(box, 'set_margin_'+side)(18)
@@ -534,7 +545,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
             asc=Gtk.ScrolledWindow();asc.set_min_content_height(100)
             set_child(asc,alias_text);append(box,asc)
             error=label(tr('Zapisane ustawienia dotyczą tylko Twojego konta.'))
-            error.set_wrap(True);append(box,error)
+            wrap_label(error);append(box,error)
             buttons=Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL,spacing=8)
             append(box,buttons)
             cancel=Gtk.Button(label=tr('Anuluj'))
@@ -585,7 +596,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                     self.status.set_text('Settings saved. Scan results preserved.' if new['language']=='en'
                                          else 'Ustawienia zapisane. Wyniki audytu zachowane.')
             save.connect('clicked',on_save)
-            set_child(dialog,box)
+            configure_gtk_dialog(dialog,box,Gtk,Gdk,Pango)
             dialog.present() if GTK4 else dialog.show_all()
 
         def apply_language(self, language: str):
@@ -992,9 +1003,22 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
             self.move_button.set_sensitive(False)
             return False
 
+        def _update_optional_tabs(self):
+            visible = visible_optional_scopes(self.items, self.stats)
+            if self.stack.get_visible_child_name() in {'flatpak', 'snap'} - visible:
+                self.stack.set_visible_child_name('all')
+            for scope in ('flatpak', 'snap'):
+                page = self.stack.get_child_by_name(scope)
+                if GTK4:
+                    self.stack.get_page(page).set_visible(scope in visible)
+                else:
+                    page.set_no_show_all(scope not in visible)
+                page.set_visible(scope in visible)
+
         def finish(self,result):
             self.scan_complete=True
             self.items,self.roots,self.stats=result
+            self._update_optional_tabs()
             self.checked.clear()
             self.hide_inspector()
             self.busy=False
@@ -1027,7 +1051,6 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
         def prompt(self,title,description,need,callback):
             """Nonblocking, two-stage native confirmation dialog."""
             dialog=Gtk.Window(title=title,transient_for=self.win,modal=True)
-            dialog.set_default_size(580,250)
             outer=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=12)
             for side in ('top','bottom','start','end'):
                 getattr(outer,'set_margin_'+side)(16)
@@ -1035,7 +1058,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
             # This is informational text, not an editable/copyable field.
             # A selectable Gtk.Label grabs focus and looks like "select all"
             # when the transient modal first opens under some GTK themes.
-            txt.set_wrap(True)
+            wrap_label(txt)
             append(outer,txt)
             entry=Gtk.Entry();entry.set_placeholder_text(tf('Wpisz {token}', token=need))
             append(outer,entry)
@@ -1053,7 +1076,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                 callback()
             confirm.connect('clicked',accept)
             append(actions,confirm)
-            set_child(dialog,outer)
+            configure_gtk_dialog(dialog,outer,Gtk,Gdk,Pango)
             # Set GTK window-local focus before mapping the transient modal;
             # an immediate grab_focus() alone can be lost on Wayland/Xvfb.
             dialog.set_focus(entry)
@@ -1106,17 +1129,16 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                     self.status.set_text(tf('Błąd porównania: {error}',error=exc));return
                 result_window=Gtk.Window(title=tr('Porównanie raportów'),
                                         transient_for=self.win,modal=True)
-                result_window.set_default_size(720,480)
                 body=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=10)
                 body.set_margin_top(14);body.set_margin_bottom(14)
                 body.set_margin_start(14);body.set_margin_end(14)
                 scrolling=Gtk.ScrolledWindow();scrolling.set_vexpand(True)
-                text=label(message);text.set_selectable(True);text.set_wrap(True)
+                text=label(message);text.set_selectable(True);wrap_label(text)
                 set_child(scrolling,text);append(body,scrolling,True)
                 close=Gtk.Button(label='Close' if _language=='en' else 'Zamknij')
                 close.connect('clicked',lambda *_:result_window.destroy())
                 append(body,close)
-                set_child(result_window,body)
+                configure_gtk_dialog(result_window,body,Gtk,Gdk,Pango)
                 result_window.present() if GTK4 else result_window.show_all()
                 text.select_region(0,0)
                 close.grab_focus()
@@ -1141,20 +1163,19 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
 
         def quarantine_preview(self,run):
             dialog=Gtk.Window(title=tr('Zawartość kwarantanny'),transient_for=self.win,modal=True)
-            dialog.set_default_size(650,450)
             body=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=12)
             for side in ('top','bottom','start','end'):
                 getattr(body,'set_margin_'+side)(15)
             append(body,label(tf('Operacja: {run_id} · {count} przeniesionych',run_id=run['run_id'],count=run['moved'])))
             preview=Gtk.ScrolledWindow();preview.set_vexpand(True)
             text=label('\n'.join(str(i.get('source','?')) for i in run['items']) or tr('(pusty manifest)'))
-            text.set_wrap(True);text.set_selectable(True)
+            wrap_label(text);text.set_selectable(True)
             set_child(preview,text)
             append(body,preview,True)
             close=Gtk.Button(label=tr('Zamknij'))
             close.connect('clicked',lambda *_:dialog.destroy())
             append(body,close)
-            set_child(dialog,body)
+            configure_gtk_dialog(dialog,body,Gtk,Gdk,Pango)
             dialog.present() if GTK4 else dialog.show_all()
             text.select_region(0,0)
             close.grab_focus()
@@ -1212,7 +1233,6 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                 self.status.set_text(tf('Nie można zapisać retencji: {error}',error=exc))
                 return
             dialog=Gtk.Window(title=tr('Retencja'),transient_for=self.win,modal=True)
-            dialog.set_default_size(370,160)
             content=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=12)
             for side in ('top','bottom','start','end'):
                 getattr(content,'set_margin_'+side)(15)
@@ -1236,7 +1256,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                     self.status.set_text(tf('Nie można zapisać retencji: {error}',error=exc))
             button.connect('clicked',accept)
             append(actions,button)
-            set_child(dialog,content)
+            configure_gtk_dialog(dialog,content,Gtk,Gdk,Pango)
             dialog.present() if GTK4 else dialog.show_all()
 
         def _quarantine_job(self, operation, completed, activity):
@@ -1259,7 +1279,6 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                     return False
                 dialog=Gtk.Window(title=tr('Weryfikacja kwarantanny'),
                                   transient_for=self.win,modal=True)
-                dialog.set_default_size(390,120)
                 dialog.set_deletable(False)
                 pane=Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL,spacing=12)
                 for side in ('top','bottom','start','end'):
@@ -1268,7 +1287,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                 spinner.start()
                 append(pane,spinner)
                 append(pane,label(tr(activity)),True)
-                set_child(dialog,pane)
+                configure_gtk_dialog(dialog,pane,Gtk,Gdk,Pango)
                 self._quarantine_progress=dialog
                 dialog.present() if GTK4 else dialog.show_all()
                 return False
@@ -1292,17 +1311,16 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
         def _quarantine_notice(self, message):
             """Show a visible GTK notice instead of a hard-to-see footer update."""
             dialog=Gtk.Window(title=tr('Historia'),transient_for=self.win,modal=True)
-            dialog.set_default_size(450,155)
             pane=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=14)
             for side in ('top','bottom','start','end'):
                 getattr(pane,'set_margin_'+side)(16)
             note=label(message)
-            note.set_wrap(True)
+            wrap_label(note)
             append(pane,note)
             close=Gtk.Button(label=tr('Zamknij'))
             close.connect('clicked',lambda *_:dialog.destroy())
             append(pane,close)
-            set_child(dialog,pane)
+            configure_gtk_dialog(dialog,pane,Gtk,Gdk,Pango)
             dialog.present() if GTK4 else dialog.show_all()
             close.grab_focus()
 
