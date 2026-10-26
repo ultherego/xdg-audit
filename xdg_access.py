@@ -135,6 +135,14 @@ def diagnose_access(home: Path, roots: dict[str, Path], run_id: str) -> dict:
             problem("FOREIGN_OWNER_OR_DEVICE", path, info)
             return
         if kind == stat.S_IFDIR:
+            mode = stat.S_IMODE(info.st_mode)
+            if not mode & stat.S_IXUSR:
+                # An owner-readable directory can be listed but its children
+                # cannot be traversed without the owner's search bit.
+                missing = stat.S_IXUSR | (stat.S_IRUSR if not mode & stat.S_IRUSR else 0)
+                problem("DIRECTORY_NOT_TRAVERSABLE", path, info,
+                        repairable=True, add_bits=missing)
+                return
             try:
                 fd = _directory(parentfd, name)
             except PermissionError:
@@ -204,7 +212,7 @@ def diagnose_access(home: Path, roots: dict[str, Path], run_id: str) -> dict:
 
 def repair_owner_directory(home: Path, roots: dict[str, Path], run_id: str,
                            relative: str) -> dict:
-    """Owner-only, exact-path chmod u+r after fresh trusted-journal diagnosis.
+    """Owner-only, exact-path permission repair after fresh journal diagnosis.
 
     Callers must obtain a distinct user confirmation before invoking this.
     This never invokes sudo or follows a symlink, and never changes ownership.
@@ -215,7 +223,7 @@ def repair_owner_directory(home: Path, roots: dict[str, Path], run_id: str,
     match = next((item for item in report["issues"]
                   if item["relative"] == relative and item["repairable"]
                   and item["code"] in ("DIRECTORY_UNREADABLE", "FILE_UNREADABLE",
-                                       "DIRECTORY_NOT_WRITABLE")), None)
+                                       "DIRECTORY_NOT_WRITABLE", "DIRECTORY_NOT_TRAVERSABLE")), None)
     if match is None:
         raise ValueError("Target is no longer eligible for owner-only repair")
     base = roots.get("data", home / ".local/share") / "xdg-audit-quarantine"
@@ -228,12 +236,15 @@ def repair_owner_directory(home: Path, roots: dict[str, Path], run_id: str,
         if (stat.S_IFMT(before.st_mode) != expected_kind or before.st_uid != os.getuid()
                 or (expected_kind == stat.S_IFREG and before.st_nlink != 1)):
             raise ValueError("Target is not a safely repairable user-owned object")
-        missing_bit = (stat.S_IWUSR if match["code"] == "DIRECTORY_NOT_WRITABLE"
-                       else stat.S_IRUSR)
-        if (stat.S_IMODE(before.st_mode) != int(match["mode"], 8) or
-                stat.S_IMODE(before.st_mode) & missing_bit):
+        original_mode = int(match["mode"], 8)
+        suggested_mode = int(match["suggested_mode"], 8)
+        missing_bits = suggested_mode & ~original_mode
+        allowed = stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR
+        if (not missing_bits or missing_bits & ~allowed or
+                stat.S_IMODE(before.st_mode) != original_mode):
             raise ValueError("Target permissions changed after diagnosis")
-        os.chmod(target.name, stat.S_IMODE(before.st_mode) | missing_bit,
+        # Never touch group/other bits, setuid/setgid, sticky bit or ownership.
+        os.chmod(target.name, original_mode | missing_bits,
                  dir_fd=parentfd, follow_symlinks=False)
         after = os.stat(target.name, dir_fd=parentfd, follow_symlinks=False)
         if _identity(before) != _identity(after):
