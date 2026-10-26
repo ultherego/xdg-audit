@@ -482,6 +482,60 @@ def purge_run(home: Path, roots: dict[str, Path], run_id: str, mounts_checker,
         os.close(basefd)
 
 
+def recover_manifest_temps(home: Path, roots: dict[str, Path], run_id: str,
+                           *, dry_run: bool = True) -> dict:
+    """Recover crash-leftover journal temp files after strict run preflight.
+
+    Never touch the journal, any scope subtree, or arbitrary untracked names.
+    No recursive removal. The caller must obtain explicit user confirmation.
+    """
+    if not RUN_ID.fullmatch(run_id):
+        raise ValueError("Invalid quarantine run ID")
+    base = roots.get("data", home / ".local/share") / "xdg-audit-quarantine"
+    if home not in base.parents or base.is_symlink():
+        raise ValueError("Unsafe quarantine path")
+    basefd = _open_path(base)
+    try:
+        runfd = _directory(basefd, run_id)
+        try:
+            info = os.fstat(runfd)
+            _check_owner(info, info.st_dev)
+            payload = _load_manifest(runfd, info.st_dev)
+            if payload.get("created") != run_id or payload.get("format") != "intent-journal-v3":
+                raise ValueError("Unsupported journal cannot be recovered")
+            rows = payload.get("items")
+            if not isinstance(rows, list) or not rows:
+                raise ValueError("Invalid journal")
+            scopes = set()
+            for row in rows:
+                if not isinstance(row, dict) or row.get("scope") not in roots:
+                    raise ValueError("Invalid journal scope")
+                scopes.add(row["scope"])
+            names = set(os.listdir(runfd))
+            temps = sorted(name for name in names if
+                           re.fullmatch(r"\\.manifest-[a-zA-Z0-9_-]{6,40}\\.tmp", name))
+            if names - set(temps) - {"manifest.json"} - scopes:
+                raise ValueError("Unexpected files outside scope directories")
+            for name in temps:
+                entry = os.stat(name, dir_fd=runfd, follow_symlinks=False)
+                _check_owner(entry, info.st_dev)
+                if not stat.S_ISREG(entry.st_mode) or entry.st_nlink != 1 or entry.st_mode & 0o077:
+                    raise ValueError("Unsafe journal temporary file")
+            if not dry_run:
+                for name in temps:
+                    entry = os.stat(name, dir_fd=runfd, follow_symlinks=False)
+                    _check_owner(entry, info.st_dev)
+                    if not stat.S_ISREG(entry.st_mode) or entry.st_nlink != 1 or entry.st_mode & 0o077:
+                        raise ValueError("Journal temp substituted")
+                    os.unlink(name, dir_fd=runfd)
+                os.fsync(runfd)
+            return {"run_id": run_id, "temporary_files": len(temps), "dry_run": dry_run}
+        finally:
+            os.close(runfd)
+    finally:
+        os.close(basefd)
+
+
 def expired_run_ids(runs: list[dict], days: int, now: dt.datetime | None = None) -> list[str]:
     if type(days) is not int or not 1 <= days <= 3650:
         raise ValueError("Retention days must be between 1 and 3650")
