@@ -113,8 +113,8 @@ def test_create(base: Path, uid: int, owner: int = 0) -> dict:
             try:
                 os.mkdir(TEST_NAME, 0o700, dir_fd=userfd)
             except FileExistsError:
-                with _verify_demo(userfd, owner) as_unused:
-                    pass
+                fd = _verify_demo(userfd, owner)
+                os.close(fd)
                 return {"status": "already_exists", "fixture": str(base / str(uid) / TEST_NAME),
                         "uid": uid, "deleted": False}
             demo = _open_demo(userfd, owner)
