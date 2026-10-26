@@ -248,6 +248,8 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
             ttk.Button(qbuttons,text=tr('Odśwież listę'),command=self._refresh_quarantine).pack(side='left')
             ttk.Button(qbuttons,text=tr('Pokaż zawartość'),command=self.quarantine_details).pack(side='left',padx=8)
             ttk.Button(qbuttons,text=tr('Przywróć operację…'),command=self.restore).pack(side='right')
+            ttk.Button(qbuttons,text=tr('Usuń trwale…'),command=self.purge_quarantine).pack(side='right',padx=6)
+            ttk.Button(qbuttons,text=tr('Usuń wygasłe…'),command=self.purge_expired).pack(side='right',padx=6)
             idx=next((i for i,(_,scope) in enumerate(SCOPE_LABELS) if scope==args.scope),0)
             self.tabs.select(idx)
             self.tabs.bind('<<NotebookTabChanged>>',self._on_tab_changed)
@@ -681,6 +683,49 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                 messagebox.showinfo(tr('Przywracanie'),tf('Przywrócono: {count}',count=result['restored'])+'\n'+tf('Pominięto: {count}',count=result['skipped']),parent=root)
             except (ValueError,OSError,KeyError) as exc:messagebox.showerror(tr('Błąd'),str(exc),parent=root)
             self.start_scan()
+
+        def purge_expired(self):
+            try:
+                ids=engine.expired_quarantine_runs(home,engine.xdg_roots(home))
+            except (ValueError,OSError) as exc:
+                messagebox.showerror(tr('Błąd'),str(exc),parent=root)
+                return
+            if not ids:
+                messagebox.showinfo(tr('Kwarantanna'),tr('Nie ma wygasłych operacji.'),parent=root)
+                return
+            self._purge_runs(ids)
+
+        def purge_quarantine(self):
+            selected=self.qtree.selection()
+            if selected:
+                self._purge_runs([selected[0]])
+
+        def _purge_runs(self,run_ids):
+            plans=[]
+            try:
+                for run_id in run_ids:
+                    plans.append(engine.purge_quarantine_run(home,engine.xdg_roots(home),run_id))
+            except (ValueError,OSError) as exc:
+                messagebox.showerror(tr('Zablokowano PURGE'),str(exc),parent=root)
+                return
+            details='\\n'.join(str(p['run_id'])+': '+str(p['objects'])+' entries / '+str(p['bytes'])+' B'
+                              for p in plans)
+            if not messagebox.askyesno(tr('Trwałe usunięcie'),
+                    details+'\\n\\n'+tr('Ta operacja jest nieodwracalna. Kontynuować?'),
+                    parent=root):
+                return
+            if simpledialog.askstring(tr('Potwierdzenie'),tr('Wpisz PURGE:'),parent=root)!='PURGE':
+                return
+            try:
+                deleted=0
+                for plan in plans:
+                    deleted+=engine.purge_quarantine_run(home,engine.xdg_roots(home),
+                                            plan['run_id'],dry_run=False)['objects']
+                self._refresh_quarantine()
+                messagebox.showinfo(tr('Kwarantanna'),tr('Usunięto obiektów: ')+str(deleted),parent=root)
+            except (ValueError,OSError) as exc:
+                self._refresh_quarantine()
+                messagebox.showerror(tr('Zablokowano PURGE'),str(exc),parent=root)
 
         def close(self):
             if self.busy and not messagebox.askyesno(tr('Skanowanie'),tr('Skanowanie trwa. Zamknąć okno?'),parent=root):return
