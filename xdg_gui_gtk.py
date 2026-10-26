@@ -1364,7 +1364,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                     return
                 summary+=('\n'+tf('Proponowana zmiana: {before} → {after}',
                                    before=issue['mode'],after=issue['suggested_mode'])+
-                          '\n'+tr('Zmienię tylko prawo odczytu właściciela. Bez sudo i bez usuwania plików.'))
+                          '\n'+tr('Zmienię tylko wskazane uprawnienia właściciela w kwarantannie. Bez sudo i bez usuwania plików.'))
                 def approved():
                     def operation():
                         return engine.repair_quarantine_access(
