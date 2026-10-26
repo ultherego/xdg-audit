@@ -1170,6 +1170,9 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
             retention=Gtk.Button(label=tr('Ustaw retencję…'))
             retention.connect('clicked',lambda *_:self.configure_retention())
             append(tools_box,retention)
+            polkit=Gtk.Button(label=tr('Test Polkit…'))
+            polkit.connect('clicked',lambda *_:self.polkit_selftest())
+            append(tools_box,polkit)
             history=Gtk.Button(label=tr('Wyczyść całą zakończoną historię…'))
             history.connect('clicked',lambda *_:self.cleanup_all_history())
             append(tools_box,history)
@@ -1288,6 +1291,45 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                 return False
 
             run_gui_job(operation, finish, GLib.idle_add)
+
+        def polkit_selftest(self):
+            from xdg_polkit import status as polkit_status, run_test
+            info=polkit_status()
+            if not info['ready']:
+                self._quarantine_notice(
+                    tr('Test Polkit wymaga instalacji systemowego helpera. Instrukcja: packaging/polkit/README.md'))
+                return
+
+            def delete_fixture():
+                def completed(ok, result):
+                    if ok:
+                        self._quarantine_notice(
+                            tr('Test Polkit zakończony: usunięto wyłącznie odizolowany katalog testowy.')+
+                            '\n'+result['fixture'])
+                    else:
+                        self._quarantine_notice(tf('Błąd testu Polkit: {error}',error=result))
+                self._quarantine_job(
+                    lambda:run_test('test-delete',graphical=True),
+                    completed,'Uwierzytelnianie Polkit…')
+
+            def create_fixture():
+                def completed(ok, result):
+                    if not ok:
+                        self._quarantine_notice(tf('Błąd testu Polkit: {error}',error=result))
+                        return
+                    self.prompt(
+                        tr('Usuń katalog testowy Polkit'),
+                        tr('Polkit utworzył katalog testowy. Usunę tylko ten katalog, nigdy kwarantannę użytkownika.')+
+                        '\n'+result['fixture'],
+                        'DELETE TEST',delete_fixture)
+                self._quarantine_job(
+                    lambda:run_test('test-create',graphical=True),
+                    completed,'Uwierzytelnianie Polkit…')
+
+            self.prompt(
+                tr('Test Polkit'),
+                tr('Poproszę system Polkit o autoryzację i utworzę odizolowany katalog testowy, bez dotykania danych kwarantanny.'),
+                'TEST',create_fixture)
 
         def _quarantine_notice(self, message):
             """Show a visible GTK notice instead of a hard-to-see footer update."""

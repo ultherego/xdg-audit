@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC
+ "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1.0/policyconfig.dtd">
+<policyconfig>
+  <vendor>xdg-audit</vendor>
+  <vendor_url>https://github.com/ultherego/xdg-audit</vendor_url>
+  <action id="io.github.ultherego.xdg-audit.polkit-selftest">
+    <description>Run the isolated xdg-audit Polkit test</description>
+    <description xml:lang="pl">Uruchom odizolowany test Polkit dla xdg-audit</description>
+    <message>Administrator authentication is required to create or remove an isolated xdg-audit test directory.</message>
+    <message xml:lang="pl">Uwierzytelnienie administratora jest wymagane do utworzenia lub usunięcia odizolowanego katalogu testowego xdg-audit.</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/xdg-audit/xdg-audit-polkit-helper</annotate>
+  </action>
+</policyconfig>

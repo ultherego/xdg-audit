@@ -1284,6 +1284,12 @@ def main(argv=None):
     parser.add_argument("--home", type=Path, default=Path.home(), help="Override HOME (useful for testing)")
     parser.add_argument("--gui", action="store_true", help="Launch native GUI using available system toolkit (GTK/Qt/Tk)")
     parser.add_argument("--theme-info", action="store_true", help="Print detected desktop theme source (read-only)")
+    parser.add_argument("--polkit-test-status", action="store_true",
+                        help="Check installed system Polkit helper (read-only)")
+    parser.add_argument("--polkit-test-create", action="store_true",
+                        help="Create isolated root-owned Polkit test fixture after TEST confirmation")
+    parser.add_argument("--polkit-test-delete", action="store_true",
+                        help="Remove only the isolated Polkit fixture after DELETE TEST confirmation")
     parser.add_argument("--scope", choices=(*SCOPES, "all"), default="all", help="Scan one scope; default all")
     parser.add_argument("--all", action="store_true", help="Also show ACTIVE and PROTECTED entries")
     parser.add_argument("--quick", action="store_true", help="Skip disk usage calculation")
@@ -1343,6 +1349,7 @@ def main(argv=None):
                   args.purge_expired, args.diagnose_access, args.repair_access,
                   args.cleanup_history, args.cleanup_expired_history,
                   args.cleanup_all_history,
+                  args.polkit_test_status, args.polkit_test_create, args.polkit_test_delete,
                   args.adopt_quarantine, args.recover_journal, args.automatic_purge,
                   args.configure_retention is not None, args.enable_retention,
                   args.disable_retention)
@@ -1361,6 +1368,23 @@ def main(argv=None):
         parser.error("Lifecycle commands cannot be combined with GUI, scan or move")
     roots = xdg_roots(home)
     if lifecycle:
+        if args.polkit_test_status or args.polkit_test_create or args.polkit_test_delete:
+            from xdg_polkit import status as polkit_status, run_test
+            if args.polkit_test_status:
+                print(json.dumps(polkit_status(), indent=2, ensure_ascii=False))
+                return 0
+            if not sys.stdin.isatty():
+                raise SystemExit("ERROR: Polkit test requires an interactive terminal")
+            if args.polkit_test_create:
+                if input("Type TEST to request system Polkit authorization to CREATE a test-only directory: ").strip() != "TEST":
+                    raise SystemExit("ERROR: Polkit create cancelled")
+                result = run_test("test-create")
+            else:
+                if input("Type DELETE TEST to request Polkit authorization to delete ONLY its isolated test directory: ").strip() != "DELETE TEST":
+                    raise SystemExit("ERROR: Polkit delete cancelled")
+                result = run_test("test-delete")
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+            return 0
         from xdg_retention import load as load_retention, save as save_retention
         from xdg_quarantine_lifecycle import (inspect_run, purge_run, expired_run_ids,
                                               adopt_legacy_run, recover_manifest_temps)

@@ -396,6 +396,9 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
             qexpired=QtWidgets.QPushButton(tr('Usuń wygasłe…'))
             qexpired.clicked.connect(self.purge_expired_dialog)
             qb.addWidget(qexpired)
+            qpolkit=QtWidgets.QPushButton(tr('Test Polkit…'))
+            qpolkit.clicked.connect(self.polkit_selftest_dialog)
+            qb.addWidget(qpolkit)
             qexpired_history=QtWidgets.QPushButton(tr('Wyczyść całą zakończoną historię…'))
             qexpired_history.clicked.connect(self.cleanup_all_history_dialog)
             qb.addWidget(qexpired_history)
@@ -531,6 +534,50 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
             self.statusBar().showMessage(tr(activity))
             run_gui_job(operation, lambda *_: None,
                         lambda _done, ok, outcome:self._quarantine_signals.finished.emit(ok,outcome))
+
+        def polkit_selftest_dialog(self):
+            from xdg_polkit import status as polkit_status, run_test
+            if not polkit_status()['ready']:
+                QtWidgets.QMessageBox.warning(
+                    self,tr('Test Polkit'),
+                    tr('Test Polkit wymaga instalacji systemowego helpera. Instrukcja: packaging/polkit/README.md'))
+                return
+            if QtWidgets.QMessageBox.question(self,tr('Test Polkit'),
+                    tr('Poproszę system Polkit o autoryzację i utworzę odizolowany katalog testowy, bez dotykania danych kwarantanny.'),
+                    QtWidgets.QMessageBox.StandardButton.Yes |
+                    QtWidgets.QMessageBox.StandardButton.No,
+                    QtWidgets.QMessageBox.StandardButton.No) != QtWidgets.QMessageBox.StandardButton.Yes:
+                return
+            token,ok=QtWidgets.QInputDialog.getText(self,tr('Test Polkit'),tr('Wpisz TEST:'))
+            if not ok or token!='TEST':return
+
+            def created(success, result):
+                if not success:
+                    QtWidgets.QMessageBox.warning(self,tr('Test Polkit'),str(result))
+                    return
+                if QtWidgets.QMessageBox.question(self,tr('Usuń katalog testowy Polkit'),
+                        tr('Polkit utworzył katalog testowy. Usunę tylko ten katalog, nigdy kwarantannę użytkownika.')+
+                        '\n'+result['fixture'],
+                        QtWidgets.QMessageBox.StandardButton.Yes |
+                        QtWidgets.QMessageBox.StandardButton.No,
+                        QtWidgets.QMessageBox.StandardButton.No) != QtWidgets.QMessageBox.StandardButton.Yes:
+                    return
+                token,ok=QtWidgets.QInputDialog.getText(
+                    self,tr('Usuń katalog testowy Polkit'),tr('Wpisz DELETE TEST:'))
+                if not ok or token!='DELETE TEST':return
+                def deleted(success, outcome):
+                    if success:
+                        QtWidgets.QMessageBox.information(self,tr('Test Polkit'),
+                            tr('Test Polkit zakończony: usunięto wyłącznie odizolowany katalog testowy.')+
+                            '\n'+outcome['fixture'])
+                    else:
+                        QtWidgets.QMessageBox.warning(self,tr('Test Polkit'),str(outcome))
+                self._quarantine_job(
+                    lambda:run_test('test-delete',graphical=True),
+                    deleted,'Uwierzytelnianie Polkit…')
+            self._quarantine_job(
+                lambda:run_test('test-create',graphical=True),
+                created,'Uwierzytelnianie Polkit…')
 
         def cleanup_history_dialog(self):
             selected=self.qtree.currentItem()
