@@ -545,7 +545,7 @@ def manual_binaries(home: Path, extra_dirs=()) -> Probe:
     folders = (home / '.local/bin', home / 'bin', home / 'Applications',
                home / '.cargo/bin', home / 'go/bin', home / 'apps/bin', home / 'Apps/bin',
                home / 'Applications/bin', home / 'opt/bin', home / '.local/opt/bin',
-               Path('/usr/local/bin'), Path('/usr/local/sbin'), *extra_dirs)
+               Path('/usr/local/bin'), *extra_dirs)
     for folder in dict.fromkeys(folders):
         found, state = _safe_direct_children(folder, require_exec=True,
             anchor=home if folder.is_relative_to(home) else Path('/'), budget=budget)

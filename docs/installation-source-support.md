@@ -158,7 +158,7 @@ the AUR request and never uses its result to authorize quarantine.
   never authorizes MOVE or applies to the native `pacman -Qq` query.
 - Manual binaries in `~/.local/bin`, `~/bin`, `~/Applications`, `~/.cargo/bin`,
   `~/go/bin`, `~/apps/bin`, `~/Apps/bin`, `~/Applications/bin`, `~/opt/bin`,
-  `~/.local/opt/bin`, `/usr/local/bin`, `/usr/local/sbin` and configured extra
+  `~/.local/opt/bin`, `/usr/local/bin` and configured extra
   folders provide protective filename hints. Files must be regular and executable;
   they are never run. `/opt` directory names, npm global and pipx add weak hints.
   Missing hints do not prove absence.

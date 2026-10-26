@@ -105,6 +105,7 @@ class SourceLocationTests(unittest.TestCase):
 
         with patch.object(sources, '_run', side_effect=query), \
              patch.object(sources, 'native_package_source', return_value='dpkg'), \
+             patch.object(sources, 'manual_binaries', return_value=sources.Probe('manual_binary', 'ok')), \
              patch.object(audit, 'command', return_value=''):
             inventory = audit.read_active_names(self.home, audit.xdg_roots(self.home))
             self.assertIn(str(image), inventory.appimage_paths)
