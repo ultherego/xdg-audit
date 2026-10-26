@@ -138,7 +138,7 @@ def flatpak_apps() -> Probe:
         if not line.strip():
             continue
         fields = line.split("\t")
-        if len(fields) < 2 or not fields[0].strip():
+        if len(fields) != 3 or not fields[0].strip() or not fields[2].strip():
             return Probe("flatpak", "parse_error", note="unexpected column format")
         app_id = fields[0].strip().casefold()
         names.add(app_id)
