@@ -159,6 +159,26 @@ class LifecycleTests(unittest.TestCase):
         self.purge(dry_run=False)
         self.assertEqual(target.read_text(), "untouched")
 
+    def test_multi_entry_manifest_uses_correct_inventory_for_every_entry(self):
+        source2 = self.home / ".local" / "share" / "unrelated-app"
+        source2.parent.mkdir(parents=True, exist_ok=True)
+        source2.write_text("different bytes")
+        info = source2.lstat()
+        destination2 = self.run / "data" / "unrelated-app"
+        destination2.parent.mkdir(parents=True)
+        source2.rename(destination2)
+        row2 = {"source": str(source2), "destination": str(destination2),
+                "scope": "data", "state": "CANDIDATE",
+                "identity": [info.st_dev, info.st_ino, stat.S_IFREG],
+                "tree_inventory": capture_inventory(destination2),
+                "move_status": "moved"}
+        self.payload["items"].append(row2)
+        self.write()
+        self.assertEqual(self.purge()["objects"], 2)
+        self.purge(dry_run=False)
+        self.assertFalse(self.dest.exists())
+        self.assertFalse(destination2.exists())
+
     def test_retention_boundary(self):
         now = dt.datetime(2026, 10, 26, 12, 0)
         old = "20260925-103000-123456"
