@@ -88,7 +88,20 @@ def create(home: Path) -> dict:
     """Create an isolated fixture; refuse to reuse or overwrite any existing path."""
     config = _config(home)
     try:
-        os.mkdir(FOLDER, 0o700, dir_fd=config)  # EEXIST means no changes
+        try:
+            os.mkdir(FOLDER, 0o700, dir_fd=config)
+        except FileExistsError:
+            root = _open(config, FOLDER)
+            try:
+                directory, marker = _validate(root, expect_modes=True)
+                if (stat.S_IMODE(directory.st_mode) != 0o111 or
+                        stat.S_IMODE(marker.st_mode) != 0o000):
+                    raise UnsafeFixture("Existing test fixture was modified; inspect it before retry")
+                return {"status": "already_exists", "path": str(path(home)),
+                        "restricted_directory": str(path(home) / CHILD),
+                        "restricted_file": str(path(home) / CHILD / FILE)}
+            finally:
+                os.close(root)
         root = _open(config, FOLDER)
         try:
             os.mkdir(CHILD, 0o700, dir_fd=root)
