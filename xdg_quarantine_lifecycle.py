@@ -15,7 +15,7 @@ import uuid
 
 RUN_ID = re.compile(r"^[0-9]{8}-[0-9]{6}-[0-9]{6}$")
 FLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
-MAX_MANIFEST = 4 * 1024 * 1024
+MAX_MANIFEST = 64 * 1024 * 1024
 ALLOWED_STATUSES = {"planned", "moving", "moved", "restoring", "restored", "purging", "purged"}
 
 
