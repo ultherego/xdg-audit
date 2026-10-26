@@ -12,6 +12,7 @@ from typing import Any
 
 from xdg_inspector import details_text, click_is_inside_control, open_item_location
 from xdg_theme import detect_appearance
+from xdg_gui_jobs import run_gui_job
 
 def align_header_edges(header: Any, left: Any, right: Any, gtk: Any) -> None:
     """Anchor desktop/session information at the far right in GTK3 and GTK4.
@@ -172,6 +173,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
             self.row_data={}
             self.focused_row=None
             self.busy=False
+            self._quarantine_job_busy=False
             self.allow_uncertain=False
             self.scope='all'
             outer=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=12)
@@ -1213,72 +1215,111 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
             set_child(dialog,content)
             dialog.present() if GTK4 else dialog.show_all()
 
+        def _quarantine_job(self, operation, completed, activity):
+            """Never hash or unlink quarantine contents on the GTK main loop.
+
+            The single-flight guard also prevents double-clicks or running
+            overlapping destructive actions during an active verification.
+            """
+            if self._quarantine_job_busy:
+                self.status.set_text(tr('Operacja kwarantanny jest już wykonywana.'))
+                return
+            self._quarantine_job_busy=True
+            self.status.set_text(tr(activity))
+
+            def finish(ok, outcome):
+                self._quarantine_job_busy=False
+                try:
+                    completed(ok, outcome)
+                except Exception as exc:
+                    self.status.set_text(tf('Błąd operacji kwarantanny: {error}',error=exc))
+                return False
+
+            run_gui_job(operation, finish, GLib.idle_add)
+
         def cleanup_expired_history(self):
-            try:
-                ids=engine.expired_quarantine_history(home,engine.xdg_roots(home))
-                if ids:
-                    self.cleanup_history(ids)
+            def query():
+                return engine.expired_quarantine_history(home,engine.xdg_roots(home))
+            def finish(ok, result):
+                if not ok:
+                    self.status.set_text(tf('Błąd retencji: {error}',error=result))
+                elif result:
+                    self.cleanup_history(result)
                 else:
                     self.status.set_text(tr('Brak wygasłych manifestów.'))
-            except (ValueError,OSError) as exc:
-                self.status.set_text(tf('Błąd retencji: {error}',error=exc))
+            self._quarantine_job(query,finish,'Sprawdzanie historii…')
 
         def cleanup_history(self,run_ids):
-            try:
-                plans=[engine.cleanup_quarantine_history(home,engine.xdg_roots(home),rid)
-                       for rid in run_ids]
-            except (ValueError,OSError) as exc:
-                self.status.set_text(tf('Błąd historii: {error}',error=exc))
-                return
-            details='\\n'.join(plan['run_id']+' ('+plan['status']+')' for plan in plans)
-            def execute():
-                try:
-                    for plan in plans:
-                        engine.cleanup_quarantine_history(
-                            home,engine.xdg_roots(home),plan['run_id'],dry_run=False)
-                    self.refresh_quarantine()
-                    self.status.set_text(tr('Usunięto zakończone manifesty.'))
-                except (ValueError,OSError) as exc:
-                    self.refresh_quarantine()
-                    self.status.set_text(tf('Błąd historii: {error}',error=exc))
-            self.prompt(tr('Usuń historię'),details+'\\n\\n'+
-                        tr('Zostaną usunięte tylko zakończone dzienniki.'),
-                        'HISTORY',execute)
+            run_ids=tuple(run_ids)
+            def preview():
+                return [engine.cleanup_quarantine_history(
+                    home,engine.xdg_roots(home),rid) for rid in run_ids]
+            def preview_ready(ok, result):
+                if not ok:
+                    self.status.set_text(tf('Błąd historii: {error}',error=result))
+                    return
+                details='\\n'.join(plan['run_id']+' ('+plan['status']+')'
+                                  for plan in result)
+                def execute():
+                    def operation():
+                        for plan in result:
+                            engine.cleanup_quarantine_history(
+                                home,engine.xdg_roots(home),plan['run_id'],dry_run=False)
+                        return len(result)
+                    def done(success, outcome):
+                        self.refresh_quarantine()
+                        if success:
+                            self.status.set_text(tr('Usunięto zakończone manifesty.'))
+                        else:
+                            self.status.set_text(tf('Błąd historii: {error}',error=outcome))
+                    self._quarantine_job(operation,done,'Usuwanie historii…')
+                self.prompt(tr('Usuń historię'),details+'\\n\\n'+
+                            tr('Zostaną usunięte tylko zakończone dzienniki.'),
+                            'HISTORY',execute)
+            self._quarantine_job(preview,preview_ready,'Sprawdzanie historii…')
 
         def purge_runs(self,run_ids):
-            plans=[]
-            try:
-                for run_id in run_ids:
-                    plans.append(engine.purge_quarantine_run(home,engine.xdg_roots(home),run_id))
-            except (ValueError,OSError) as exc:
-                self.status.set_text(tf('Zablokowano PURGE: {error}',error=exc))
-                return
-            details='\\n'.join(f"{p['run_id']}: {p['objects']} entries, {p['bytes']} B"
-                              for p in plans)
-            def execute():
-                try:
-                    removed=0
-                    for plan in plans:
-                        result=engine.purge_quarantine_run(home,engine.xdg_roots(home),
-                                                          plan['run_id'],dry_run=False)
-                        removed+=result['objects']
-                    self.status.set_text(tr('Trwale usunięto obiektów: ')+str(removed))
-                    self.refresh_quarantine()
-                except (OSError,ValueError) as exc:
-                    self.status.set_text(tf('Zablokowano PURGE: {error}',error=exc))
-                    self.refresh_quarantine()
-            self.prompt(tr('Trwałe usunięcie'),details+'\\n\\n'+
-                        tr('Nie można cofnąć tej operacji.'),'PURGE',execute)
+            run_ids=tuple(run_ids)
+            def preview():
+                return [engine.purge_quarantine_run(
+                    home,engine.xdg_roots(home),run_id) for run_id in run_ids]
+            def preview_ready(ok, outcome):
+                if not ok:
+                    self.status.set_text(tf('Zablokowano PURGE: {error}',error=outcome))
+                    return
+                details='\\n'.join(
+                    f"{p['run_id']}: {p['objects']} entries, {p['bytes']} B"
+                    for p in outcome)
+                def execute():
+                    def operation():
+                        removed=0
+                        for plan in outcome:
+                            result=engine.purge_quarantine_run(
+                                home,engine.xdg_roots(home),plan['run_id'],dry_run=False)
+                            removed+=result['objects']
+                        return removed
+                    def done(success, result):
+                        self.refresh_quarantine()
+                        if success:
+                            self.status.set_text(tr('Trwale usunięto obiektów: ')+str(result))
+                        else:
+                            self.status.set_text(tf('Zablokowano PURGE: {error}',error=result))
+                    self._quarantine_job(operation,done,'Trwałe usuwanie z kwarantanny…')
+                self.prompt(tr('Trwałe usunięcie'),details+'\\n\\n'+
+                            tr('Nie można cofnąć tej operacji.'),'PURGE',execute)
+            self._quarantine_job(preview,preview_ready,'Sprawdzanie kwarantanny…')
 
         def purge_expired(self):
-            try:
-                run_ids=engine.expired_quarantine_runs(home,engine.xdg_roots(home))
-                if run_ids:
-                    self.purge_runs(run_ids)
+            def query():
+                return engine.expired_quarantine_runs(home,engine.xdg_roots(home))
+            def finish(ok, result):
+                if not ok:
+                    self.status.set_text(tf('Błąd retencji: {error}',error=result))
+                elif result:
+                    self.purge_runs(result)
                 else:
                     self.status.set_text(tr('Brak wygasłych kwarantann.'))
-            except (ValueError,OSError) as exc:
-                self.status.set_text(tf('Błąd retencji: {error}',error=exc))
+            self._quarantine_job(query,finish,'Sprawdzanie kwarantanny…')
 
         def restore(self,run_id):
             def do_restore():
