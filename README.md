@@ -232,6 +232,20 @@ See [Quarantine lifecycle](docs/quarantine-lifecycle.md) for recovery,
 history-only cleanup, manual/automatic retention, user-scoped systemd
 timer, legacy adoption, and safeguards.
 
+## 🧭 Kolejne etapy projektu
+
+Najpierw domykamy bezpieczeństwo i jakość wersji 1.7.0 — bez zmiany
+reguł kwalifikowania osieroconych danych. Zobacz
+[release-readiness checklist](docs/release-readiness.md).
+
+Następny etap będzie dotyczył **wykrywania źródeł instalacji aplikacji**,
+a nie pakowania samego xdg-audit:
+AUR/pakiety foreign, binarki instalowane ręcznie, dokładniejszy Flatpak,
+Snap i AppImage, a później inwentarze `dpkg` i `rpm`.
+Aktualnie AUR instalowany za pomocą pacmana jest już widoczny jako
+zainstalowany pakiet. Szczegółowy plan i ograniczenia bezpieczeństwa:
+[installation-source-support](docs/installation-source-support.md).
+
 ## 🧪 Testing & release status
 
 The unreleased development version on `main` is **`1.7.0-rc2`**. The most recent tagged prerelease is **[v1.7.0-rc1](https://github.com/ultherego/xdg-audit/releases/tag/v1.7.0-rc1)**.
