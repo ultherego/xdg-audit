@@ -1,91 +1,88 @@
-# v1.7.0 — Release Readiness checklist
+# v1.7.0 — Release readiness checklist
 
-**Stan:** prace stabilizacyjne na `main` (kod deklaruje `1.7.0-rc2`).
-Ostatni opublikowany tag/Release: `v1.7.0-rc1`.
-Nie publikować nowego wydania ani stabilnego tagu bez odrębnej decyzji.
+**Status:** stabilization on `main` (source version `1.7.0-rc2`).
+The latest published tag/release is `v1.7.0-rc1`.
+Publishing a new release or stable tag requires a separate release decision.
 
-Dowody wymagane do zamknięcia otwartych pozycji: [protokół walidacji P0/P1](release-verification-evidence.md).
-Zaznaczenie checkboxa wymaga podlinkowanego wyniku; sam skrypt/test dodany do repozytorium nie jest dowodem jego uruchomienia.
+Evidence needed to close open items is defined in the
+[P0/P1 validation protocol](release-verification-evidence.md).
+A checked item requires a linked result; adding a script or test alone does
+not demonstrate that it ran.
 
-Wyniki prac i wykonanych kontroli z 2026-10-26:
-[rejestr weryfikacji](verification-2026-10-26.md).
+Results from 2026-10-26: [verification record](verification-2026-10-26.md).
 
-## 1. Bezpieczeństwo (P0)
+## 1. Safety (P0)
 
-- [x] Dostęp do kwarantanny, manifestu i podrzędnych katalogów oparty
-  na deskryptorach, bez podążania za symlinkami.
-- [x] Rekurencyjny inwentarz SHA-256 oraz kontrola inode przed PURGE.
-- [x] Brak automatycznych zmian przy nieznanej własności / urządzeniu
-  i osobne potwierdzenia `ACCESS`, `ADOPT`, `PURGE`.
-- [x] Testy zapisu dziennika, wznowienia po częściowym usunięciu,
-  podmiany ścieżek, kolizji i danych spoza kwarantanny.
-- [x] Regresje dla katalogów bez prawa odczytu, zapisu i przeszukiwania.
-- [x] Rzeczywiste przerwanie procesu w ośmiu punktach MOVE/RESTORE/PURGE
-  przez `SIGKILL`, z *wyłącznie sztucznymi danymi*, oraz odzyskanie po
-  ponownym uruchomieniu — [wyniki i zakres](verification-2026-10-26.md).
-  Nie jest to test odcięcia zasilania ani awarii jądra.
-- [ ] Przegląd bezpieczeństwa ostatnich zmian przez drugą osobę.
+- [x] Descriptor-based access to quarantine, manifests and child directories,
+  without following symlinks.
+- [x] Recursive SHA-256 inventory and inode verification before PURGE.
+- [x] Refusal of automatic changes with unknown ownership/device identity,
+  with separate `ACCESS`, `ADOPT` and `PURGE` confirmations.
+- [x] Journal-write, partial-deletion recovery, path replacement, collision
+  and outside-quarantine sentinel tests.
+- [x] Regressions for directories without read, write or search permission.
+- [x] Real process interruption at eight MOVE/RESTORE/PURGE checkpoints using
+  `SIGKILL`, with synthetic data only, followed by restart recovery —
+  [results and scope](verification-2026-10-26.md).
+  This covers process termination, not power loss or kernel failure.
+- [ ] Independent security review of the latest changes by a second person.
 
-## 2. CI i ochrona main (P0)
+## 2. CI and main protection (P0)
 
-Repozytorium ma aktywny ruleset `Protect main`, wymagający PR,
-blokujący force-push/usunięcie `main` i sprawdzający testy Python,
-GUI Xvfb, benchmark oraz archiwum źródeł.
+The active `Protect main` ruleset requires a PR, blocks force-push and deletion
+of `main`, and requires Python, Xvfb GUI, benchmark and source-archive checks.
 
-**Istotny szczegół:** check `Source ZIP and tar.gz` ma w workflow
+The `Source ZIP and tar.gz` workflow job has
 `needs: [test, gui-smoke, wayland-smoke, benchmark, quarantine-cycle, native-sources]`.
-Zatem poprawne zbudowanie archiwum wymaga także sukcesu testu Wayland
-i testu `Quarantine and restore E2E (isolated)`, mimo że nie są wpisane
-bezpośrednio na listę wymaganych kontekstów rulesetu.
+Archive success therefore also requires Wayland, isolated quarantine E2E and
+native Ubuntu/Fedora tests, even when those contexts are not listed directly
+in the ruleset.
 
-- [x] Testy Python 3.10–3.14 i natywne GUI (Xvfb/Weston).
-- [x] Izolowany pełny test MOVE → RESTORE i awarii bezpieczeństwa.
-- [x] Bramka budowania release zależna od kontroli Wayland i E2E.
-- [ ] **Opcjonalnie** dopisać dwa testy do rulesetu bezpośrednio,
-  aby administrator widział je osobno jako obowiązkowe.
-  Wymaga uprawnień administracyjnych GitHub; nie wykonywać obejścia
-  bez odpowiednich uprawnień.
+- [x] Python 3.10–3.14 and native GUI checks (Xvfb/Weston).
+- [x] Isolated MOVE → RESTORE lifecycle and safety-failure tests.
+- [x] Archive and release gates depend on Wayland, E2E and native-source checks.
+- [ ] **Optional:** list Wayland and E2E directly in the ruleset so administrators
+  can see them individually as required checks. This requires GitHub
+  administrative permission; do not bypass access controls.
 
-## 3. Kompatybilność Linux i GUI (P0)
+## 3. Linux and GUI compatibility (P0)
 
-**Potwierdzenie użytkownika (2026-10-26):** autor projektu testował GUI
-i potwierdził działanie wszystkich sprawdzanych funkcji. Odbiór tego
-środowiska jest zakończony; nie wymaga ponownego wykonywania tych samych testów.
-Poniższa macierz dotyczy dodatkowego pokrycia osobnych środowisk, którego
-potwierdzenie użytkownika nie wymienia.
+**Owner confirmation (2026-10-26):** the owner tested the GUI and confirmed all
+functions checked in that environment worked. Acceptance of that environment
+is complete and does not require repeating the same tests.
+The following matrix concerns additional, separately identified environments.
 
-- [x] Testy funkcjonalne GUI w środowisku autora — potwierdzenie użytkownika.
+- [x] Functional GUI tests in the owner's environment — owner confirmation.
+- [ ] GNOME/Wayland — complete scan, restore and PURGE workflow.
+- [ ] KDE Plasma/Wayland — the same workflow with system-theme integration.
+- [ ] Xfce/X11 — startup and workflow through Tk/GTK.
+- [x] Native APT/dpkg and RPM: MOVE verifies the OS's own database without
+  requiring pacman. Ubuntu/Fedora native lifecycle tests are mandatory before
+  CI can build archives.
+- [x] Full-disk and permission-error handling: engine ENOSPC/EACCES tests,
+  no data overwrites, and a native GTK ENOSPC message smoke test —
+  [results](verification-2026-10-26.md). Physical storage exhaustion and
+  separate error acceptance on every desktop remain outside this evidence.
 
-- [ ] GNOME/Wayland — cały przepływ od skanu do przywrócenia i PURGE.
-- [ ] KDE Plasma/Wayland — analogicznie, z zachowaniem motywu.
-- [ ] Xfce/X11 — uruchomienie i przebieg na backendzie Tk/GTK.
-- [x] Natywne APT/dpkg i RPM: przed MOVE jest sprawdzana właściwa baza
-  systemu; nie jest wymagany pacman. Testy natywnego cyklu Ubuntu/Fedora
-  są obowiązkowym warunkiem zbudowania archiwów w CI.
-- [x] Obsługa pełnego dysku i braku praw: testy silnika ENOSPC/EACCES,
-  brak nadpisywania danych oraz natywny smoke komunikatu ENOSPC w GTK —
-  [wyniki](verification-2026-10-26.md). Nie oznacza to testu fizycznego
-  zapełnienia nośnika ani osobnego odbioru błędów na każdym pulpicie.
+## 4. Publication (P1)
 
-## 4. Publikacja (P1)
+- [x] **MIT license:** the owner delegated license selection on 2026-10-26.
+  Full text in [LICENSE](../LICENSE), also included in source archives.
+- [x] README, CHANGELOG and RELEASE_NOTES describe RC2. All repository
+  documentation is English; Polish is application localization only.
+- [x] Review existing screenshots, neutral paths and source-archive inputs;
+  exclude incidental checkout files —
+  [scope and results](verification-2026-10-26.md). Final published artifacts
+  still require acceptance before release.
+- [x] Document and test user installation, update and desktop-registration
+  removal (`install_desktop.py` currently points to the existing checkout) —
+  [instructions and tests](desktop-installation.md).
+- [ ] Publish a **new RC** after acceptance, then consider a stable release.
 
-- [x] **Licencja MIT**: właściciel zlecił wybór licencji (2026-10-26).
-  Pełny tekst w [LICENSE](../LICENSE), również w archiwach źródeł.
-- [x] Zaktualizować README, CHANGELOG i RELEASE_NOTES do kodu RC2.
-- [x] Zweryfikować bieżące screenshoty, neutralne ścieżki oraz wejścia do
-  archiwów źródeł; wykluczyć przypadkowe pliki z checkoutu —
-  [zakres i wyniki](verification-2026-10-26.md). Finalny opublikowany
-  artefakt wymaga jeszcze odbioru przed wydaniem.
-- [x] Przygotować i przetestować udokumentowany scenariusz instalacji użytkownika,
-  aktualizacji i odinstalowania (obecnie `install_desktop.py`
-  wskazuje na aktualny katalog repozytorium) —
-  [opis i testy](desktop-installation.md).
-- [ ] Opublikować **nowy RC** po akceptacji, dopiero potem wersję stabilną.
+## 5. Application installation sources
 
-## 5. Źródła instalacji aplikacji
-
-Rozwijać **inwentaryzację aplikacji**, nie paczki xdg-audit:
-Arch/AUR/foreign, Flatpak, Snap, AppImage, binarki oraz APT/dpkg i RPM są obsługiwane.
-MOVE nadal wymaga jawnej decyzji i sprawnej natywnej bazy systemu.
-Projekt adapterów i warunki bezpieczeństwa:
+Application inventory covers Arch/AUR/foreign, Flatpak, Snap, AppImage,
+manual binaries, APT/dpkg and RPM. MOVE requires explicit consent and a
+healthy native package database.
+Adapter behavior and safety conditions:
 [installation-source-support.md](installation-source-support.md).

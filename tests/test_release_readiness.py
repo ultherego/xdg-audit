@@ -17,7 +17,7 @@ class ReleaseReadinessTests(unittest.TestCase):
         release_notes = (ROOT / "RELEASE_NOTES.md").read_text(encoding="utf-8")
         self.assertIn(version, changelog)
         self.assertIn(version, release_notes)
-        self.assertIn("Niewydany", release_notes)
+        self.assertIn("Unreleased", release_notes)
 
     def test_archive_build_is_gated_by_all_safety_and_gui_jobs(self):
         workflow = (ROOT / ".github/workflows/tests.yml").read_text(encoding="utf-8")
