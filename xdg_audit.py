@@ -1224,6 +1224,12 @@ def main(argv=None):
     parser.add_argument("--allow-uncertain", action="store_true", help="Allow manually selected REVIEW/UNKNOWN; still prompts")
     parser.add_argument("--list-quarantine", action="store_true", help="List previous quarantine runs")
     parser.add_argument("--restore", metavar="RUN_ID", help="Restore one quarantine run")
+    parser.add_argument("--quarantine-info", metavar="RUN_ID", help="Inspect a v3 quarantine run")
+    parser.add_argument("--purge", metavar="RUN_ID", help="Permanently delete quarantined objects")
+    parser.add_argument("--purge-expired", action="store_true", help="Preview expired quarantine runs")
+    parser.add_argument("--retention-days", type=int, default=30, metavar="DAYS")
+    parser.add_argument("--execute", action="store_true", help="Execute purge-expired after confirmation")
+    parser.add_argument("--dry-run", action="store_true", help="Preview a purge without writes")
     argv = list(sys.argv[1:] if argv is None else argv)
     args = parser.parse_args(argv)
     # Explicit CLI flags keep their historical behaviour; no arguments open desktop GUI.
@@ -1243,7 +1249,46 @@ def main(argv=None):
         parser.error("--select requires --remove")
     if args.allow_uncertain and not args.remove:
         parser.error("--allow-uncertain requires --remove")
+    operations = (args.restore, args.list_quarantine, args.quarantine_info, args.purge, args.purge_expired)
+    if sum(bool(x) for x in operations) > 1:
+        parser.error("Select a single quarantine operation")
+    if not 1 <= args.retention_days <= 3650:
+        parser.error("--retention-days must be between 1 and 3650")
+    if args.execute and not args.purge_expired:
+        parser.error("--execute requires --purge-expired")
+    if (args.quarantine_info or args.purge or args.purge_expired) and (args.gui or args.remove or args.json):
+        parser.error("Cannot combine lifecycle operations with GUI, move or report modes")
     roots = xdg_roots(home)
+    if args.quarantine_info or args.purge or args.purge_expired:
+        from xdg_quarantine_lifecycle import inspect_run, purge_run, expired_run_ids
+        if args.quarantine_info:
+            report = inspect_run(home, roots, args.quarantine_info, nested_mounts_status)
+            print(json.dumps({"run_id": report["run_id"], "objects": report["present"],
+                              "bytes": report["bytes"], "entries": [
+                                  {"source": str(e["source"]), "status": e["status"],
+                                   "present": e["present"], "bytes": e["bytes"]}
+                                  for e in report["entries"]]}, indent=2))
+            return 0
+        ids = [args.purge] if args.purge else expired_run_ids(
+            quarantine_runs(home, roots), args.retention_days)
+        previews = [purge_run(home, roots, run_id, nested_mounts_status, dry_run=True)
+                    for run_id in ids]
+        if not previews:
+            print("No eligible quarantine runs.")
+            return 0
+        for preview in previews:
+            print("PURGE PLAN: %s: %d objects, %s" % (
+                preview["run_id"], preview["objects"], human(preview["bytes"])))
+        if args.dry_run or (args.purge_expired and not args.execute):
+            return 0
+        if not sys.stdin.isatty():
+            raise SystemExit("ERROR: purge requires an interactive TTY")
+        if input("Type PURGE to permanently remove these quarantined objects: ").strip() != "PURGE":
+            print("Cancelled.")
+            return 0
+        for preview in previews:
+            print(purge_run(home, roots, preview["run_id"], nested_mounts_status, dry_run=False))
+        return 0
     if args.theme_info:
         from xdg_theme import detect_appearance
         from xdg_gui import detect_gui_runtime
