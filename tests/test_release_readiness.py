@@ -33,7 +33,8 @@ class ReleaseReadinessTests(unittest.TestCase):
         self.assertIn("dpkg", roadmap)
         self.assertIn("rpm", roadmap)
         self.assertIn("foreign ≠ AUR", roadmap)
-        self.assertIn("MOVE pozostaje zablokowany", roadmap)
+        self.assertIn("MOVE nadal zablokowany", roadmap)
+        self.assertIn("nie są uprawnione do MOVE", roadmap)
         self.assertTrue((ROOT / "docs/release-readiness.md").is_file())
 
 

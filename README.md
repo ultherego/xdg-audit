@@ -175,12 +175,14 @@ python3 xdg_audit.py --installed-sources
 ```
 
 Zestawienie tylko do odczytu pokazuje stan inwentarzy pacman, pacman-foreign,
-Flatpak, Snap, AppImage i ochronnych wskazówek dla ręcznie instalowanych
+Flatpak, Snap, AppImage, zainstalowanych pakietów DEB/RPM i ochronnych wskazówek dla ręcznie instalowanych
 binarek (`~/.local/bin`, `~/bin`, `/usr/local/bin`, `/opt`).
 Pakiety foreign mogą pochodzić z AUR **lub** lokalnej instalacji.
 Błąd aktywnego dostawcy nie oznacza odinstalowania programu i blokuje MOVE
-do czasu poprawnego ponownego sprawdzenia. Dostawcy dpkg i rpm będą
-następnym etapem; do tego czasu MOVE nadal wymaga inwentarza pacmana.
+do czasu poprawnego ponownego sprawdzenia. Odczyt `dpkg-query` i `rpm -qa` służy obecnie do ochrony
+**zainstalowanych** aplikacji. MOVE na systemach Debian/RPM pozostaje
+zablokowany do czasu walidacji właściwego dostawcy pakietów przed zmianami;
+obecnie MOVE nadal wymaga sprawnego pacmana.
 
 
 

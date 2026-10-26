@@ -4,7 +4,10 @@
 > źródeł danych, pacman foreign, Flatpak, Snap, AppImage oraz ochronne
 > sygnały ręcznych binarek (włącznie z katalogami `/opt`).
 > Komenda `python3 xdg_audit.py --installed-sources` przedstawia
-> stan każdego dostawcy. Adaptery dpkg/rpm pozostają w planie.
+> stan każdego dostawcy. Kolejny etap PR #21 dodaje tylko odczyt
+> **zainstalowanych** pakietów z `dpkg-query` i `rpm -qa`.
+> Debian/RPM nadal **nie są uprawnione do MOVE** — osobna walidacja przed
+> zmianami będzie przedmiotem kolejnej kontroli.
 
 Ten dokument dotyczy **rozpoznawania zainstalowanych aplikacji i osieroconych danych XDG**.
 Nie dotyczy tworzenia paczek instalacyjnych xdg-audit. Rozszerzanie źródeł
@@ -20,8 +23,8 @@ jako dowodu odinstalowania aplikacji.
 | Snap | `snap list` z walidacją i raportowaniem błędów | Podstawowa ochrona aktywnych Snapów; ograniczone metadane |
 | AppImage | Płytki skan *.AppImage w wybranych katalogach użytkownika bez uruchamiania | Warianty nazw i launchery nie są jeszcze wiarygodnie mapowane na XDG |
 | Instalacje ręczne / binarne | `ps`, `systemctl --user`, `.desktop`, `~/.local/bin`, `~/bin`, `~/Applications`, `/usr/local/bin`, `/opt`, `~/.local/opt` | Tylko sygnały ochronne; bez wiarygodnej własności plików |
-| Debian/Ubuntu (DEB/APT) | Brak dostawcy pakietów | MOVE pozostaje zablokowany bez pacmana |
-| Fedora/RHEL/openSUSE i podobne (RPM) | Brak dostawcy pakietów | MOVE pozostaje zablokowany bez pacmana |
+| Debian/Ubuntu (DEB/APT) | `dpkg-query` rozpoznaje pakiety w stanie `installed` | Odczyt i ochrona ACTIVE; MOVE nadal zablokowany |
+| Fedora/RHEL/openSUSE i podobne (RPM) | `rpm -qa` czyta bazę zainstalowanych pakietów | Odczyt i ochrona ACTIVE; MOVE nadal zablokowany |
 
 **Nie utożsamiać „nie znaleziono” z „odinstalowano”.**
 Dopiero skutecznie odczytana lista pakietów i odpowiednie dowody pozwalają
@@ -70,7 +73,7 @@ nie mogą być obowiązkowe. Etykieta w UI: „pacman (foreign / AUR lub lokalny
   Nie przeszukiwać rekurencyjnie całego systemu ani nie wykonywać binarek.
   Bez potwierdzonego właściciela obiekt pozostaje co najmniej `REVIEW`.
 
-### Etap 4 — Debian/Ubuntu i rodzina RPM
+### Etap 4 — Debian/Ubuntu i rodzina RPM (wykrywanie ACTIVE wykonane; MOVE w planie)
 
 - Debian/Ubuntu: status rzeczywiście zainstalowanych pakietów
   odczytywać przez `dpkg-query`; `apt` służy przede wszystkim do

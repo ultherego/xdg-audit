@@ -30,13 +30,15 @@ class Probe:
 class ActiveInventory(tuple):
     """Backward-compatible 8-field tuple carrying provider health metadata."""
 
-    def __new__(cls, values, *, status=None, foreign=(), manual=(), provenance=None):
+    def __new__(cls, values, *, status=None, foreign=(), manual=(),
+                distro=None, provenance=None):
         obj = super().__new__(cls, values)
         if len(obj) != 8:
             raise ValueError("Invalid installed-application inventory shape")
         obj.status = dict(status or {})
         obj.foreign = frozenset(foreign)
         obj.manual = frozenset(manual)
+        obj.distro = {name: frozenset(values) for name, values in (distro or {}).items()}
         obj.provenance = dict(provenance or {})
         return obj
 
@@ -81,6 +83,41 @@ def pacman_foreign() -> Probe:
     if any(not _PACKAGE.fullmatch(name) for name in names):
         return Probe("pacman_foreign", "parse_error", note="unexpected package identifier")
     return Probe("pacman_foreign", "ok", frozenset(names))
+
+
+def dpkg_packages() -> Probe:
+    """Only fully installed Debian packages (not residual config-files)."""
+    base, output = _run("dpkg", [
+        "dpkg-query", "-W", "-f=${binary:Package}\\t${Status}\\n"], 30)
+    if base.status != "ok":
+        return base
+    names = set()
+    for line in output.splitlines():
+        if not line.strip():
+            continue
+        fields = line.split("\t", 1)
+        if len(fields) != 2 or not fields[0].strip():
+            return Probe("dpkg", "parse_error", note="invalid dpkg-query fields")
+        name = fields[0].casefold().strip()
+        base_name = name.split(":", 1)[0]  # Multi-Arch qualified identifiers
+        if not _PACKAGE.fullmatch(base_name):
+            return Probe("dpkg", "parse_error", note="invalid dpkg package name")
+        state = fields[1].strip().casefold()
+        if state.endswith(" ok installed") and state.split()[0] in ("install", "hold"):
+            names.add(base_name)
+            names.add(name)
+    return Probe("dpkg", "ok", frozenset(names))
+
+
+def rpm_packages() -> Probe:
+    """Only RPM's installed database; no yum/dnf/zypper side effects."""
+    base, output = _run("rpm", ["rpm", "-qa", "--qf", "%{NAME}\\n"], 30)
+    if base.status != "ok":
+        return base
+    names = [x.strip().casefold() for x in output.splitlines() if x.strip()]
+    if any(not _PACKAGE.fullmatch(x) for x in names):
+        return Probe("rpm", "parse_error", note="invalid rpm package identifier")
+    return Probe("rpm", "ok", frozenset(names))
 
 
 def flatpak_apps() -> Probe:

@@ -20,6 +20,12 @@ o opublikowaniu nowego tagu.
   bez blokowania głównego interfejsu podczas liczenia SHA-256.
 - Polskie/angielskie tłumaczenia interfejsu; natywny test GTK/Qt
   na Wayland (Weston) i kompletny syntetyczny test E2E.
+- Wykrywanie źródeł instalacji aplikacji: stan zdrowia pacman,
+  foreign (AUR **lub** lokalny), Flatpak, Snap, AppImage, ręczne binarki
+  i katalogi /opt oraz odczyt pakietów dpkg/rpm.
+  `--installed-sources` udostępnia diagnostykę tylko do odczytu.
+- Zainstalowane pakiety dpkg/rpm chronią dane jako ACTIVE, ale
+  MOVE poza Arch pozostaje celowo zablokowany.
 - Dodatkowe testy bezpieczeństwa: awaria przed/po usunięciu,
   katalog bez prawa przeszukiwania, pliki bez odczytu,
   symlinki, hardlinki, obce inode i nieprawidłowe manifesty.
@@ -29,7 +35,8 @@ o opublikowaniu nowego tagu.
 - Skanowanie jest tylko do odczytu; `CANDIDATE` nie oznacza
   pewnego osierocenia. Przed MOVE należy sprawdzić dane.
 - Aktualny MOVE wymaga prawidłowego inwentarza `pacman`; na systemach
-  Debian/RPM dostępne jest obecnie skanowanie, nie bezpieczne przenoszenie.
+  Debian/RPM wykrywanie zainstalowanych aplikacji jest tylko do odczytu.
+  Bezpieczne przenoszenie na tych systemach pozostaje zablokowane.
 - AUR instalowany przez pacmana znajduje się w `pacman -Qq`;
   pochodzenie z AUR nie jest dziś rozróżniane od innych pakietów foreign.
 - Flatpak i Snap mają podstawowe przesłanki instalacji.
