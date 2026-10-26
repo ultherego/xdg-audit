@@ -35,7 +35,7 @@ of `main`, and requires Python, Xvfb GUI, benchmark and source-archive checks.
 The `Source ZIP and tar.gz` workflow job has
 `needs: [test, gui-smoke, wayland-smoke, benchmark, quarantine-cycle, native-sources]`.
 Archive success therefore also requires Wayland, isolated quarantine E2E and
-native Ubuntu/Fedora tests, even when those contexts are not listed directly
+native Arch/Ubuntu/Fedora tests, even when those contexts are not listed directly
 in the ruleset.
 
 - [x] Python 3.10–3.14 and native GUI checks (Xvfb/Weston).
@@ -56,9 +56,10 @@ The following matrix concerns additional, separately identified environments.
 - [ ] GNOME/Wayland — complete scan, restore and PURGE workflow.
 - [ ] KDE Plasma/Wayland — the same workflow with system-theme integration.
 - [ ] Xfce/X11 — startup and workflow through Tk/GTK.
-- [x] Native APT/dpkg and RPM: MOVE verifies the OS's own database without
-  requiring pacman. Ubuntu/Fedora native lifecycle tests are mandatory before
-  CI can build archives.
+- [x] Native pacman, APT/dpkg and RPM: MOVE verifies the OS's own database.
+  Arch/Ubuntu/Fedora native protection and lifecycle tests are mandatory before
+  CI can build archives. Arch validates the package-manager family used by
+  CachyOS, with real regular-user inventories rather than synthetic package lists.
 - [x] Full-disk and permission-error handling: engine ENOSPC/EACCES tests,
   no data overwrites, and a native GTK ENOSPC message smoke test —
   [results](verification-2026-10-26.md). Physical storage exhaustion and

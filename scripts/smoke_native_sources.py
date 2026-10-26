@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Native dpkg/RPM scan -> explicit MOVE -> RESTORE -> PURGE in a temporary HOME.
+"""Native pacman/dpkg/RPM protection and lifecycle checks in a temporary HOME.
 
 No inventory mocking and no system package modification. Run as a regular
 user on a supported distribution with an existing, healthy package database.
@@ -42,8 +42,29 @@ def run(expected):
             installed = audit.read_active_names(home, roots)
             require(verified_native_source(installed) == expected, 'wrong native provider')
             require(installed.status.get(expected) == 'ok', 'native database unhealthy')
-            require(not installed[0], 'this smoke expects a system without pacman')
+            if expected != 'pacman':
+                require(not installed[0], 'non-Arch smoke expects a system without pacman')
             print('PASS real native database:', expected)
+
+            # A directory named after the actual installed package manager must
+            # remain ACTIVE and refuse even an explicitly uncertain MOVE.
+            protected = roots['config'] / expected
+            protected.mkdir()
+            (protected / 'settings').write_bytes(original)
+            rows, _, report = audit.scan(home, ['config'], set(), {}, True)
+            require(report['native_package_source'] == expected, 'report selected the wrong database')
+            require(report['native_packages'] > 0, 'report lost the native package count')
+            active = next(row for row in rows if row.path == protected)
+            require(active.state == 'ACTIVE', 'installed native package was not protected')
+            try:
+                audit.commit_quarantine([active], roots, home,
+                    allow_uncertain=True, emit=lambda _: None)
+            except ValueError:
+                pass
+            else:
+                raise AssertionError('installed native package data was accepted for MOVE')
+            require((protected / 'settings').read_bytes() == original, 'protected bytes changed')
+            print('PASS installed native package protected from MOVE')
 
             # This is an intentionally unknown test application, not an orphan
             # inferred from missing package records. Uncertain consent is required.
@@ -78,10 +99,11 @@ def run(expected):
             require(audit.purge_quarantine_run(home, roots, result['run_id'])['objects'] == 0,
                 'PURGE was not idempotent')
             require(sentinel.read_bytes() == b'never change', 'unrelated data changed')
+            require((protected / 'settings').read_bytes() == original, 'protected data changed')
             print('PASS native PURGE, idempotence and unrelated sentinel')
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--expect', choices=('dpkg', 'rpm'), required=True)
+    parser.add_argument('--expect', choices=('pacman', 'dpkg', 'rpm'), required=True)
     run(parser.parse_args().expect)

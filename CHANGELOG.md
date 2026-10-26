@@ -2,6 +2,10 @@
 
 ## 1.7.0-rc2 (unreleased)
 
+- Report the native package database, unique installed package-name count and
+  provider health in CLI/JSON, preserving the existing pacman JSON statistic.
+- Require real Arch/pacman protection and quarantine lifecycle checks alongside
+  Ubuntu/dpkg and Fedora/RPM, including refusal to MOVE installed-package data.
 - Adopt the MIT License and include it in both source archive formats.
 - Authorize native DEB/RPM quarantine using the OS-selected fresh installed
   database; APT uses dpkg. Incomplete dpkg states block mutation.

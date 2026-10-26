@@ -563,7 +563,7 @@ def scan(home: Path, scopes: list[str], keeps: set[str], extra_aliases: dict[str
     inventory = read_active_names(home, roots)
     packages, flatpaks, snaps, appimages, units, processes, desktops, active = inventory
     health = getattr(inventory, "status", None)
-    from xdg_sources import verified_native_source, dpkg_removals
+    from xdg_sources import verified_native_source, dpkg_removals, package_name_count
     native_source = getattr(inventory, 'native_source', 'pacman')
     try:
         verified_native_source(inventory)
@@ -579,6 +579,7 @@ def scan(home: Path, scopes: list[str], keeps: set[str], extra_aliases: dict[str
     removal_log = 'dpkg.log' if native_source == 'dpkg' else 'pacman.log'
     current_native = (packages if native_source == 'pacman' else
                       getattr(inventory, 'distro', {}).get(native_source, ()))
+    native_count = package_name_count(native_source, current_native)
     removed_normal = {normalize(p): p for p in removals if p not in current_native}
     removed_normal.update({normalize(stem_package(p)): p for p in removals if p not in current_native})
     alias_map = {**ALIASES, **{k.casefold(): v for k, v in extra_aliases.items()}}
@@ -798,8 +799,9 @@ def scan(home: Path, scopes: list[str], keeps: set[str], extra_aliases: dict[str
     return items, roots, {"pacman_packages": len(packages), "flatpak_entries": len(flatpaks),
                           "removed_package_names": len(removals), "desktop_names": len(desktops),
                           "phase_times_ms": times,
-                          "installed_sources": dict(health or {"pacman": "legacy"}),
+                          "installed_sources": dict(health if health is not None else {"pacman": "legacy"}),
                           'native_package_source': native_source,
+                          'native_packages': native_count,
                           "pacman_foreign_count": len(getattr(inventory, "foreign", ()))} 
 
 
@@ -861,7 +863,11 @@ def print_comparison(changes: list[dict]):
 def print_report(items: list[Item], stats: dict, all_items: bool, removal_mode: bool = False):
     from collections import Counter
     counts = Counter(i.state for i in items)
-    print(f"xdg-audit v{VERSION} | PACMAN={stats['pacman_packages']} FLATPAK={stats['flatpak_entries']} "
+    native = stats.get('native_package_source', 'pacman')
+    native_count = stats.get('native_packages', stats.get('pacman_packages', 0) if native == 'pacman' else 0)
+    native_health = stats.get('installed_sources', {}).get(native, 'unknown')
+    print(f"xdg-audit v{VERSION} | NATIVE={native or 'unknown'} PACKAGES={native_count} "
+          f"SOURCE_HEALTH={native_health} FLATPAK={stats['flatpak_entries']} "
           f"DESKTOP_TOKENS={stats['desktop_names']} HISTORY={stats['removed_package_names']}")
     print(" | ".join(f"{state}={counts[state]}" for state in ("CANDIDATE", "REVIEW", "UNKNOWN", "ACTIVE", "PROTECTED")))
     print(("AUDIT READ ONLY; --remove requires explicit selection + confirmation."
@@ -1574,12 +1580,17 @@ def main(argv=None):
         parser.error("Lifecycle commands cannot be combined with GUI, scan or move")
     roots = xdg_roots(home)
     if args.installed_sources:
+        from xdg_sources import package_name_count
         if any(bool(x) for x in operations) or args.theme_info:
             parser.error("--installed-sources cannot be combined with lifecycle operations")
         inventory = read_active_names(home, roots)
         packages, flatpaks, snaps, appimages, _units, _processes, _desktops, _active = inventory
+        native = getattr(inventory, 'native_source', None)
+        native_names = (packages if native == 'pacman' else
+                        getattr(inventory, 'distro', {}).get(native, ()))
         print(json.dumps({
-            'native_package_source': getattr(inventory, 'native_source', None),
+            'native_package_source': native,
+            'native_packages': package_name_count(native, native_names),
             "health": dict(getattr(inventory, "status", {})),
             "counts": {"pacman": len(packages),
                        "foreign_pacman_AUR_or_local": len(getattr(inventory, "foreign", ())),
@@ -1588,7 +1599,7 @@ def main(argv=None):
                           getattr(inventory, "flatpak_ids", None) is not None else None),
                        "npm_global_hints": len(getattr(inventory, "npm_global", ())),
                        "pipx_hints": len(getattr(inventory, "pipx", ())),
-                       "dpkg": len(getattr(inventory, "distro", {}).get("dpkg", ())),
+                       "dpkg": package_name_count('dpkg', getattr(inventory, "distro", {}).get("dpkg", ())),
                        "rpm": len(getattr(inventory, "distro", {}).get("rpm", ())),
                        "snap": len(snaps),
                        "appimage": len(getattr(inventory, 'appimage_paths', None)

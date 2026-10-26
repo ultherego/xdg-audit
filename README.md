@@ -179,6 +179,10 @@ independent of how xdg-audit itself is distributed.
 python3 xdg_audit.py --installed-sources
 ```
 
+Text scan reports identify the native database, unique installed package-name
+count and source health. JSON reports expose `native_package_source` and
+`native_packages` while retaining the existing pacman statistics.
+
 The read-only diagnostic reports provider health for pacman, foreign packages,
 Flatpak, Snap, AppImage, installed DEB/RPM packages, and protective hints for
 manual binaries in `~/.local/bin`, `~/bin`, `/usr/local/bin` and `/opt`.
@@ -295,7 +299,7 @@ for the current contract and its limitations.
 
 The unreleased development version on `main` is **`1.7.0-rc2`**. The most recent tagged prerelease is **[v1.7.0-rc1](https://github.com/ultherego/xdg-audit/releases/tag/v1.7.0-rc1)**.
 
-GitHub Actions runs Python 3.10–3.14 tests, GTK4/Qt6/Tk GUI startup under Xvfb, native GTK4/Qt6 Wayland startup with headless Weston, a synthetic benchmark, the isolated end-to-end quarantine/restore/purge test, real SIGKILL recovery checkpoints, native Ubuntu/dpkg and Fedora/RPM lifecycle checks, a Gio desktop-launch test, GTK disk-full error handling, and source ZIP/tar.gz integrity checks. The owner confirmed the tested GUI functionality on 2026-10-26. Additional GNOME/KDE/Xfce session coverage remains separately recorded in the readiness checklist.
+GitHub Actions runs Python 3.10–3.14 tests, GTK4/Qt6/Tk GUI startup under Xvfb, native GTK4/Qt6 Wayland startup with headless Weston, a synthetic benchmark, the isolated end-to-end quarantine/restore/purge test, real SIGKILL recovery checkpoints, native Arch/pacman, Ubuntu/dpkg and Fedora/RPM protection and lifecycle checks, a Gio desktop-launch test, GTK disk-full error handling, and source ZIP/tar.gz integrity checks. The owner confirmed the tested GUI functionality on 2026-10-26. Additional GNOME/KDE/Xfce session coverage remains separately recorded in the readiness checklist.
 
 ```bash
 python3 -m unittest discover -s tests -v
