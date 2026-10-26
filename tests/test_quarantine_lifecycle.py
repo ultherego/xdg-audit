@@ -8,7 +8,7 @@ import tempfile
 import unittest
 
 import xdg_audit as audit
-from xdg_quarantine_lifecycle import inspect_run, purge_run, expired_run_ids, capture_inventory
+from xdg_quarantine_lifecycle import inspect_run, purge_run, expired_run_ids, capture_inventory, adopt_legacy_run
 
 
 class LifecycleTests(unittest.TestCase):
@@ -132,6 +132,32 @@ class LifecycleTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.purge(dry_run=False)
         self.assertTrue(self.dest.exists())
+
+    def test_adopt_explicit_legacy_inventory(self):
+        self.row.pop("tree_inventory")
+        self.write()
+        with self.assertRaises(ValueError):
+            self.purge(dry_run=False)
+        adopted = adopt_legacy_run(self.home, self.roots, self.run_id, self.check_mounts)
+        self.assertEqual(adopted["adopted"], 1)
+        self.purge(dry_run=False)
+        self.assertFalse(self.dest.exists())
+
+    def test_resume_after_partial_nested_delete(self):
+        self.row["move_status"] = "purging"
+        self.write()
+        (self.dest / "settings").unlink()
+        self.purge(dry_run=False)
+        self.assertFalse(self.dest.exists())
+
+    def test_external_symlink_present_at_capture_is_unlinked_not_followed(self):
+        target = self.home / "outside"
+        target.write_text("untouched")
+        (self.dest / "link").symlink_to(target)
+        self.row["tree_inventory"] = capture_inventory(self.dest)
+        self.write()
+        self.purge(dry_run=False)
+        self.assertEqual(target.read_text(), "untouched")
 
     def test_retention_boundary(self):
         now = dt.datetime(2026, 10, 26, 12, 0)
