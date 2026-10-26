@@ -1400,7 +1400,11 @@ def main(argv=None):
         if args.automatic_purge and not policy["automatic"]:
             raise SystemExit("ERROR: automatic deletion not enabled in retention settings")
         days = args.retention_days if args.retention_days is not None else policy["days"]
-        ids = [args.purge] if args.purge else expired_run_ids(quarantine_runs(home, roots), days)
+        # Retention may purge only healthy runs that still contain quarantined
+        # objects. Finished RESTORED/PURGED and interrupted runs are excluded.
+        ids = ([args.purge] if args.purge else expired_run_ids(
+            [run for run in quarantine_runs(home, roots)
+             if run["status"] == "QUARANTINED"], days))
         previews = []
         failed = []
         for run_id in ids:
