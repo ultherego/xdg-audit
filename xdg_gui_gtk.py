@@ -1173,6 +1173,9 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
             polkit=Gtk.Button(label=tr('Test Polkit…'))
             polkit.connect('clicked',lambda *_:self.polkit_selftest())
             append(tools_box,polkit)
+            filesystem=Gtk.Button(label=tr('Test uprawnień ~/.config…'))
+            filesystem.connect('clicked',lambda *_:self.config_access_selftest())
+            append(tools_box,filesystem)
             history=Gtk.Button(label=tr('Wyczyść całą zakończoną historię…'))
             history.connect('clicked',lambda *_:self.cleanup_all_history())
             append(tools_box,history)
@@ -1294,42 +1297,58 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
 
         def polkit_selftest(self):
             from xdg_polkit import status as polkit_status, run_test
-            info=polkit_status()
-            if not info['ready']:
-                self._quarantine_notice(
-                    tr('Test Polkit wymaga instalacji systemowego helpera. Instrukcja: packaging/polkit/README.md'))
+            if not polkit_status()['ready']:
+                self._quarantine_notice(tr('pkexec lub systemowy /usr/bin/id jest niedostępny.'))
                 return
-
-            def delete_fixture():
-                def completed(ok, result):
+            def approve():
+                def done(ok, result):
                     if ok:
                         self._quarantine_notice(
-                            tr('Test Polkit zakończony: usunięto wyłącznie odizolowany katalog testowy.')+
-                            '\n'+result['fixture'])
+                            tr('Polkit potwierdził uprawnienia administratora. Uruchomiono tylko odczyt UID=0; żadne pliki nie zostały zmienione.'))
                     else:
                         self._quarantine_notice(tf('Błąd testu Polkit: {error}',error=result))
                 self._quarantine_job(
-                    lambda:run_test('test-delete',graphical=True),
-                    completed,'Uwierzytelnianie Polkit…')
+                    lambda:run_test('test-auth',graphical=True),
+                    done,'Uwierzytelnianie Polkit…')
+            self.prompt(tr('Test Polkit'),
+                        tr('Systemowy Polkit poprosi o autoryzację uruchomienia /usr/bin/id -u. Nic nie zostanie zapisane ani usunięte. Nie wymaga instalacji helpera.'),
+                        'AUTH',approve)
 
-            def create_fixture():
-                def completed(ok, result):
-                    if not ok:
-                        self._quarantine_notice(tf('Błąd testu Polkit: {error}',error=result))
-                        return
-                    self.prompt(
-                        tr('Usuń katalog testowy Polkit'),
-                        tr('Polkit utworzył katalog testowy. Usunę tylko ten katalog, nigdy kwarantannę użytkownika.')+
-                        '\n'+result['fixture'],
-                        'DELETE TEST',delete_fixture)
-                self._quarantine_job(
-                    lambda:run_test('test-create',graphical=True),
-                    completed,'Uwierzytelnianie Polkit…')
-
-            self.prompt(
-                tr('Test Polkit'),
-                tr('Poproszę system Polkit o autoryzację i utworzę odizolowany katalog testowy, bez dotykania danych kwarantanny.'),
-                'TEST',create_fixture)
+        def config_access_selftest(self):
+            from xdg_config_selftest import create, diagnose, repair, cleanup, path
+            def after_create(ok, result):
+                if not ok:
+                    self._quarantine_notice(tf('Błąd testu uprawnień: {error}',error=result))
+                    return
+                details=diagnose(home)
+                desc=(tr('Utworzono testowe pliki użytkownika:')+'\n'+
+                      result['restricted_directory']+'\n'+
+                      tf('Katalog: {mode}',mode=details['directory_mode'])+
+                      ', '+tf('Plik: {mode}',mode=details['file_mode'])+'\n'+
+                      tr('Naprawię odczyt tylko tych dwóch obiektów, bez Polkit i bez roota.'))
+                def approve_repair():
+                    def repaired(success, outcome):
+                        if not success:
+                            self._quarantine_notice(tf('Błąd testu uprawnień: {error}',error=outcome))
+                            return
+                        def approve_cleanup():
+                            def cleaned(yes, res):
+                                if yes:
+                                    self._quarantine_notice(
+                                        tr('Usunięto wyłącznie katalog testowy ~/.config/xdg-audit-polkit-test.'))
+                                else:
+                                    self._quarantine_notice(tf('Błąd testu uprawnień: {error}',error=res))
+                            self._quarantine_job(lambda:cleanup(home),cleaned,'Usuwanie katalogu testowego…')
+                        self.prompt(tr('Usuń katalog testowy'),
+                                    tr('Zakończono naprawę. Zatwierdź usunięcie wyłącznie katalogu testowego.'),
+                                    'DELETE TEST',approve_cleanup)
+                    self._quarantine_job(lambda:repair(home),repaired,'Test naprawy uprawnień…')
+                self.prompt(tr('Naprawa testowych uprawnień'),desc,'ACCESS TEST',approve_repair)
+            def approve_create():
+                self._quarantine_job(lambda:create(home),after_create,'Tworzenie plików testowych…')
+            self.prompt(tr('Test uprawnień ~/.config'),
+                        tr('Utworzę ~/.config/xdg-audit-polkit-test z katalogiem 111 i plikiem 000. Nie zmienię innych danych.'),
+                        'TEST',approve_create)
 
         def _quarantine_notice(self, message):
             """Show a visible GTK notice instead of a hard-to-see footer update."""
