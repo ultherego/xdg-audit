@@ -100,45 +100,43 @@ class PolkitHelperTests(unittest.TestCase):
 
 
 class PolkitClientTests(unittest.TestCase):
-    def test_untrusted_helper_is_not_executed(self):
+    def test_untrusted_pkexec_is_not_executed(self):
         with patch("xdg_polkit.status", return_value={"ready": False}), \
              patch("xdg_polkit.subprocess.run") as command:
             with self.assertRaises(xdg_polkit.PolkitUnavailable):
-                xdg_polkit.run_test("test-delete")
+                xdg_polkit.run_test("test-auth")
             command.assert_not_called()
 
-    def test_executes_only_pinned_program_and_action(self):
+    def test_native_pkexec_invokes_only_read_only_id(self):
         with patch("xdg_polkit.status", return_value={"ready": True}), \
              patch("xdg_polkit.shutil.which", return_value="/usr/bin/pkexec"), \
              patch("xdg_polkit.subprocess.run", return_value=SimpleNamespace(
-                 returncode=0, stdout=json.dumps({
-                     "status": "created", "fixture": "/var/lib/xdg-audit/polkit-selftest/123",
-                     "uid": os.getuid(), "deleted": False}), stderr="")) as command:
-            result = xdg_polkit.run_test("test-create", graphical=True)
-            self.assertEqual(result["status"], "created")
+                 returncode=0, stdout="0\\n", stderr="")) as command:
+            result = xdg_polkit.run_test("test-auth", graphical=True)
+            self.assertEqual(result["effective_uid"], 0)
+            self.assertFalse(result["file_operations"])
             self.assertEqual(command.call_args.args[0], [
                 "/usr/bin/pkexec", "--disable-internal-agent",
-                str(xdg_polkit.HELPER), "test-create"
+                "/usr/bin/id", "-u"
             ])
 
-    def test_cancelled_auth_is_never_reported_as_success(self):
+    def test_cancelled_auth_is_never_success(self):
         with patch("xdg_polkit.status", return_value={"ready": True}), \
              patch("xdg_polkit.shutil.which", return_value="/usr/bin/pkexec"), \
              patch("xdg_polkit.subprocess.run", return_value=SimpleNamespace(
                  returncode=126, stdout="", stderr="")):
             with self.assertRaisesRegex(xdg_polkit.PolkitUnavailable, "cancelled"):
-                xdg_polkit.run_test("test-delete")
+                xdg_polkit.run_test("test-auth")
 
-    def test_rejects_wrong_uid_and_arbitrary_operation(self):
+    def test_wrong_uid_and_old_privileged_actions_rejected(self):
         with self.assertRaises(ValueError):
-            xdg_polkit.run_test("delete", graphical=True)
+            xdg_polkit.run_test("test-delete", graphical=True)
         with patch("xdg_polkit.status", return_value={"ready": True}), \
              patch("xdg_polkit.shutil.which", return_value="/usr/bin/pkexec"), \
              patch("xdg_polkit.subprocess.run", return_value=SimpleNamespace(
-                 returncode=0, stdout=json.dumps({
-                     "status": "deleted", "uid": os.getuid()+1, "deleted": True}), stderr="")):
-            with self.assertRaisesRegex(xdg_polkit.PolkitUnavailable, "different caller UID"):
-                xdg_polkit.run_test("test-delete")
+                 returncode=0, stdout="1000\\n", stderr="")):
+            with self.assertRaises(xdg_polkit.PolkitUnavailable):
+                xdg_polkit.run_test("test-auth")
 
 
 if __name__ == "__main__":
