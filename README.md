@@ -128,6 +128,11 @@ xdg-audit scans user-scoped configuration, data, state, cache, Flatpak/Snap dire
 | 📊 | **Portable reports** | JSON export and comparison against a prior audit |
 | 🧩 | **Personal controls** | Keep rules and app/package aliases |
 
+Flatpak and Snap tabs are hidden after a complete scan when their integration
+is unavailable and no leftover data was found. Existing data and failed probes
+keep the corresponding tab accessible. Dialogs fit their contents with 20 px
+internal padding and scroll long messages within the available screen area.
+
 ## 🚀 Get started
 
 **Linux + Python 3.10+**. The command-line engine uses the Python standard library. There is no `pip install` step or automatic dependency installer.

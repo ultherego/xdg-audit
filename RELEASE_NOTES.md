@@ -5,6 +5,10 @@
 
 ## New since v1.7.0-rc1
 
+- Hide unavailable Flatpak/Snap tabs only when no leftover data exists, with
+  stable scope selection and automatic fallback after a completed scan.
+- Content-sized GTK/Qt/Tk dialogs with 20 px internal padding, bounded long
+  messages, accessible actions and unchanged confirmation/cancellation semantics.
 - Healthy empty foreign-package filters distinguished from failures, with a
   live pacman query check in native CI.
 - Strict raw Flatpak/native identifiers and complete dpkg architecture qualifiers;

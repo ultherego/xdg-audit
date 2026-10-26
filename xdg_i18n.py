@@ -7,6 +7,9 @@ from __future__ import annotations
 
 LANGUAGES = {'pl': 'Polski', 'en': 'English'}
 EN = {
+    'Tak': 'Yes',
+    'Nie': 'No',
+    'Nieprawidłowa wartość.': 'Invalid value.',
     'Snap': 'Snap',
     "Test uprawnień ~/.config…": "Test ~/.config permissions…",
     "Test uprawnień ~/.config": "Test ~/.config permissions",
