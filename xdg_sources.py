@@ -117,7 +117,9 @@ def dpkg_packages() -> Probe:
                                     "unpacked", "half-configured", "triggers-awaited",
                                     "triggers-pending", "installed")):
             return Probe("dpkg", "parse_error", note="invalid dpkg package status")
-        if state[0] in ("install", "hold") and state[1:] == ["ok", "installed"]:
+        # Want is the requested future action, not the current package state.
+        # deinstall/purge can still be fully installed until dpkg executes it.
+        if state[1:] == ["ok", "installed"]:
             names.add(base_name)
             names.add(name)
     return Probe("dpkg", "ok", frozenset(names))

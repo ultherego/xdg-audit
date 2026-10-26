@@ -965,22 +965,15 @@ def _sync_directory(path: Path) -> None:
 
 
 def _write_manifest_atomic(path: Path, data: dict) -> None:
-    """Durable write-then-replace manifest, with no temp symlink traversal."""
-    import tempfile
-    if path.is_symlink():
-        raise ValueError('Unsafe manifest symlink')
-    fd, temp = tempfile.mkstemp(dir=path.parent, prefix='.manifest-', suffix='.tmp')
+    """Use the same anchored durable writer for MOVE, RESTORE and PURGE."""
+    from xdg_quarantine_lifecycle import _open_path, _write_manifest
+    if path.name != 'manifest.json' or path.is_symlink():
+        raise ValueError('Unsafe manifest name or symlink')
+    fd = _open_path(path.parent)
     try:
-        os.fchmod(fd, 0o600)
-        with os.fdopen(fd, 'w', encoding='utf-8') as stream:
-            json.dump(data, stream, indent=2, ensure_ascii=False)
-            stream.flush()
-            os.fsync(stream.fileno())
-        os.replace(temp, path)
-        _sync_directory(path.parent)
+        _write_manifest(fd, data)
     finally:
-        if os.path.lexists(temp):
-            os.unlink(temp)
+        os.close(fd)
 
 def _safe_rename_noreplace(source: Path, destination: Path,
                            expected_identity: tuple[int, int, int] | None = None) -> None:
@@ -1151,9 +1144,9 @@ def commit_quarantine(chosen: list[Item], roots: dict[str, Path], home: Path,
             row['move_status'] = 'moving'
             _write_manifest_atomic(manifest, payload)
             _safe_rename_noreplace(source, destination, it.identity)
+            moved.append(str(source))
             _sync_directory(source.parent)
             _sync_directory(destination.parent)
-            moved.append(str(source))
             from xdg_quarantine_lifecycle import capture_inventory
             try:
                 row['tree_inventory'] = capture_inventory(destination)
@@ -1276,6 +1269,40 @@ def restore_quarantine_run(home: Path, roots: dict[str, Path], run_id: str, emit
                 emit(f"SKIPPED missing/invalid quarantine identity: {src}")
                 continue
             expected_identity = tuple(raw_identity)
+        if (identity_required and row.get('move_status') in ('moving', 'moved', 'restoring')
+                and src.parent == root and dest.parent == run / scope and dest.name == src.name
+                and src != home and src != root and not dest.exists() and not dest.is_symlink()):
+            # A crash can leave an already-returned object and a stale intent.
+            # Only the original inode can complete this explicitly requested
+            # restore; a newly created collision must never complete a journal.
+            from xdg_quarantine_lifecycle import _open_path, _identity
+            try:
+                originalfd = _open_path(root)
+                try:
+                    original = os.stat(src.name, dir_fd=originalfd, follow_symlinks=False)
+                finally:
+                    os.close(originalfd)
+                scopefd = _open_path(dest.parent)
+                try:
+                    try:
+                        os.stat(dest.name, dir_fd=scopefd, follow_symlinks=False)
+                    except FileNotFoundError:
+                        pass
+                    else:
+                        raise ValueError('Quarantine object reappeared during restore recovery')
+                finally:
+                    os.close(scopefd)
+                if _identity(original) != expected_identity or original.st_uid != os.getuid():
+                    raise ValueError('Original path contains a different object')
+                row['move_status'] = 'restored'
+                _write_manifest_atomic(manifest, payload)
+                count += 1
+                emit(f'RESTORED {src}')
+                continue
+            except (OSError, ValueError) as exc:
+                skipped += 1
+                emit(f'ERROR reconciling restore {src}: {exc}')
+                continue
         if (src.parent != root or dest.parent != run / scope or dest.name != src.name
                 or src == home or src == root or dest.is_symlink() or root.is_symlink()
                 or not (dest.is_dir() or dest.is_file()) or src.exists() or src.is_symlink()
@@ -1284,18 +1311,21 @@ def restore_quarantine_run(home: Path, roots: dict[str, Path], run_id: str, emit
             skipped += 1
             emit(f"SKIPPED unsafe/conflict: {src}")
             continue
+        did_restore = False
         try:
             row['move_status'] = 'restoring'
             _write_manifest_atomic(manifest, payload)
             _safe_rename_noreplace(dest, src, expected_identity)
+            did_restore = True
+            count += 1
             _sync_directory(dest.parent)
             _sync_directory(src.parent)
-            count += 1
             row['move_status'] = 'restored'
             _write_manifest_atomic(manifest, payload)
             emit(f"RESTORED {src}")
         except (OSError, ValueError) as exc:
-            skipped += 1
+            if not did_restore:
+                skipped += 1
             emit(f"ERROR restoring {src}: {exc}")
     return {"restored": count, "skipped": skipped, "run_id": run_id}
 

@@ -17,6 +17,8 @@ class DistroProviderTests(unittest.TestCase):
         output = ("firefox\tinstall ok installed\n"
                   "chromium\tdeinstall ok config-files\n"
                   "curl:amd64\thold ok installed\n"
+                  "pending-remove\tdeinstall ok installed\n"
+                  "pending-purge\tpurge ok installed\n"
                   "unfinished\tinstall ok unpacked\n")
         with patch.object(sources, "_run", return_value=(
             sources.Probe("dpkg", "ok"), output)) as call:
@@ -25,6 +27,8 @@ class DistroProviderTests(unittest.TestCase):
         self.assertIn("firefox", packages.names)
         self.assertIn("curl", packages.names)
         self.assertIn("curl:amd64", packages.names)
+        self.assertIn("pending-remove", packages.names)
+        self.assertIn("pending-purge", packages.names)
         self.assertNotIn("chromium", packages.names)
         self.assertNotIn("unfinished", packages.names)
         self.assertIn("dpkg-query", call.call_args.args[1])

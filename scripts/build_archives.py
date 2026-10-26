@@ -11,14 +11,15 @@ import ast
 import gzip
 import hashlib
 import io
+import json
 import os
 from pathlib import Path
+import stat
 import tarfile
 import zipfile
 
 SOURCE_ROOT = Path(__file__).resolve().parent.parent
-SKIP_DIRS = {'.git', '__pycache__', '.pytest_cache', '.venv', '.env', 'dist', '.build', '.idea', '.vscode'}
-SKIP_SUFFIXES = {'.pyc', '.pyo', '.swp'}
+MANIFEST = 'scripts/archive-files.json'
 
 
 def version() -> str:
@@ -34,10 +35,27 @@ def version() -> str:
 
 
 def inputs() -> list[Path]:
-    return sorted((p for p in SOURCE_ROOT.rglob('*') if p.is_file()
-                   and not any(part in SKIP_DIRS for part in p.relative_to(SOURCE_ROOT).parts)
-                   and p.suffix not in SKIP_SUFFIXES),
-                  key=lambda p: p.relative_to(SOURCE_ROOT).as_posix())
+    # Explicitly reviewed files only. A checkout can contain user reports,
+    # credentials and output directories; globbing it can publish those bytes.
+    names = json.loads((SOURCE_ROOT / MANIFEST).read_text(encoding='utf-8'))
+    if (not isinstance(names, list) or not names or
+            any(not isinstance(name, str) for name in names) or len(set(names)) != len(names)):
+        raise ValueError('Invalid source archive manifest')
+    result = []
+    for name in sorted(names):
+        relative = Path(name)
+        if (relative.is_absolute() or relative.as_posix() != name or
+                any(part in ('', '.', '..') for part in name.split('/'))):
+            raise ValueError('Unsafe archive member path')
+        path = SOURCE_ROOT
+        for part in relative.parts:
+            path = path / part
+            if path.is_symlink():
+                raise ValueError('Symlink in archive source: ' + name)
+        if not stat.S_ISREG(path.lstat().st_mode):
+            raise ValueError('Archive source is not a regular file: ' + name)
+        result.append(path)
+    return result
 
 
 def archives(output_dir: Path) -> list[Path]:

@@ -113,7 +113,7 @@ xdg-audit scans user-scoped configuration, data, state, cache, Flatpak directori
 
 </details>
 
-<sub>Screenshots: GTK4 on Niri / Wayland. User paths are replaced with neutral, illustrative paths; pointer and individual quarantine run identifiers have been removed. These are real application screens, not UI mock-ups.</sub>
+<sub>Screenshots: GTK4 on Niri / Wayland, captured before the final RC2 safety fixes. Counts, classifications and quarantine actions may differ in the current version. User paths are replaced with neutral, illustrative paths; pointer and individual quarantine run identifiers have been removed. These are real application screens, not UI mock-ups.</sub>
 
 ## ✨ Features
 
@@ -280,19 +280,17 @@ Najpierw domykamy bezpieczeństwo i jakość wersji 1.7.0 — bez zmiany
 reguł kwalifikowania osieroconych danych. Zobacz
 [release-readiness checklist](docs/release-readiness.md).
 
-Następny etap będzie dotyczył **wykrywania źródeł instalacji aplikacji**,
-a nie pakowania samego xdg-audit:
-AUR/pakiety foreign, binarki instalowane ręcznie, dokładniejszy Flatpak,
-Snap i AppImage, a później inwentarze `dpkg` i `rpm`.
-Aktualnie AUR instalowany za pomocą pacmana jest już widoczny jako
-zainstalowany pakiet. Szczegółowy plan i ograniczenia bezpieczeństwa:
+Podstawowe inwentarze pacmana/foreign, Flatpaka, Snapa, AppImage,
+binarek ręcznych, npm/pipx oraz `dpkg` i `rpm` już działają.
+Przed rozszerzeniem operacji MOVE poza Arch kończymy walidację P0/P1.
+Szczegółowy stan i ograniczenia bezpieczeństwa:
 [installation-source-support](docs/installation-source-support.md).
 
 ## 🧪 Testing & release status
 
 The unreleased development version on `main` is **`1.7.0-rc2`**. The most recent tagged prerelease is **[v1.7.0-rc1](https://github.com/ultherego/xdg-audit/releases/tag/v1.7.0-rc1)**.
 
-GitHub Actions runs Python 3.10–3.14 tests, GTK4/Qt6/Tk GUI startup under Xvfb, native GTK4/Qt6 Wayland startup with headless Weston, a synthetic benchmark, the isolated end-to-end quarantine/restore/purge test, and source ZIP/tar.gz integrity checks. **Real-session Niri and KDE Plasma usage still deserves separate validation before a stable release.**
+GitHub Actions runs Python 3.10–3.14 tests, GTK4/Qt6/Tk GUI startup under Xvfb, native GTK4/Qt6 Wayland startup with headless Weston, a synthetic benchmark, the isolated end-to-end quarantine/restore/purge test, real SIGKILL recovery checkpoints, a Gio desktop-launch test, GTK disk-full error handling, and source ZIP/tar.gz integrity checks. The owner confirmed the tested GUI functionality on 2026-10-26. Additional GNOME/KDE/Xfce session coverage remains separately recorded in the readiness checklist.
 
 ```bash
 python3 -m unittest discover -s tests -v
@@ -302,4 +300,8 @@ python3 scripts/build_archives.py --output-dir dist
 
 The quarantine test creates a disposable `HOME`, performs real moves, restores and purge, verifies file hashes and handles simulated conflicts without writing into your real XDG directories. Details: [Safe integration testing](docs/testing-quarantine.md).
 
-Desktop-menu installation and distribution packaging are intentionally deferred. See the [changelog](CHANGELOG.md) for version history.
+Optional per-user desktop-menu registration, updating and safe unregistration are described in [Desktop installation](docs/desktop-installation.md). Distribution packaging is intentionally deferred. See the [changelog](CHANGELOG.md) for version history.
+
+Source archives use the explicit allowlist in `scripts/archive-files.json`.
+Add intended source files there when extending the project; incidental checkout
+files and symbolic links must never enter a release archive.

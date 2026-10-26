@@ -190,11 +190,14 @@ def _write_manifest(fd: int, payload: dict) -> None:
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
     tmp = os.open(name, flags, 0o600, dir_fd=fd)
     try:
-        with os.fdopen(tmp, "w", encoding="utf-8") as handle:
+        handle = os.fdopen(tmp, "w", encoding="utf-8")
+        # fdopen owns the descriptor even if dump/flush/fsync later fails.
+        # A second close would mask ENOSPC/EACCES with EBADF.
+        tmp = -1
+        with handle:
             json.dump(payload, handle, indent=2, ensure_ascii=False)
             handle.flush()
             os.fsync(handle.fileno())
-        tmp = -1
         os.replace(name, "manifest.json", src_dir_fd=fd, dst_dir_fd=fd)
         os.fsync(fd)
     finally:

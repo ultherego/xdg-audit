@@ -194,7 +194,7 @@ class SourceProviderTests(unittest.TestCase):
             import io
             import json
             output = io.StringIO()
-            with contextlib.redirect_stdout(output):
+            with contextlib.redirect_stdout(output), patch.object(audit, "check_no_root"):
                 result = audit.main(["--home", str(Path(temp)), "--installed-sources"])
             self.assertEqual(result, 0)
             report = json.loads(output.getvalue())

@@ -6,6 +6,15 @@ o opublikowaniu nowego tagu.
 
 ## Nowe od v1.7.0-rc1
 
+- Osiem testów rzeczywistego zakończenia procesu przez `SIGKILL` i odzyskiwania
+  MOVE/RESTORE/PURGE; testy błędów ENOSPC/EACCES przy zapisie dziennika.
+- Wznowienie zakończonego RESTORE uzgadnia dziennik na podstawie oryginalnego
+  inode. Liczniki uwzględniają rename nawet przy późniejszym błędzie synchronizacji.
+- Archiwa źródeł obejmują wyłącznie jawną listę plików projektu, a instalator
+  desktopowy zapisuje atomowo bez podążania za symlinkami katalogów nadrzędnych.
+- Rzeczywisty test dpkg bez pacmana potwierdza skan tylko do odczytu i blokadę
+  MOVE; CI sprawdza również uruchomienie launchera o ścieżce ze znakami specjalnymi
+  oraz komunikat pełnego dysku w GTK.
 - Pełny cykl kwarantanny z jawnie zatwierdzanym `PURGE`, rekursywnym
   inwentarzem SHA-256, sprawdzaniem tożsamości plików i dziennikiem v3.
 - Bezpieczne wznowienie po przerwaniu operacji oraz osobne `ADOPT`
@@ -54,8 +63,10 @@ o opublikowaniu nowego tagu.
   narzędzie naprawia tylko sprawdzone obiekty bieżącego użytkownika.
 - `PURGE` nie oznacza bezpiecznego nadpisywania nośnika.
   Wewnętrzne limity lub brak dostępu blokują operację.
-- To nadal kandydat; potrzebne są testy ręczne GNOME/KDE/Xfce,
-  decyzja właściciela o licencji oraz przegląd finalnego pakowania.
+- To nadal kandydat. Autor potwierdził działanie testowanego GUI (2026-10-26),
+  ale nie udokumentowano osobno macierzy GNOME/KDE/Xfce.
+  Niezależny przegląd bezpieczeństwa, decyzja o licencji oraz odbiór
+  finalnych artefaktów nadal pozostają otwarte.
 
 ## Weryfikacja
 
@@ -63,7 +74,9 @@ o opublikowaniu nowego tagu.
 python3 -m unittest discover -s tests -q
 python3 scripts/smoke_quarantine_cycle.py --synthetic-inventory
 python3 scripts/build_archives.py --output-dir dist
-(cd dist && sha256sum -c SHA256SUMS)
+cd dist
+sha256sum -c SHA256SUMS
+cd ..
 ```
 
 Dalsza kontrola jakości:
@@ -71,3 +84,6 @@ Dalsza kontrola jakości:
 Rozwój wykrywania AUR / binarek / Flatpak / Snap / AppImage i później
 DEB/RPM:
 [docs/installation-source-support.md](docs/installation-source-support.md).
+
+Dokumentacja instalacji/aktualizacji/usuwania rejestracji desktopowej:
+[docs/desktop-installation.md](docs/desktop-installation.md).
