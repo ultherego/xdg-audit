@@ -379,6 +379,9 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
             qexpired=QtWidgets.QPushButton(tr('Usuń wygasłe…'))
             qexpired.clicked.connect(self.purge_expired_dialog)
             qb.addWidget(qexpired)
+            qretention=QtWidgets.QPushButton(tr('Ustaw retencję…'))
+            qretention.clicked.connect(self.configure_retention_dialog)
+            qb.addWidget(qretention)
             qlayout.addLayout(qb)
             self.content_stack.addWidget(qpage)
             layout.addWidget(self.content_stack,1)
@@ -469,6 +472,21 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
             if run:
                 QtWidgets.QMessageBox.information(self,tr('Zawartość kwarantanny'),
                     '\n'.join(x.get('source','?') for x in run['items'][:45]) or tr('(brak danych)'))
+
+        def configure_retention_dialog(self):
+            from xdg_retention import load, save
+            try:
+                current=load(home,engine.xdg_roots(home))
+                days,ok=QtWidgets.QInputDialog.getInt(self,tr('Retencja'),
+                    tr('Dni przechowywania:'),current['days'],1,3650,1)
+                if ok:
+                    current['days']=days
+                    save(home,engine.xdg_roots(home),current)
+                    self.statusBar().showMessage(
+                        tf('Ustawiono retencję: {days} dni',days=days))
+            except (ValueError,OSError) as exc:
+                QtWidgets.QMessageBox.warning(self,tr('Retencja'),
+                    tf('Nie można zapisać retencji: {error}',error=exc))
 
         def purge_dialog(self):
             entry=self.qtree.currentItem()
