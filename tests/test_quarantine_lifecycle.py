@@ -8,7 +8,7 @@ import tempfile
 import unittest
 
 import xdg_audit as audit
-from xdg_quarantine_lifecycle import inspect_run, purge_run, expired_run_ids, capture_inventory, adopt_legacy_run
+from xdg_quarantine_lifecycle import inspect_run, purge_run, expired_run_ids, capture_inventory, adopt_legacy_run, recover_manifest_temps
 
 
 class LifecycleTests(unittest.TestCase):
@@ -178,6 +178,31 @@ class LifecycleTests(unittest.TestCase):
         self.purge(dry_run=False)
         self.assertFalse(self.dest.exists())
         self.assertFalse(destination2.exists())
+
+    def test_recovery_cleans_only_abandoned_manifest_temps(self):
+        temp = self.run / ".manifest-aabbccddeeff00112233445566778899.tmp"
+        temp.write_text("incomplete")
+        temp.chmod(0o600)
+        with self.assertRaises(ValueError):
+            self.purge(dry_run=False)
+        report = recover_manifest_temps(self.home, self.roots, self.run_id, dry_run=True)
+        self.assertEqual(report["temporary_files"], 1)
+        self.assertTrue(temp.exists())
+        recover_manifest_temps(self.home, self.roots, self.run_id, dry_run=False)
+        self.assertFalse(temp.exists())
+        self.purge(dry_run=False)
+        self.assertFalse(self.dest.exists())
+
+    def test_recovery_rejects_unknown_untracked_file(self):
+        temp = self.run / ".manifest-aabbccddeeff00112233445566778899.tmp"
+        temp.write_text("temp")
+        temp.chmod(0o600)
+        unknown = self.run / "unrelated"
+        unknown.write_text("preserve")
+        with self.assertRaises(ValueError):
+            recover_manifest_temps(self.home, self.roots, self.run_id, dry_run=False)
+        self.assertTrue(temp.exists())
+        self.assertTrue(unknown.exists())
 
     def test_retention_boundary(self):
         now = dt.datetime(2026, 10, 26, 12, 0)
