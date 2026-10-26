@@ -121,7 +121,12 @@ class SourceProviderTests(unittest.TestCase):
                 for idx in range(100_000):
                     seen.append(idx)
                     yield folder / f"item-{idx}.AppImage"
-            with patch.object(Path, "iterdir", many):
+            original_lstat = Path.lstat
+            def fake_lstat(path):
+                if path.name.startswith("item-"):
+                    return original_lstat(folder)  # Simulate harmless non-regular entries.
+                return original_lstat(path)
+            with patch.object(Path, "iterdir", many), patch.object(Path, "lstat", fake_lstat):
                 names, status = sources._safe_direct_children(
                     folder, extensions=(".appimage",), anchor=home)
             self.assertEqual(status, "failed")
