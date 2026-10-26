@@ -59,6 +59,8 @@ offering another individually approved correction if a different object
 still blocks access. This includes:
 
 - directories without owner-read (`111 → 511`),
+- directories without owner-search/execute permission (`400 → 500`, or
+  `000 → 500` if both owner read and search are absent),
 - user-owned, single-linked regular files without owner-read (`000 → 400`),
 - **nonempty** directories that can be read but lack owner-write, required
   to unlink their children (`511 → 711`).
