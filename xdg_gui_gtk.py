@@ -1054,9 +1054,15 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
             confirm.connect('clicked',accept)
             append(actions,confirm)
             set_child(dialog,outer)
+            # Set GTK window-local focus before mapping the transient modal;
+            # an immediate grab_focus() alone can be lost on Wayland/Xvfb.
+            dialog.set_focus(entry)
             dialog.present() if GTK4 else dialog.show_all()
-            # Focus belongs to the confirmation entry, never the description.
-            entry.grab_focus()
+            def ensure_entry_focus():
+                if dialog.get_visible():
+                    entry.grab_focus()
+                return False
+            GLib.idle_add(ensure_entry_focus)
 
         def move(self,*_):
             if self.busy:return
