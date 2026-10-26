@@ -472,6 +472,8 @@ class Item:
                 ('installed flatpak:', 'flatpak', 'strong'),
                 ('installed snap:', 'snap', 'strong'),
                 ('appimage found:', 'appimage', 'medium'),
+                ('manual executable found', 'manual_binary', 'weak'),
+                ('installed-app inventory failed:', 'source_health', 'weak'),
                 ('executable on path:', 'executable', 'medium'),
                 ('running executable:', 'process', 'medium'),
                 ('user systemd unit:', 'systemd_user', 'medium'),
