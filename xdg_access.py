@@ -32,7 +32,7 @@ def authority_context() -> dict:
         "session": os.environ.get("XDG_SESSION_ID") or None,
         "session_type": os.environ.get("XDG_SESSION_TYPE") or None,
         "pkexec_installed": shutil.which("pkexec") is not None,
-        "authorization": "delegated_to_system",
+        "authorization": "not_requested",
     }
 
 
