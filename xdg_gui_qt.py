@@ -390,8 +390,8 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
             qexpired=QtWidgets.QPushButton(tr('Usuń wygasłe…'))
             qexpired.clicked.connect(self.purge_expired_dialog)
             qb.addWidget(qexpired)
-            qexpired_history=QtWidgets.QPushButton(tr('Wyczyść starą historię…'))
-            qexpired_history.clicked.connect(self.cleanup_expired_history_dialog)
+            qexpired_history=QtWidgets.QPushButton(tr('Wyczyść całą zakończoną historię…'))
+            qexpired_history.clicked.connect(self.cleanup_all_history_dialog)
             qb.addWidget(qexpired_history)
             qretention=QtWidgets.QPushButton(tr('Ustaw retencję…'))
             qretention.clicked.connect(self.configure_retention_dialog)
@@ -530,6 +530,19 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
             selected=self.qtree.currentItem()
             if selected is not None:
                 self._cleanup_history_runs([selected.data(0,Role)])
+
+        def cleanup_all_history_dialog(self):
+            def completed(ok, outcome):
+                if not ok:
+                    QtWidgets.QMessageBox.critical(self,tr('Historia'),str(outcome))
+                elif outcome:
+                    self._cleanup_history_runs(outcome)
+                else:
+                    QtWidgets.QMessageBox.information(self,tr('Historia'),
+                        tr('Brak zakończonych operacji do wyczyszczenia. Aktywne i niedokończone pozostają chronione.'))
+            self._quarantine_job(
+                lambda:engine.completed_quarantine_history(home,engine.xdg_roots(home)),
+                completed,'Sprawdzanie historii…')
 
         def cleanup_expired_history_dialog(self):
             def completed(ok, outcome):
