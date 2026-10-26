@@ -259,6 +259,8 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
             ttk.Button(qbuttons,text=tr('Usuń wygasłe…'),command=self.purge_expired).pack(side='right',padx=6)
             ttk.Button(qbuttons,text=tr('Ustaw retencję…'),command=self.configure_retention).pack(side='right',padx=6)
             ttk.Button(qbuttons,text=tr('Usuń historię…'),command=self.cleanup_history).pack(side='right',padx=6)
+            ttk.Button(qbuttons,text=tr('Test Polkit…'),
+                       command=self.polkit_selftest).pack(side='right',padx=6)
             ttk.Button(qbuttons,text=tr('Wyczyść całą zakończoną historię…'),
                        command=self.cleanup_all_history).pack(side='right',padx=6)
             idx=next((i for i,(_,scope) in enumerate(SCOPE_LABELS) if scope==args.scope),0)
@@ -726,6 +728,45 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
             run_gui_job(operation, lambda *_:None,
                         lambda _cb, ok, value:self.jobs.put(
                             ('quarantine-job',(ok,value))))
+
+        def polkit_selftest(self):
+            from xdg_polkit import status as polkit_status, run_test
+            if not polkit_status()['ready']:
+                messagebox.showwarning(
+                    tr('Test Polkit'),
+                    tr('Test Polkit wymaga instalacji systemowego helpera. Instrukcja: packaging/polkit/README.md'),
+                    parent=root)
+                return
+            if not messagebox.askyesno(tr('Test Polkit'),
+                tr('Poproszę system Polkit o autoryzację i utworzę odizolowany katalog testowy, bez dotykania danych kwarantanny.'),
+                parent=root):
+                return
+            if simpledialog.askstring(tr('Test Polkit'),tr('Wpisz TEST:'),parent=root)!='TEST':
+                return
+            def created(ok,result):
+                if not ok:
+                    messagebox.showerror(tr('Test Polkit'),str(result),parent=root)
+                    return
+                if not messagebox.askyesno(tr('Usuń katalog testowy Polkit'),
+                    tr('Polkit utworzył katalog testowy. Usunę tylko ten katalog, nigdy kwarantannę użytkownika.')+
+                    '\n'+result['fixture'],parent=root):
+                    return
+                if simpledialog.askstring(tr('Usuń katalog testowy Polkit'),
+                    tr('Wpisz DELETE TEST:'),parent=root)!='DELETE TEST':
+                    return
+                def deleted(ok,outcome):
+                    if ok:
+                        messagebox.showinfo(tr('Test Polkit'),
+                            tr('Test Polkit zakończony: usunięto wyłącznie odizolowany katalog testowy.')+
+                            '\n'+outcome['fixture'],parent=root)
+                    else:
+                        messagebox.showerror(tr('Test Polkit'),str(outcome),parent=root)
+                self._quarantine_job(
+                    lambda:run_test('test-delete',graphical=True),
+                    deleted,'Uwierzytelnianie Polkit…')
+            self._quarantine_job(
+                lambda:run_test('test-create',graphical=True),
+                created,'Uwierzytelnianie Polkit…')
 
         def cleanup_all_history(self):
             def done(ok, result):
