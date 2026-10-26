@@ -200,9 +200,11 @@ python3 xdg_audit.py --cleanup-history RUN_ID --dry-run
 python3 xdg_audit.py --cleanup-expired-history # 30 days after PURGE
 python3 xdg_audit.py --cleanup-all-history    # Preview all completed history
 python3 xdg_audit.py --cleanup-all-history --execute # Explicit HISTORY confirmation
-python3 xdg_audit.py --polkit-test-status      # Read-only helper/status check
-python3 xdg_audit.py --polkit-test-create      # TEST + Polkit authorization
-python3 xdg_audit.py --polkit-test-delete      # DELETE TEST + Polkit authorization
+python3 xdg_audit.py --polkit-test-status      # Read-only existing Polkit check
+python3 xdg_audit.py --polkit-test-auth        # AUTH + native Polkit id -u
+python3 xdg_audit.py --polkit-test-create      # TEST: create ~/.config fixture
+python3 xdg_audit.py --polkit-test-repair      # ACCESS TEST: owner-only repair
+python3 xdg_audit.py --polkit-test-delete      # DELETE TEST: clean test-only fixture
 ```
 
 Available scopes: `all`, `config`, `data`, `state`, `cache`, `flatpak`, `dotfiles`.
@@ -212,12 +214,14 @@ their manifest is cleaned up; that history may be automatically removed 30
 days after full PURGE, but only with explicit opt-in to automatic retention.
 Incomplete or corrupted journals are never auto-removed.
 
-For an optional **real Polkit authorization test**, see the
-[system helper installation and isolated test guide](packaging/polkit/README.md).
-GTK, Qt and Tk expose **Test Polkit…** in Quarantine. The helper is a
-root-installed, fixed-purpose executable: it can create/delete only a
-dedicated test directory under /var/lib/xdg-audit, never actual quarantined
-data. It does not grant elevated PURGE capabilities.
+**Polkit requires no xdg-audit installation.** The GUI's **Test Polkit…**
+button requests the existing system Polkit agent to authorize the fixed
+read-only command `/usr/bin/id -u`. The separate **Test uprawnień ~/.config…**
+button creates a user-owned restricted directory `pkg` (mode 111) and
+file (mode 000) under `~/.config/xdg-audit-polkit-test`, tests owner-only
+permission repair and offers isolated cleanup. These are **independent tests**.
+No new policy, privileged helper, sudo password form, or root-owned file
+is needed. Neither test enables root access for the actual quarantine/PURGE.
 
 See [Quarantine lifecycle](docs/quarantine-lifecycle.md) for recovery,
 history-only cleanup, manual/automatic retention, user-scoped systemd
