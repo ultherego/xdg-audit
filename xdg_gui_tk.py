@@ -867,7 +867,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                     return
                 msg+='\n'+tf('Proponowana zmiana: {before} → {after}',
                               before=issue['mode'],after=issue['suggested_mode'])
-                msg+='\n'+tr('Zmienię tylko prawo odczytu właściciela. Bez sudo i bez usuwania plików.')
+                msg+='\n'+tr('Zmienię tylko wskazane uprawnienia właściciela w kwarantannie. Bez sudo i bez usuwania plików.')
                 if not messagebox.askyesno(tr('Napraw dostęp'),msg,parent=root):return
                 if simpledialog.askstring(tr('Napraw dostęp'),tr('Wpisz ACCESS:'),
                                           parent=root) != 'ACCESS':return
