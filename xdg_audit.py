@@ -1329,7 +1329,21 @@ def main(argv=None):
         from xdg_quarantine_lifecycle import (inspect_run, purge_run, expired_run_ids,
                                               adopt_legacy_run, recover_manifest_temps)
         if args.configure_retention is not None or args.enable_retention or args.disable_retention:
-            if args.cleanup_history or args.cleanup_expired_history:
+            policy = load_retention(home, roots)
+            if args.configure_retention is not None:
+                if not 1 <= args.configure_retention <= 3650:
+                    parser.error("Retention days must be between 1 and 3650")
+                policy["days"] = args.configure_retention
+            elif args.enable_retention:
+                if not sys.stdin.isatty() or input("Type ENABLE to permit scheduled purge: ").strip() != "ENABLE":
+                    raise SystemExit("ERROR: scheduled purge not enabled")
+                policy["automatic"] = True
+            elif args.disable_retention:
+                policy["automatic"] = False
+            save_retention(home, roots, policy)
+            print(json.dumps(policy))
+            return 0
+        if args.cleanup_history or args.cleanup_expired_history:
             from xdg_quarantine_history import cleanup_history, history_candidates
             ids = ([args.cleanup_history] if args.cleanup_history else
                    history_candidates(home, roots,
@@ -1353,20 +1367,6 @@ def main(argv=None):
             for plan in previews:
                 cleanup_history(home, roots, plan["run_id"], dry_run=False)
                 print("HISTORY REMOVED:", plan["run_id"])
-            return 0
-        policy = load_retention(home, roots)
-            if args.configure_retention is not None:
-                if not 1 <= args.configure_retention <= 3650:
-                    parser.error("Retention days must be between 1 and 3650")
-                policy["days"] = args.configure_retention
-            elif args.enable_retention:
-                if not sys.stdin.isatty() or input("Type ENABLE to permit scheduled purge: ").strip() != "ENABLE":
-                    raise SystemExit("ERROR: scheduled purge not enabled")
-                policy["automatic"] = True
-            elif args.disable_retention:
-                policy["automatic"] = False
-            save_retention(home, roots, policy)
-            print(json.dumps(policy))
             return 0
         if args.recover_journal:
             preview = recover_manifest_temps(home, roots, args.recover_journal, dry_run=True)
