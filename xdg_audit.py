@@ -1236,7 +1236,12 @@ def main(argv=None):
     parser.add_argument("--quarantine-info", metavar="RUN_ID", help="Inspect a v3 quarantine run")
     parser.add_argument("--purge", metavar="RUN_ID", help="Permanently delete quarantined objects")
     parser.add_argument("--purge-expired", action="store_true", help="Preview expired quarantine runs")
-    parser.add_argument("--retention-days", type=int, default=30, metavar="DAYS")
+    parser.add_argument("--retention-days", type=int, default=None, metavar="DAYS")
+    parser.add_argument("--adopt-quarantine", metavar="RUN_ID", help="Approve current legacy contents for later purge")
+    parser.add_argument("--automatic-purge", action="store_true", help="Run opt-in scheduled cleanup without TTY")
+    parser.add_argument("--configure-retention", type=int, metavar="DAYS", help="Save retention days")
+    parser.add_argument("--enable-retention", action="store_true", help="Enable scheduled purge (requires explicit confirmation)")
+    parser.add_argument("--disable-retention", action="store_true", help="Disable scheduled purge")
     parser.add_argument("--execute", action="store_true", help="Execute purge-expired after confirmation")
     parser.add_argument("--dry-run", action="store_true", help="Preview a purge without writes")
     argv = list(sys.argv[1:] if argv is None else argv)
@@ -1258,46 +1263,92 @@ def main(argv=None):
         parser.error("--select requires --remove")
     if args.allow_uncertain and not args.remove:
         parser.error("--allow-uncertain requires --remove")
-    operations = (args.restore, args.list_quarantine, args.quarantine_info, args.purge, args.purge_expired)
+    operations = (args.restore, args.list_quarantine, args.quarantine_info, args.purge,
+                  args.purge_expired, args.adopt_quarantine, args.automatic_purge,
+                  args.configure_retention is not None, args.enable_retention,
+                  args.disable_retention)
     if sum(bool(x) for x in operations) > 1:
         parser.error("Select a single quarantine operation")
-    if not 1 <= args.retention_days <= 3650:
+    if args.retention_days is not None and not 1 <= args.retention_days <= 3650:
         parser.error("--retention-days must be between 1 and 3650")
     if args.execute and not args.purge_expired:
         parser.error("--execute requires --purge-expired")
-    if (args.quarantine_info or args.purge or args.purge_expired) and (args.gui or args.remove or args.json):
-        parser.error("Cannot combine lifecycle operations with GUI, move or report modes")
+    lifecycle = any(bool(x) for x in operations[2:])
+    if lifecycle and (args.gui or args.remove or args.json or args.compare or args.select):
+        parser.error("Lifecycle commands cannot be combined with GUI, scan or move")
     roots = xdg_roots(home)
-    if args.quarantine_info or args.purge or args.purge_expired:
-        from xdg_quarantine_lifecycle import inspect_run, purge_run, expired_run_ids
+    if lifecycle:
+        from xdg_retention import load as load_retention, save as save_retention
+        from xdg_quarantine_lifecycle import (inspect_run, purge_run, expired_run_ids,
+                                              adopt_legacy_run)
+        if args.configure_retention is not None or args.enable_retention or args.disable_retention:
+            policy = load_retention(home, roots)
+            if args.configure_retention is not None:
+                if not 1 <= args.configure_retention <= 3650:
+                    parser.error("Retention days must be between 1 and 3650")
+                policy["days"] = args.configure_retention
+            elif args.enable_retention:
+                if not sys.stdin.isatty() or input("Type ENABLE to permit scheduled purge: ").strip() != "ENABLE":
+                    raise SystemExit("ERROR: scheduled purge not enabled")
+                policy["automatic"] = True
+            elif args.disable_retention:
+                policy["automatic"] = False
+            save_retention(home, roots, policy)
+            print(json.dumps(policy))
+            return 0
+        if args.adopt_quarantine:
+            report = inspect_run(home, roots, args.adopt_quarantine, nested_mounts_status,
+                                 allow_unsealed=True)
+            print("LEGACY ADOPTION PLAN: %d entries, %s. Current contents may differ from original." %
+                  (report["present"], human(report["bytes"])))
+            if not sys.stdin.isatty() or input("Type ADOPT to bind CURRENT contents: ").strip() != "ADOPT":
+                raise SystemExit("ERROR: adoption cancelled")
+            print(adopt_legacy_run(home, roots, args.adopt_quarantine, nested_mounts_status))
+            return 0
         if args.quarantine_info:
-            report = inspect_run(home, roots, args.quarantine_info, nested_mounts_status)
+            report = inspect_run(home, roots, args.quarantine_info, nested_mounts_status,
+                                 allow_unsealed=True)
             print(json.dumps({"run_id": report["run_id"], "objects": report["present"],
                               "bytes": report["bytes"], "entries": [
                                   {"source": str(e["source"]), "status": e["status"],
-                                   "present": e["present"], "bytes": e["bytes"]}
+                                   "present": e["present"], "bytes": e["bytes"],
+                                   "requires_adoption": e.get("unsealed", False)}
                                   for e in report["entries"]]}, indent=2))
             return 0
-        ids = [args.purge] if args.purge else expired_run_ids(
-            quarantine_runs(home, roots), args.retention_days)
-        previews = [purge_run(home, roots, run_id, nested_mounts_status, dry_run=True)
-                    for run_id in ids]
+        policy = load_retention(home, roots)
+        if args.automatic_purge and not policy["automatic"]:
+            raise SystemExit("ERROR: automatic deletion not enabled in retention settings")
+        days = args.retention_days if args.retention_days is not None else policy["days"]
+        ids = [args.purge] if args.purge else expired_run_ids(quarantine_runs(home, roots), days)
+        previews = []
+        failed = []
+        for run_id in ids:
+            try:
+                previews.append(purge_run(home, roots, run_id, nested_mounts_status, dry_run=True))
+            except (ValueError, OSError) as exc:
+                failed.append((run_id, str(exc)))
+                print(f"BLOCKED {run_id}: {exc}", file=sys.stderr)
         if not previews:
             print("No eligible quarantine runs.")
-            return 0
+            return 1 if failed else 0
         for preview in previews:
-            print("PURGE PLAN: %s: %d objects, %s" % (
-                preview["run_id"], preview["objects"], human(preview["bytes"])))
+            print("PURGE PLAN: %s: %d entries, %s" %
+                  (preview["run_id"], preview["objects"], human(preview["bytes"])))
         if args.dry_run or (args.purge_expired and not args.execute):
-            return 0
-        if not sys.stdin.isatty():
-            raise SystemExit("ERROR: purge requires an interactive TTY")
-        if input("Type PURGE to permanently remove these quarantined objects: ").strip() != "PURGE":
-            print("Cancelled.")
-            return 0
+            return 1 if failed else 0
+        if not args.automatic_purge:
+            if not sys.stdin.isatty():
+                raise SystemExit("ERROR: purge requires an interactive TTY")
+            if input("Type PURGE to permanently delete these objects: ").strip() != "PURGE":
+                print("Cancelled.")
+                return 0
         for preview in previews:
-            print(purge_run(home, roots, preview["run_id"], nested_mounts_status, dry_run=False))
-        return 0
+            try:
+                print(purge_run(home, roots, preview["run_id"], nested_mounts_status, dry_run=False))
+            except (ValueError, OSError) as exc:
+                failed.append((preview["run_id"], str(exc)))
+                print(f"BLOCKED {preview['run_id']}: {exc}", file=sys.stderr)
+        return 1 if failed else 0
     if args.theme_info:
         from xdg_theme import detect_appearance
         from xdg_gui import detect_gui_runtime
