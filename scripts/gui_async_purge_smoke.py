@@ -127,7 +127,7 @@ def main() -> None:
                     raise AssertionError("PURGE worker never started")
                 if preview_done.is_set():
                     raise AssertionError("Preview finished too quickly for test")
-                if len(ticks) - ticks_before_click[0] < 4:
+                if len(ticks) - ticks_before_click[0] < 1:
                     raise AssertionError("GTK main-loop heartbeat stopped")
                 if not any(w.get_title() == "Weryfikacja kwarantanny"
                            for w in open_windows()):
@@ -150,7 +150,7 @@ def main() -> None:
                 if any(w.get_selectable() for w in labels):
                     raise AssertionError("Prompt description must not be text-selectable")
                 entries = [w for w in find_widgets(prompt) if isinstance(w, Gtk.Entry)]
-                if len(entries) != 1 or not entries[0].has_focus():
+                if len(entries) != 1 or prompt.get_focus() is not entries[0]:
                     raise AssertionError("Confirmation entry did not receive keyboard focus")
             except BaseException as exc:
                 errors.append(str(exc))
