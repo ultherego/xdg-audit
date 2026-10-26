@@ -254,6 +254,8 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
             ttk.Button(qbuttons,text=tr('Usuń trwale…'),command=self.purge_quarantine).pack(side='right',padx=6)
             ttk.Button(qbuttons,text=tr('Sprawdź dostęp…'),
                        command=self.access_diagnostics).pack(side='right',padx=6)
+            ttk.Button(qbuttons,text=tr('Zatwierdź stan…'),
+                       command=self.adopt_inventory).pack(side='right',padx=6)
             ttk.Button(qbuttons,text=tr('Usuń wygasłe…'),command=self.purge_expired).pack(side='right',padx=6)
             ttk.Button(qbuttons,text=tr('Ustaw retencję…'),command=self.configure_retention).pack(side='right',padx=6)
             ttk.Button(qbuttons,text=tr('Usuń historię…'),command=self.cleanup_history).pack(side='right',padx=6)
@@ -796,6 +798,28 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
             except (ValueError,OSError) as exc:
                 messagebox.showerror(tr('Retencja'),
                     tf('Nie można zapisać retencji: {error}',error=exc),parent=root)
+
+        def adopt_inventory(self):
+            selected=self.qtree.selection()
+            if not selected:return
+            run_id=selected[0]
+            message=(tf('Operacja: {run_id}',run_id=run_id)+'\n'+
+                tr('Zatwierdzisz stan plików widoczny TERAZ. Nie oznacza to, że zawartość jest identyczna jak w dniu przeniesienia. PURGE nadal wymaga osobnej zgody.'))
+            if not messagebox.askyesno(tr('Zatwierdź aktualny stan'),message,parent=root):return
+            if simpledialog.askstring(tr('Zatwierdź aktualny stan'),tr('Wpisz ADOPT:'),parent=root)!='ADOPT':return
+            def done(ok,result):
+                if not ok:
+                    messagebox.showerror(tr('Zatwierdź aktualny stan'),str(result),parent=root)
+                else:
+                    self._refresh_quarantine()
+                    messagebox.showinfo(tr('Zatwierdź aktualny stan'),
+                        tf('Zatwierdzono aktualny stan: {count} obiektów.',count=result['adopted'])+
+                        '\n'+tr('Nie wykonano PURGE. Ponownie sprawdź dostęp i osobno potwierdź usunięcie.'),
+                        parent=root)
+            self._quarantine_job(
+                lambda:engine.adopt_quarantine_inventory(
+                    home,engine.xdg_roots(home),run_id),
+                done,'Weryfikacja kwarantanny')
 
         def access_diagnostics(self,run_id=None):
             if run_id is None:
