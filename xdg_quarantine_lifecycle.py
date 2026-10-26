@@ -352,6 +352,7 @@ def inspect_run(home: Path, roots: dict[str, Path], run_id: str, mounts_checker,
                 finally:
                     os.close(scopefd)
             for entry in entries:
+                row = entry["row"]
                 scopefd = _directory(runfd, entry["scope"])
                 try:
                     try:
