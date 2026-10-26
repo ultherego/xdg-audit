@@ -226,44 +226,58 @@ def _walk(fd: int, device: int) -> tuple[int, int]:
     return size, objects
 
 
-def _delete_children(fd: int, device: int) -> None:
-    """Delete only names relative to already-open, verified directory FDs."""
-    for name in os.listdir(fd):
+def _delete_children(fd: int, device: int, expected: dict, prefix: str = ".") -> None:
+    """Delete exactly inventoried names, anchored to verified directory fds."""
+    for name in sorted(os.listdir(fd)):
+        relative = name if prefix == "." else prefix + "/" + name
+        if relative not in expected:
+            raise ValueError("New untracked object appeared while purging")
         info = os.stat(name, dir_fd=fd, follow_symlinks=False)
         _check_owner(info, device)
+        if list(_identity(info)) != expected[relative]["identity"]:
+            raise ValueError("Object replaced while purging")
         mode = stat.S_IFMT(info.st_mode)
         if mode == stat.S_IFDIR:
             child = _directory(fd, name)
             try:
                 if _identity(os.fstat(child)) != _identity(info):
                     raise ValueError("Directory replaced during deletion")
-                _delete_children(child, device)
-                os.fsync(child)
+                _delete_children(child, device, expected, relative)
             finally:
                 os.close(child)
+            info2 = os.stat(name, dir_fd=fd, follow_symlinks=False)
+            if _identity(info2) != _identity(info):
+                raise ValueError("Directory changed before rmdir")
             os.rmdir(name, dir_fd=fd)
         elif mode in (stat.S_IFREG, stat.S_IFLNK):
             if mode == stat.S_IFREG and info.st_nlink != 1:
                 raise ValueError("Unexpected hard link")
+            info2 = os.stat(name, dir_fd=fd, follow_symlinks=False)
+            if _identity(info2) != _identity(info):
+                raise ValueError("File changed before unlink")
             os.unlink(name, dir_fd=fd)
         else:
             raise ValueError("Special file inside quarantine")
     os.fsync(fd)
 
 
-def _delete_entry(scopefd: int, name: str, expected: tuple[int, int, int], device: int) -> None:
+def _delete_entry(scopefd: int, name: str, expected_identity: tuple[int, int, int],
+                  device: int, inventory: dict) -> None:
     info = os.stat(name, dir_fd=scopefd, follow_symlinks=False)
     _check_owner(info, device)
-    if _identity(info) != expected:
+    if _identity(info) != expected_identity:
         raise ValueError("Quarantined object identity changed; refusing purge")
     if stat.S_ISDIR(info.st_mode):
         child = _directory(scopefd, name)
         try:
-            if _identity(os.fstat(child)) != expected:
+            if _identity(os.fstat(child)) != expected_identity:
                 raise ValueError("Object changed during purge")
-            _delete_children(child, device)
+            _delete_children(child, device, inventory)
         finally:
             os.close(child)
+        current = os.stat(name, dir_fd=scopefd, follow_symlinks=False)
+        if _identity(current) != expected_identity:
+            raise ValueError("Quarantine entry changed before rmdir")
         os.rmdir(name, dir_fd=scopefd)
     elif stat.S_ISREG(info.st_mode) and info.st_nlink == 1:
         os.unlink(name, dir_fd=scopefd)
@@ -408,9 +422,12 @@ def purge_run(home: Path, roots: dict[str, Path], run_id: str, mounts_checker,
                 try:
                     if mounts_checker(entry["destination"]) is not False and entry["identity"][2] == stat.S_IFDIR:
                         raise ValueError("Mount inventory changed during purge")
+                    expected = _validated_inventory(row.get("tree_inventory"), entry["identity"])
+                    current = capture_inventory(entry["destination"])
+                    _match_inventory(expected, current, partial=(row["move_status"] == "purging"))
                     row["move_status"] = "purging"
                     _write_manifest(runfd, payload)
-                    _delete_entry(scopefd, entry["name"], entry["identity"], device)
+                    _delete_entry(scopefd, entry["name"], entry["identity"], device, expected)
                     row["move_status"] = "purged"
                     _write_manifest(runfd, payload)
                     emit("PURGED " + str(entry["destination"]))
