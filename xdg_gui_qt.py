@@ -624,7 +624,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
                     home,engine.xdg_roots(home),run_id),
                 done,'Weryfikacja kwarantanny')
 
-        def access_diagnostics_dialog(self, run_id=None, resume_purge=False):
+        def access_diagnostics_dialog(self, run_id=None, resume_purge=False, repaired=False):
             if run_id is None:
                 current=self.qtree.currentItem()
                 if current is None:return
@@ -636,7 +636,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
                     return
                 issues=report['issues']
                 if not issues:
-                    if resume_purge:
+                    if resume_purge and (repaired or report['unsealed']):
                         if report['unsealed']:
                             self.adopt_inventory_dialog(run_id, resume_purge=True)
                         else:
@@ -682,7 +682,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
                     if report['unsealed']:
                         result+='\n'+tr('Brak kompletnego spisu plików. Wymagane osobne zatwierdzenie aktualnej zawartości (ADOPT).')
                     if resume_purge:
-                        self.access_diagnostics_dialog(run_id, resume_purge=True)
+                        self.access_diagnostics_dialog(run_id, resume_purge=True, repaired=True)
                     else:
                         QtWidgets.QMessageBox.information(self,tr('Napraw dostęp'),result)
                 self._quarantine_job(
