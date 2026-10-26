@@ -7,6 +7,11 @@ from __future__ import annotations
 
 LANGUAGES = {'pl': 'Polski', 'en': 'English'}
 EN = {
+    "Zatwierdź stan…": "Approve current state…",
+    "Zatwierdź aktualny stan": "Approve current state",
+    "Zatwierdzisz stan plików widoczny TERAZ. Nie oznacza to, że zawartość jest identyczna jak w dniu przeniesienia. PURGE nadal wymaga osobnej zgody.": "You will bind the files as they exist NOW. This does not prove they match the contents at quarantine time. PURGE still needs separate authorization.",
+    "Wpisz ADOPT:": "Type ADOPT:",
+    "Zatwierdzono aktualny stan: {count} obiektów.": "Current state approved: {count} objects.",
     'Sprawdź dostęp…': 'Check access…',
     'Napraw dostęp': 'Repair access',
     'Diagnostyka dostępu': 'Access diagnostics',
