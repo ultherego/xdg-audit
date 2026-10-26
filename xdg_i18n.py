@@ -7,6 +7,22 @@ from __future__ import annotations
 
 LANGUAGES = {'pl': 'Polski', 'en': 'English'}
 EN = {
+    'PURGED': 'PURGED',
+    'RESTORED': 'RESTORED',
+    'COMPLETED': 'COMPLETED',
+    'QUARANTINED': 'QUARANTINED',
+    'INCOMPLETE': 'INCOMPLETE',
+    'ERROR': 'ERROR',
+    'Usuń historię…': 'Clear history…',
+    'Wyczyść starą historię…': 'Clear expired history…',
+    'Brak wygasłych manifestów.': 'No expired history journals.',
+    'Usuń historię': 'Clear history',
+    'Zostaną usunięte tylko zakończone dzienniki.': 'Only completed history journals will be deleted.',
+    'Wpisz HISTORY:': 'Type HISTORY:',
+    'Błąd historii: {error}': 'History error: {error}',
+    'Usunięto zakończone manifesty.': 'Completed history journals removed.',
+    'Status operacji': 'Operation status',
+    'Historia': 'History',
     'Audyt tylko do odczytu · MOVE i PURGE wymagają potwierdzenia': 'Read-only scan · MOVE and PURGE require separate confirmation',
     'Ustaw retencję…': 'Configure retention…',
     'Retencja': 'Retention',
