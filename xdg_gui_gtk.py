@@ -1032,7 +1032,10 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
             for side in ('top','bottom','start','end'):
                 getattr(outer,'set_margin_'+side)(16)
             txt=label(description)
-            txt.set_wrap(True);txt.set_selectable(True)
+            # This is informational text, not an editable/copyable field.
+            # A selectable Gtk.Label grabs focus and looks like "select all"
+            # when the transient modal first opens under some GTK themes.
+            txt.set_wrap(True)
             append(outer,txt)
             entry=Gtk.Entry();entry.set_placeholder_text(tf('Wpisz {token}', token=need))
             append(outer,entry)
@@ -1052,6 +1055,8 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
             append(actions,confirm)
             set_child(dialog,outer)
             dialog.present() if GTK4 else dialog.show_all()
+            # Focus belongs to the confirmation entry, never the description.
+            entry.grab_focus()
 
         def move(self,*_):
             if self.busy:return
@@ -1104,6 +1109,8 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                 append(body,close)
                 set_child(result_window,body)
                 result_window.present() if GTK4 else result_window.show_all()
+                text.select_region(0,0)
+                close.grab_focus()
             chooser.connect('response',chosen)
             chooser.show()
 
@@ -1140,6 +1147,8 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
             append(body,close)
             set_child(dialog,body)
             dialog.present() if GTK4 else dialog.show_all()
+            text.select_region(0,0)
+            close.grab_focus()
 
         def refresh_quarantine(self):
             clear(self.qlist)
@@ -1152,8 +1161,8 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
             retention=Gtk.Button(label=tr('Ustaw retencję…'))
             retention.connect('clicked',lambda *_:self.configure_retention())
             append(tools_box,retention)
-            history=Gtk.Button(label=tr('Wyczyść starą historię…'))
-            history.connect('clicked',lambda *_:self.cleanup_expired_history())
+            history=Gtk.Button(label=tr('Wyczyść całą zakończoną historię…'))
+            history.connect('clicked',lambda *_:self.cleanup_all_history())
             append(tools_box,history)
             tools_row.set_child(tools_box) if GTK4 else tools_row.add(tools_box)
             append(self.qlist,tools_row)
@@ -1264,6 +1273,36 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                 return False
 
             run_gui_job(operation, finish, GLib.idle_add)
+
+        def _quarantine_notice(self, message):
+            """Show a visible GTK notice instead of a hard-to-see footer update."""
+            dialog=Gtk.Window(title=tr('Historia'),transient_for=self.win,modal=True)
+            dialog.set_default_size(450,155)
+            pane=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=14)
+            for side in ('top','bottom','start','end'):
+                getattr(pane,'set_margin_'+side)(16)
+            note=label(message)
+            note.set_wrap(True)
+            append(pane,note)
+            close=Gtk.Button(label=tr('Zamknij'))
+            close.connect('clicked',lambda *_:dialog.destroy())
+            append(pane,close)
+            set_child(dialog,pane)
+            dialog.present() if GTK4 else dialog.show_all()
+            close.grab_focus()
+
+        def cleanup_all_history(self):
+            """Manual all-history operation, not the automatic 30-day GC."""
+            def query():
+                return engine.completed_quarantine_history(home,engine.xdg_roots(home))
+            def done(ok, result):
+                if not ok:
+                    self._quarantine_notice(tf('Błąd historii: {error}',error=result))
+                elif result:
+                    self.cleanup_history(result)
+                else:
+                    self._quarantine_notice(tr('Brak zakończonych operacji do wyczyszczenia. Aktywne i niedokończone pozostają chronione.'))
+            self._quarantine_job(query,done,'Sprawdzanie historii…')
 
         def cleanup_expired_history(self):
             def query():
