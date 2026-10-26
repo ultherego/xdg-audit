@@ -174,10 +174,11 @@ sudo pacman -S --needed python pyside6
 | `ACTIVE` / `PROTECTED` | Cannot be moved to quarantine |
 
 - Scans do not modify data. The user must explicitly select and confirm every move.
-- Selected entries are **moved, never permanently deleted by xdg-audit**, into `~/.local/share/xdg-audit-quarantine/`.
+- With `--remove`, selected entries are **moved, not permanently deleted**, into `~/.local/share/xdg-audit-quarantine/`.
 - Before a move the application revalidates filesystem and package evidence, refuses cross-filesystem moves, and never overwrites the destination.
-- New v3 manifests bind restores to the original device, inode and file type. Earlier manifests remain supported with their original safeguards.
+- New v3 manifests bind restores to the original device, inode and file type and include a recursive SHA-256 inventory for later verified purge. Earlier manifests remain restore-capable; old v3 runs require explicit inventory adoption before purge.
 - Cancelled and unfinished scans cannot authorize quarantine operations.
+- Permanent deletion (`PURGE`) requires its own explicit confirmation and strict recursive verification; automatic retention is disabled unless opted into.
 
 > [!CAUTION]
 > File ownership is inherently ambiguous. Inspect each candidate and keep backups of anything important. Quarantine is **not** a replacement for a backup.
@@ -191,15 +192,21 @@ python3 xdg_audit.py --scope config --compare audit.json
 python3 xdg_audit.py --scope config --remove  # Interactive confirmation
 python3 xdg_audit.py --list-quarantine
 python3 xdg_audit.py --restore RUN_ID         # Interactive confirmation
+python3 xdg_audit.py --quarantine-info RUN_ID
+python3 xdg_audit.py --purge RUN_ID --dry-run
+python3 xdg_audit.py --purge RUN_ID           # Explicit PURGE confirmation
+python3 xdg_audit.py --purge-expired          # Retention preview
 ```
 
 Available scopes: `all`, `config`, `data`, `state`, `cache`, `flatpak`, `dotfiles`.
+
+See [Quarantine lifecycle](docs/quarantine-lifecycle.md) for recovery, manual/automatic retention, user-scoped systemd timer, legacy adoption, and safeguards.
 
 ## 🧪 Testing & release status
 
 The unreleased development version on `main` is **`1.7.0-rc2`**. The most recent tagged prerelease is **[v1.7.0-rc1](https://github.com/ultherego/xdg-audit/releases/tag/v1.7.0-rc1)**.
 
-GitHub Actions runs Python 3.10–3.14 tests, GTK4/Qt6/Tk GUI startup under Xvfb, native GTK4/Qt6 Wayland startup with headless Weston, a synthetic benchmark, the isolated end-to-end quarantine/restore test, and source ZIP/tar.gz integrity checks. **Real-session Niri and KDE Plasma usage still deserves separate validation before a stable release.**
+GitHub Actions runs Python 3.10–3.14 tests, GTK4/Qt6/Tk GUI startup under Xvfb, native GTK4/Qt6 Wayland startup with headless Weston, a synthetic benchmark, the isolated end-to-end quarantine/restore/purge test, and source ZIP/tar.gz integrity checks. **Real-session Niri and KDE Plasma usage still deserves separate validation before a stable release.**
 
 ```bash
 python3 -m unittest discover -s tests -v
@@ -207,6 +214,6 @@ python3 scripts/smoke_quarantine_cycle.py
 python3 scripts/build_archives.py --output-dir dist
 ```
 
-The quarantine test creates a disposable `HOME`, performs real moves and restores, verifies file hashes and handles simulated conflicts without writing into your real XDG directories. Details: [Safe integration testing](docs/testing-quarantine.md).
+The quarantine test creates a disposable `HOME`, performs real moves, restores and purge, verifies file hashes and handles simulated conflicts without writing into your real XDG directories. Details: [Safe integration testing](docs/testing-quarantine.md).
 
 Desktop-menu installation and distribution packaging are intentionally deferred. See the [changelog](CHANGELOG.md) for version history.

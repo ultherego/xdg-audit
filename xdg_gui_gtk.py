@@ -1141,6 +1141,17 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
 
         def refresh_quarantine(self):
             clear(self.qlist)
+            tools_row=Gtk.ListBoxRow()
+            tools_box=Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL,spacing=10)
+            append(tools_box,label(tr('Retencja: usuń wygasłe operacje')),True)
+            expired=Gtk.Button(label=tr('Usuń wygasłe…'))
+            expired.connect('clicked',lambda *_:self.purge_expired())
+            append(tools_box,expired)
+            retention=Gtk.Button(label=tr('Ustaw retencję…'))
+            retention.connect('clicked',lambda *_:self.configure_retention())
+            append(tools_box,retention)
+            tools_row.set_child(tools_box) if GTK4 else tools_row.add(tools_box)
+            append(self.qlist,tools_row)
             for run in engine.quarantine_runs(home,engine.xdg_roots(home)):
                 row=Gtk.ListBoxRow()
                 box=Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL,spacing=12)
@@ -1151,9 +1162,82 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                 button=Gtk.Button(label=tr('Przywróć…'))
                 button.connect('clicked',lambda _,rid=run['run_id']:self.restore(rid))
                 append(box,button)
+                purge=Gtk.Button(label=tr('Usuń trwale…'))
+                purge.connect('clicked',lambda _,rid=run['run_id']:self.purge_runs([rid]))
+                append(box,purge)
                 row.set_child(box) if GTK4 else row.add(box)
                 append(self.qlist,row)
             if not GTK4:self.qlist.show_all()
+
+        def configure_retention(self):
+            from xdg_retention import load, save
+            try:
+                current=load(home,engine.xdg_roots(home))
+            except (ValueError,OSError) as exc:
+                self.status.set_text(tf('Nie można zapisać retencji: {error}',error=exc))
+                return
+            dialog=Gtk.Window(title=tr('Retencja'),transient_for=self.win,modal=True)
+            dialog.set_default_size(370,160)
+            content=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=12)
+            for side in ('top','bottom','start','end'):
+                getattr(content,'set_margin_'+side)(15)
+            append(content,label(tr('Dni przechowywania:')))
+            days=Gtk.SpinButton.new_with_range(1,3650,1)
+            days.set_value(current['days'])
+            append(content,days)
+            actions=Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL,spacing=8)
+            append(content,actions)
+            cancel=Gtk.Button(label=tr('Anuluj'))
+            cancel.connect('clicked',lambda *_:dialog.destroy())
+            append(actions,cancel)
+            button=Gtk.Button(label=tr('Zapisz'))
+            def accept(*_):
+                current['days']=days.get_value_as_int()
+                try:
+                    save(home,engine.xdg_roots(home),current)
+                    self.status.set_text(tf('Ustawiono retencję: {days} dni',days=current['days']))
+                    dialog.destroy()
+                except (ValueError,OSError) as exc:
+                    self.status.set_text(tf('Nie można zapisać retencji: {error}',error=exc))
+            button.connect('clicked',accept)
+            append(actions,button)
+            set_child(dialog,content)
+            dialog.present() if GTK4 else dialog.show_all()
+
+        def purge_runs(self,run_ids):
+            plans=[]
+            try:
+                for run_id in run_ids:
+                    plans.append(engine.purge_quarantine_run(home,engine.xdg_roots(home),run_id))
+            except (ValueError,OSError) as exc:
+                self.status.set_text(tf('Zablokowano PURGE: {error}',error=exc))
+                return
+            details='\\n'.join(f"{p['run_id']}: {p['objects']} entries, {p['bytes']} B"
+                              for p in plans)
+            def execute():
+                try:
+                    removed=0
+                    for plan in plans:
+                        result=engine.purge_quarantine_run(home,engine.xdg_roots(home),
+                                                          plan['run_id'],dry_run=False)
+                        removed+=result['objects']
+                    self.status.set_text(tr('Trwale usunięto obiektów: ')+str(removed))
+                    self.refresh_quarantine()
+                except (OSError,ValueError) as exc:
+                    self.status.set_text(tf('Zablokowano PURGE: {error}',error=exc))
+                    self.refresh_quarantine()
+            self.prompt(tr('Trwałe usunięcie'),details+'\\n\\n'+
+                        tr('Nie można cofnąć tej operacji.'),'PURGE',execute)
+
+        def purge_expired(self):
+            try:
+                run_ids=engine.expired_quarantine_runs(home,engine.xdg_roots(home))
+                if run_ids:
+                    self.purge_runs(run_ids)
+                else:
+                    self.status.set_text(tr('Brak wygasłych kwarantann.'))
+            except (ValueError,OSError) as exc:
+                self.status.set_text(tf('Błąd retencji: {error}',error=exc))
 
         def restore(self,run_id):
             def do_restore():
