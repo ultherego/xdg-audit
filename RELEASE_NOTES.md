@@ -24,6 +24,13 @@ o opublikowaniu nowego tagu.
   foreign (AUR **lub** lokalny), Flatpak, Snap, AppImage, ręczne binarki
   i katalogi /opt oraz odczyt pakietów dpkg/rpm.
   `--installed-sources` udostępnia diagnostykę tylko do odczytu.
+- Ochronne, tylko-do-odczytu sprawdzenie pakietów npm global oraz pipx
+  (wybrane katalogi, bez wykonywania kodu). Dodatkowe źródła chronią
+  `CANDIDATE` przed MOVE, ale ich brak nie jest dowodem odinstalowania.
+- Flatpak rozdziela kanoniczne identyfikatory aplikacji od nazw
+  wyświetlanych; nowe `flatpak_app_ids` podaje liczbę rzeczywistych ID.
+- Skan `--quick --json` oznacza niemierzone rozmiary przez `null`,
+  a stan dowodów ma jawne `evidence_level` i `orphan_ownership_verified`.
 - Zainstalowane pakiety dpkg/rpm chronią dane jako ACTIVE, ale
   MOVE poza Arch pozostaje celowo zablokowany.
 - Dodatkowe testy bezpieczeństwa: awaria przed/po usunięciu,
