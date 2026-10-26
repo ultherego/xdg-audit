@@ -7,6 +7,7 @@ from __future__ import annotations
 
 LANGUAGES = {'pl': 'Polski', 'en': 'English'}
 EN = {
+    'Weryfikacja kwarantanny': 'Quarantine verification',
     'Operacja kwarantanny jest już wykonywana.': 'A quarantine operation is already running.',
     'Błąd operacji kwarantanny: {error}': 'Quarantine operation failed: {error}',
     'Sprawdzanie kwarantanny…': 'Verifying quarantine…',
