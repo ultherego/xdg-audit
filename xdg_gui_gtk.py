@@ -1332,6 +1332,8 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                     return
                 issues=result['issues']
                 who=result['identity']['user']
+                polkit_text=tf('Polkit dostępny: {state}',
+                               state=tr('tak') if result['identity']['pkexec_installed'] else tr('nie'))
                 if not issues:
                     note=tr('Nie znaleziono problemów z odczytem. Sprawdź pozostałe komunikaty PURGE.')
                     if result['unsealed']:
@@ -1341,12 +1343,14 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                 issue=issues[0]
                 summary=(tf('Operacja: {run_id}',run_id=run_id)+'\n'+
                          tf('Użytkownik: {user}',user=who)+'\n'+
+                         polkit_text+'\n'+
                          tf('Problem: {code}',code=issue['code'])+'\n'+
                          str(issue['path'])+'\n'+
                          tf('Uprawnienia: {mode}',mode=issue['mode'])+'\n')
                 if not issue['repairable']:
                     self._quarantine_notice(
-                        summary+'\n'+tr('Nie można automatycznie naprawić. Nie podnoszę uprawnień ani nie omijam kontroli PURGE.'))
+                        summary+'\n'+tr('Nie można automatycznie naprawić. Nie podnoszę uprawnień ani nie omijam kontroli PURGE.')+
+                        '\n'+tr('Naprawa tego obiektu wymaga dodatkowej analizy. Zasady Polkit określa system; xdg-audit nie uruchamia kodu użytkownika jako root.'))
                     return
                 summary+=('\n'+tf('Proponowana zmiana: {before} → {after}',
                                    before=issue['mode'],after=issue['suggested_mode'])+
