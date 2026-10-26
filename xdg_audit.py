@@ -1219,6 +1219,23 @@ def expired_quarantine_history(home: Path, roots: dict[str, Path]) -> list[str]:
                               [x["run_id"] for x in quarantine_runs(home, roots)])
 
 
+def adopt_quarantine_inventory(home: Path, roots: dict[str, Path], run_id: str) -> dict:
+    """User-confirmed snapshot of current contents after access recovery."""
+    from xdg_quarantine_lifecycle import adopt_legacy_run
+    return adopt_legacy_run(home, roots, run_id, nested_mounts_status)
+
+
+def diagnose_quarantine_access(home: Path, roots: dict[str, Path], run_id: str) -> dict:
+    from xdg_access import diagnose_access
+    return diagnose_access(home, roots, run_id)
+
+
+def repair_quarantine_access(home: Path, roots: dict[str, Path],
+                             run_id: str, relative: str) -> dict:
+    from xdg_access import repair_owner_directory
+    return repair_owner_directory(home, roots, run_id, relative)
+
+
 def list_quarantine(home: Path, roots: dict[str, Path]):
     base = quarantine_dir(home, roots)
     if not base.is_dir():
@@ -1281,6 +1298,12 @@ def main(argv=None):
     parser.add_argument("--list-quarantine", action="store_true", help="List previous quarantine runs")
     parser.add_argument("--restore", metavar="RUN_ID", help="Restore one quarantine run")
     parser.add_argument("--quarantine-info", metavar="RUN_ID", help="Inspect a v3 quarantine run")
+    parser.add_argument("--diagnose-access", metavar="RUN_ID",
+                        help="Inspect inaccessible quarantine files without changing permissions")
+    parser.add_argument("--repair-access", metavar="RUN_ID",
+                        help="Explicitly add owner-read permission to one diagnosed user-owned directory")
+    parser.add_argument("--repair-target", metavar="SCOPE/RELATIVE_PATH",
+                        help="Exact relative directory path from --diagnose-access")
     parser.add_argument("--purge", metavar="RUN_ID", help="Permanently delete quarantined objects")
     parser.add_argument("--purge-expired", action="store_true", help="Preview expired quarantine runs")
     parser.add_argument("--cleanup-history", metavar="RUN_ID", help="Remove a completed run journal (interactive)")
@@ -1317,7 +1340,8 @@ def main(argv=None):
     if args.allow_uncertain and not args.remove:
         parser.error("--allow-uncertain requires --remove")
     operations = (args.restore, args.list_quarantine, args.quarantine_info, args.purge,
-                  args.purge_expired, args.cleanup_history, args.cleanup_expired_history,
+                  args.purge_expired, args.diagnose_access, args.repair_access,
+                  args.cleanup_history, args.cleanup_expired_history,
                   args.cleanup_all_history,
                   args.adopt_quarantine, args.recover_journal, args.automatic_purge,
                   args.configure_retention is not None, args.enable_retention,
@@ -1326,6 +1350,10 @@ def main(argv=None):
         parser.error("Select a single quarantine operation")
     if args.retention_days is not None and not 1 <= args.retention_days <= 3650:
         parser.error("--retention-days must be between 1 and 3650")
+    if args.repair_target and not args.repair_access:
+        parser.error("--repair-target requires --repair-access")
+    if args.repair_access and not args.repair_target:
+        parser.error("--repair-access requires --repair-target from --diagnose-access")
     if args.execute and not (args.purge_expired or args.cleanup_expired_history or args.cleanup_all_history):
         parser.error("--execute requires --purge-expired or a history cleanup flag")
     lifecycle = any(bool(x) for x in operations[2:])
@@ -1350,6 +1378,27 @@ def main(argv=None):
                 policy["automatic"] = False
             save_retention(home, roots, policy)
             print(json.dumps(policy))
+            return 0
+        if args.diagnose_access:
+            print(json.dumps(diagnose_quarantine_access(home, roots, args.diagnose_access),
+                             indent=2, ensure_ascii=False))
+            return 0
+        if args.repair_access:
+            from xdg_access import diagnose_access
+            report = diagnose_access(home, roots, args.repair_access)
+            issue = next((i for i in report["issues"]
+                          if i["relative"] == args.repair_target
+                          and i["repairable"]), None)
+            if issue is None:
+                raise SystemExit("ERROR: target not eligible for owner-only repair")
+            print("ACCESS REPAIR:", issue["path"], issue["mode"], "->",
+                  issue["suggested_mode"])
+            if not sys.stdin.isatty() or input("Type ACCESS to change only this directory's owner-read bit: ").strip() != "ACCESS":
+                raise SystemExit("ERROR: access repair cancelled")
+            result = repair_quarantine_access(home, roots, args.repair_access,
+                                              args.repair_target)
+            print(json.dumps(result, ensure_ascii=False))
+            print("Re-run --diagnose-access. PURGE requires separate verification and confirmation.")
             return 0
         if args.cleanup_history or args.cleanup_expired_history or args.cleanup_all_history:
             from xdg_quarantine_history import (cleanup_history, history_candidates,

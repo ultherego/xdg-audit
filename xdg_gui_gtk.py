@@ -1079,6 +1079,9 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                     result=engine.commit_quarantine(selected,self.roots,home,allow_uncertain=bool(uncertain),emit=output.append,extra_aliases=aliases,keep_names=args.keep)
                     self.status.set_text(tf('Kwarantanna: {run_id}, przeniesiono {count}.',run_id=result['run_id'],count=entries_count(len(result['moved']),_language)))
                     self.start_scan()
+                    if any('purge inventory unavailable' in line for line in output):
+                        self._quarantine_notice(
+                            tr('Pliki przeniesiono, ale nie można było sprawdzić całej zawartości. Przed PURGE użyj „Sprawdź dostęp…”, następnie osobno „Zatwierdź stan…” (ADOPT).'))
                 except (ValueError,OSError,SystemExit) as exc:self.status.set_text(tf('Błąd przenoszenia: {error}',error=exc))
             def confirm_move():self.prompt(tr('Ostateczne potwierdzenie'),description+'\n'+tr('Zamknij powiązane aplikacje.'), 'MOVE', commit)
             if uncertain:
@@ -1191,6 +1194,12 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                     purge=Gtk.Button(label=tr('Usuń trwale…'))
                     purge.connect('clicked',lambda _,rid=run['run_id']:self.purge_runs([rid]))
                     append(box,purge)
+                    access=Gtk.Button(label=tr('Sprawdź dostęp…'))
+                    access.connect('clicked',lambda _,rid=run['run_id']:self.access_diagnostics(rid))
+                    append(box,access)
+                    adopt=Gtk.Button(label=tr('Zatwierdź stan…'))
+                    adopt.connect('clicked',lambda _,rid=run['run_id']:self.adopt_inventory(rid))
+                    append(box,adopt)
                 row.set_child(box) if GTK4 else row.add(box)
                 append(self.qlist,row)
             if not GTK4:self.qlist.show_all()
@@ -1297,6 +1306,77 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
             dialog.present() if GTK4 else dialog.show_all()
             close.grab_focus()
 
+        def adopt_inventory(self, run_id):
+            explanation=(tf('Operacja: {run_id}',run_id=run_id)+'\n'+
+                         tr('Zatwierdzisz stan plików widoczny TERAZ. Nie oznacza to, że zawartość jest identyczna jak w dniu przeniesienia. PURGE nadal wymaga osobnej zgody.'))
+            def commit():
+                def done(ok, result):
+                    if not ok:
+                        self._quarantine_notice(tf('Naprawa zablokowana: {error}',error=result))
+                    else:
+                        self.refresh_quarantine()
+                        self._quarantine_notice(
+                            tf('Zatwierdzono aktualny stan: {count} obiektów.',count=result['adopted'])+
+                            '\n'+tr('Nie wykonano PURGE. Ponownie sprawdź dostęp i osobno potwierdź usunięcie.'))
+                self._quarantine_job(
+                    lambda:engine.adopt_quarantine_inventory(
+                        home,engine.xdg_roots(home),run_id),
+                    done,'Weryfikacja kwarantanny')
+            self.prompt(tr('Zatwierdź aktualny stan'),explanation,'ADOPT',commit)
+
+        def access_diagnostics(self, run_id):
+            """Investigate one run without granting elevated privileges."""
+            def ready(ok, result):
+                if not ok:
+                    self._quarantine_notice(tf('Błąd diagnostyki: {error}',error=result))
+                    return
+                issues=result['issues']
+                who=result['identity']['user']
+                polkit_text=tf('pkexec zainstalowany: {state}',
+                               state=tr('tak') if result['identity']['pkexec_installed'] else tr('nie'))
+                if not issues:
+                    note=tr('Nie znaleziono problemów z odczytem. Sprawdź pozostałe komunikaty PURGE.')
+                    if result['unsealed']:
+                        note+='\n'+tr('Brak kompletnego spisu plików. Wymagane osobne zatwierdzenie aktualnej zawartości (ADOPT).')
+                    self._quarantine_notice(note)
+                    return
+                issue=issues[0]
+                summary=(tf('Operacja: {run_id}',run_id=run_id)+'\n'+
+                         tf('Użytkownik: {user}',user=who)+'\n'+
+                         polkit_text+'\n'+
+                         tf('Problem: {code}',code=issue['code'])+'\n'+
+                         str(issue['path'])+'\n'+
+                         tf('Uprawnienia: {mode}',mode=issue['mode'])+'\n')
+                if not issue['repairable']:
+                    self._quarantine_notice(
+                        summary+'\n'+tr('Nie można automatycznie naprawić. Nie podnoszę uprawnień ani nie omijam kontroli PURGE.')+
+                        '\n'+tr('Naprawa tego obiektu wymaga dodatkowej analizy. Zasady Polkit określa system; xdg-audit nie uruchamia kodu użytkownika jako root.'))
+                    return
+                summary+=('\n'+tf('Proponowana zmiana: {before} → {after}',
+                                   before=issue['mode'],after=issue['suggested_mode'])+
+                          '\n'+tr('Zmienię tylko prawo odczytu właściciela. Bez sudo i bez usuwania plików.'))
+                def approved():
+                    def operation():
+                        return engine.repair_quarantine_access(
+                            home,engine.xdg_roots(home),run_id,issue['relative'])
+                    def completed(success, outcome):
+                        if not success:
+                            self._quarantine_notice(
+                                tf('Naprawa zablokowana: {error}',error=outcome))
+                            return
+                        info=(tf('Zmieniono uprawnienia: {before} → {after}',
+                                 before=outcome['old_mode'],after=outcome['new_mode'])+
+                              '\n'+tr('Nie wykonano PURGE. Ponownie sprawdź dostęp i osobno potwierdź usunięcie.'))
+                        if result['unsealed']:
+                            info+='\n'+tr('Brak kompletnego spisu plików. Wymagane osobne zatwierdzenie aktualnej zawartości (ADOPT).')
+                        self._quarantine_notice(info)
+                    self._quarantine_job(operation,completed,'Naprawianie dostępu…')
+                self.prompt(tr('Napraw dostęp'),summary,'ACCESS',approved)
+            self._quarantine_job(
+                lambda:engine.diagnose_quarantine_access(
+                    home,engine.xdg_roots(home),run_id),
+                ready,'Sprawdzanie dostępu…')
+
         def cleanup_all_history(self):
             """Manual all-history operation, not the automatic 30-day GC."""
             def query():
@@ -1359,6 +1439,8 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
             def preview_ready(ok, outcome):
                 if not ok:
                     self.status.set_text(tf('Zablokowano PURGE: {error}',error=outcome))
+                    if isinstance(outcome,PermissionError) and len(run_ids)==1:
+                        self.access_diagnostics(run_ids[0])
                     return
                 details='\\n'.join(
                     f"{p['run_id']}: {p['objects']} entries, {p['bytes']} B"

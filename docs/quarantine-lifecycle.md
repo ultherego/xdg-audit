@@ -41,6 +41,52 @@ Adoption requires typing `ADOPT`. It does not prove that the current content
 is the same as when the item was first quarantined. Legacy v2 journals remain
 restore-only and are not eligible for adoption or purge.
 
+## Explaining blocked PURGE and safe access recovery
+
+A failure such as `[Errno 13] Permission denied: 'pkg'` means Linux refused
+a read while xdg-audit was inventorying quarantine data. The path may refer
+to a directory with mode `111`: it can be entered but not listed.
+Failure to inspect **blocks deletion**, not restoration.
+
+GTK, Qt and Tk now have **Check access…** beside a quarantine run. They
+report the invoking user's UID and username, the precise inaccessible path,
+the existing permissions and whether it can be repaired without escalation.
+A failed PURGE preview with `PermissionError` directs the user to that
+diagnostic flow. Nothing is modified by simply opening diagnosis.
+
+Equivalent CLI commands:
+
+```fish
+python3 xdg_audit.py --diagnose-access RUN_ID
+# From issues[].relative choose the exact diagnosed directory:
+python3 xdg_audit.py --repair-access RUN_ID --repair-target cache/Shelly/lib32-gstreamer/pkg
+```
+
+Repair is deliberately limited to **one user-owned directory** whose
+inaccessible mode has just been verified against the journal. It adds only
+the owner's read bit (`111` -> `511`), never changes ownership, never
+traverses a symlink, and requires the separate token `ACCESS`. No root
+password is collected; no `sudo` or `pkexec` is invoked. Neither repair
+nor diagnostic authorizes or triggers PURGE.
+
+If the original post-MOVE SHA-256 inventory could not be recorded, fixing
+permissions alone is insufficient. You must separately bind and approve
+the **current** contents with `ADOPT` (available as **Approve current
+state…** in GTK/Qt/Tk), then repeat PURGE inspection and its own `PURGE`
+confirmation. Current contents may differ from those present at the time
+of the original quarantine operation.
+
+The diagnostic identity comes from `os.getuid()` and the OS account
+database; it also reports `XDG_SESSION_ID`, session type, user groups and
+whether `pkexec` exists. This does *not* predict which account a Polkit
+agent will require to authorize privileged actions: only the system's
+Polkit policy/agent decides that at authentication time. **This release
+does not ship a privileged helper** and never performs a root-backed repair.
+Foreign-owner data and integrity violations remain protected. A future
+privileged repair implementation must use an audited, system-installed,
+root-owned helper with narrowly scoped actions; running scripts directly
+from a user-writable clone through `pkexec` is unsafe.
+
 ## Recovery after interruption
 
 If a process was interrupted while writing a journal, a leftover
