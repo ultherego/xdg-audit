@@ -1,5 +1,11 @@
 # Weryfikacja P0/P1 — 2026-10-26
 
+> Historyczny zapis wyników PR #27/#28. Późniejsze zlecenie właściciela obejmuje
+> licencję MIT oraz natywny MOVE dla APT/dpkg i RPM, zakres Snap i rozszerzenie
+> AppImage. Bieżący kontrakt: [obsługa źródeł](installation-source-support.md).
+> Wzmianki o blokadzie RPM/MOVE i oczekiwaniu na licencję poniżej opisują stan
+> tamtych commitów, a nie aktualną specyfikację.
+
 Zmiany: [PR #27](https://github.com/ultherego/xdg-audit/pull/27) i
 [PR #28](https://github.com/ultherego/xdg-audit/pull/28).
 Dokładny SHA oraz wyniki każdej wersji Pythona i natywnych smoke testów

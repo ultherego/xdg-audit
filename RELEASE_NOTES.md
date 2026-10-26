@@ -6,6 +6,15 @@ o opublikowaniu nowego tagu.
 
 ## Nowe od v1.7.0-rc1
 
+- Licencja MIT, dołączana także do archiwów źródeł.
+- Natywna autoryzacja MOVE na APT/dpkg i RPM, sprawdzanie ID/ID_LIKE,
+  historia usunięć dpkg i blokada operacji przy niepełnej konfiguracji pakietów.
+- Zakres `~/snap` w CLI i wszystkich GUI, dokładne identyfikatory instancji,
+  ponowne sprawdzenie obecności przed MOVE i wspólne RESTORE/PURGE.
+- Statyczne rozpoznawanie AppImage z numerem wersji i architekturą oraz
+  bezpiecznych launcherów wskazujących istniejący obraz; bez wykonywania kodu.
+- Obowiązkowe testy natywnych baz i cyklu kwarantanny na Ubuntu i Fedora w CI.
+
 - Osiem testów rzeczywistego zakończenia procesu przez `SIGKILL` i odzyskiwania
   MOVE/RESTORE/PURGE; testy błędów ENOSPC/EACCES przy zapisie dziennika.
 - Wznowienie zakończonego RESTORE uzgadnia dziennik na podstawie oryginalnego
@@ -41,7 +50,7 @@ o opublikowaniu nowego tagu.
 - Skan `--quick --json` oznacza niemierzone rozmiary przez `null`,
   a stan dowodów ma jawne `evidence_level` i `orphan_ownership_verified`.
 - Zainstalowane pakiety dpkg/rpm chronią dane jako ACTIVE, ale
-  MOVE poza Arch pozostaje celowo zablokowany.
+  MOVE korzysta teraz z natywnej bazy wybranej przez os-release.
 - Dodatkowe testy bezpieczeństwa: awaria przed/po usunięciu,
   katalog bez prawa przeszukiwania, pliki bez odczytu,
   symlinki, hardlinki, obce inode i nieprawidłowe manifesty.
@@ -50,9 +59,9 @@ o opublikowaniu nowego tagu.
 
 - Skanowanie jest tylko do odczytu; `CANDIDATE` nie oznacza
   pewnego osierocenia. Przed MOVE należy sprawdzić dane.
-- Aktualny MOVE wymaga prawidłowego inwentarza `pacman`; na systemach
-  Debian/RPM wykrywanie zainstalowanych aplikacji jest tylko do odczytu.
-  Bezpieczne przenoszenie na tych systemach pozostaje zablokowane.
+- MOVE wymaga prawidłowego, aktualnego inwentarza natywnego `pacman`,
+  `dpkg-query` lub `rpm`, wybranego na podstawie rodziny systemu.
+  Nieznany system, błąd dostawcy lub niepełna baza dpkg blokują operację.
 - AUR instalowany przez pacmana znajduje się w `pacman -Qq`;
   pochodzenie z AUR nie jest dziś rozróżniane od innych pakietów foreign.
 - Flatpak i Snap mają podstawowe przesłanki instalacji.
@@ -65,7 +74,7 @@ o opublikowaniu nowego tagu.
   Wewnętrzne limity lub brak dostępu blokują operację.
 - To nadal kandydat. Autor potwierdził działanie testowanego GUI (2026-10-26),
   ale nie udokumentowano osobno macierzy GNOME/KDE/Xfce.
-  Niezależny przegląd bezpieczeństwa, decyzja o licencji oraz odbiór
+  Niezależny przegląd bezpieczeństwa, dodatkowe sesje pulpitów oraz odbiór
   finalnych artefaktów nadal pozostają otwarte.
 
 ## Weryfikacja

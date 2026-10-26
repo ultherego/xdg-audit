@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Conservative, user-scoped XDG leftovers auditor for Arch/CachyOS.
+"""Conservative, user-scoped Linux XDG leftovers auditor.
 
 READ ONLY by default. --remove moves explicitly selected entries to quarantine.
 Python >= 3.10, standard library only. Never run with sudo.
@@ -23,7 +23,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 VERSION = "1.7.0-rc2"
-SCOPES = ("config", "data", "state", "cache", "flatpak", "dotfiles")
+SCOPES = ("config", "data", "state", "cache", "flatpak", "snap", "dotfiles")
 # These entries are generic OS/session infrastructure or particularly sensitive data.
 # The protection is intentional even when a matching executable is not found.
 PROTECTED = {
@@ -44,6 +44,7 @@ PROTECTED = {
     "state": {"systemd", "wireplumber", "xdg-audit"},
     "cache": {"mesa_shader_cache", "fontconfig", "thumbnails", "paru", "yay", "go-build"},
     "flatpak": set(),
+    "snap": set(),
     "dotfiles": {".config", ".local", ".cache", ".var", ".ssh", ".gnupg", ".pki", ".mozilla",
                  ".profile", ".bashrc", ".zshrc", ".bash_profile", ".gitconfig", ".Xauthority",
                  ".ICEauthority", ".lesshst", ".password-store", ".rustup", ".cargo",
@@ -242,6 +243,7 @@ def xdg_roots(home: Path) -> dict[str, Path]:
         "state": valid_root(os.environ.get("XDG_STATE_HOME"), home / ".local/state", home),
         "cache": valid_root(os.environ.get("XDG_CACHE_HOME"), home / ".cache", home),
         "flatpak": valid_root(None, home / ".var/app", home),
+        "snap": valid_root(None, home / 'snap', home),
         "dotfiles": home,
     }
     return {k: v for k, v in roots.items() if v is not None}
@@ -316,7 +318,7 @@ def read_active_names(home: Path, roots: dict[str, Path]):
     from xdg_sources import (ActiveInventory, pacman_packages, pacman_foreign,
                              dpkg_packages, rpm_packages, flatpak_apps, snap_apps,
                              user_appimages, manual_binaries,
-                             npm_global_packages, pipx_environments)
+                             npm_global_packages, pipx_environments, native_package_source)
 
     installed = pacman_packages()
     foreign = pacman_foreign() if installed.status == "ok" else None
@@ -324,7 +326,7 @@ def read_active_names(home: Path, roots: dict[str, Path]):
     rpm = rpm_packages()
     flatpak = flatpak_apps()
     snap = snap_apps()
-    appimage = user_appimages(home)
+    appimage = user_appimages(home, roots.get('data', home / '.local/share'))
     manual = manual_binaries(home)
     npm = npm_global_packages(home)
     pipx = pipx_environments(home)
@@ -360,6 +362,9 @@ def read_active_names(home: Path, roots: dict[str, Path]):
         manual=manual.names,
         npm_global=npm.names, pipx=pipx.names,
         flatpak_ids=flatpak.app_ids if flatpak.status == "ok" else (),
+        snap_ids=snap.app_ids if snap.status == 'ok' else (),
+        appimage_paths=appimage.app_ids,
+        native_source=native_package_source(),
         distro={"dpkg": dpkg.names, "rpm": rpm.names},
         provenance={name: p.note for name, p in probes.items() if p.note})
 
@@ -495,6 +500,7 @@ class Item:
                 ('desktop entry', 'desktop', 'weak'),
                 ('auxiliary installed package', 'pacman_helper', 'weak'),
                 ('removed in pacman.log:', 'pacman_history', 'historical'),
+                ('removed in dpkg.log:', 'dpkg_history', 'historical'),
                 ('historical removed package:', 'pacman_history', 'historical'),
                 ('mentioned in user session', 'session_reference', 'weak'),
                 ('protected:', 'protection_policy', 'policy'),
@@ -557,14 +563,24 @@ def scan(home: Path, scopes: list[str], keeps: set[str], extra_aliases: dict[str
     inventory = read_active_names(home, roots)
     packages, flatpaks, snaps, appimages, units, processes, desktops, active = inventory
     health = getattr(inventory, "status", None)
-    pacman_available = bool(packages) and (health is None or health.get("pacman") == "ok")
+    from xdg_sources import verified_native_source, dpkg_removals
+    native_source = getattr(inventory, 'native_source', 'pacman')
+    try:
+        verified_native_source(inventory)
+        native_available = True
+    except ValueError:
+        native_available = False
     provider_failures = set() if health is None else {
         name for name, state in health.items()
         if name != "pacman_foreign" and state not in ("ok", "absent")
     }
-    removals = parse_removals(home)
-    removed_normal = {normalize(p): p for p in removals if p not in packages}
-    removed_normal.update({normalize(stem_package(p)): p for p in removals if p not in packages})
+    removals = (dpkg_removals() if native_source == 'dpkg' else
+                {} if native_source == 'rpm' else parse_removals(home))
+    removal_log = 'dpkg.log' if native_source == 'dpkg' else 'pacman.log'
+    current_native = (packages if native_source == 'pacman' else
+                      getattr(inventory, 'distro', {}).get(native_source, ()))
+    removed_normal = {normalize(p): p for p in removals if p not in current_native}
+    removed_normal.update({normalize(stem_package(p)): p for p in removals if p not in current_native})
     alias_map = {**ALIASES, **{k.casefold(): v for k, v in extra_aliases.items()}}
     stage('Katalogi i klasyfikacja')
     items: list[Item] = []
@@ -632,6 +648,25 @@ def scan(home: Path, scopes: list[str], keeps: set[str], extra_aliases: dict[str
                         else:
                             it.reasons.append(
                                 "Flatpak app-id is not currently installed; check manually")
+                    items.append(it)
+                    continue
+                if scope == 'snap':
+                    from xdg_sources import valid_snap_id
+                    snap_health = (health or {}).get('snap')
+                    snap_ids = getattr(inventory, 'snap_ids', None)
+                    if snap_ids is None:
+                        snap_ids = snaps  # legacy inventory callers
+                    if not valid_snap_id(path.name):
+                        it.state, it.protected = 'PROTECTED', True
+                        it.reasons.append('not a canonical Snap instance directory')
+                    elif path.name in snap_ids and snap_health in (None, 'ok'):
+                        it.state = 'ACTIVE'
+                        it.reasons.append('installed Snap: ' + path.name)
+                    else:
+                        it.state = 'REVIEW'
+                        it.reasons.append('Snap instance is not verified as installed; check manually'
+                            if snap_health in (None, 'ok') else
+                            'Snap inventory unavailable; cannot verify instance')
                     items.append(it)
                     continue
                 # Current installed inventory is authoritative. An old removal
@@ -708,13 +743,13 @@ def scan(home: Path, scopes: list[str], keeps: set[str], extra_aliases: dict[str
                             it.reasons.append("pipx environment found (protective hint only): " +
                                               ",".join(pipx_matches[:3]))
                         if removed:
-                            it.reasons.append("historical removed package: " + ",".join(sorted(set(removed))[:4]))
+                            it.reasons.append(f"removed in {removal_log}: " + ",".join(sorted(set(removed))[:4]))
                     elif removed:
-                        it.state = ("CANDIDATE" if pacman_available and not provider_failures
+                        it.state = ("CANDIDATE" if native_available and not provider_failures
                                     else "REVIEW")
-                        it.reasons.append("removed in pacman.log: " + ",".join(sorted(set(removed))[:4]))
-                        if not pacman_available:
-                            it.reasons.append("pacman package inventory unavailable; cannot confirm removal")
+                        it.reasons.append(f"removed in {removal_log}: " + ",".join(sorted(set(removed))[:4]))
+                        if not native_available:
+                            it.reasons.append("native package inventory unavailable; cannot confirm removal")
                         if provider_failures:
                             it.reasons.append("installed-app inventory failed: " +
                                               ",".join(sorted(provider_failures)))
@@ -764,6 +799,7 @@ def scan(home: Path, scopes: list[str], keeps: set[str], extra_aliases: dict[str
                           "removed_package_names": len(removals), "desktop_names": len(desktops),
                           "phase_times_ms": times,
                           "installed_sources": dict(health or {"pacman": "legacy"}),
+                          'native_package_source': native_source,
                           "pacman_foreign_count": len(getattr(inventory, "foreign", ()))} 
 
 
@@ -1056,14 +1092,13 @@ def commit_quarantine(chosen: list[Item], roots: dict[str, Path], home: Path,
             raise ValueError(f"Invalid scan entry: {it.path}")
     # Revalidate installation evidence immediately before any filesystem move:
     # the application might have been installed after the scan completed.
-    # A missing pacman inventory is ambiguous: fail closed for removal.
+    # Require the actual OS database; optional foreign tools cannot replace it.
     current_inventory = read_active_names(home, roots)
     (current_packages, current_flatpaks, current_snaps, current_appimages,
      current_units, current_processes, _desktops, _active) = current_inventory
     current_health = getattr(current_inventory, "status", None)
-    if not current_packages or (current_health is not None and
-                                current_health.get("pacman") != "ok"):
-        raise ValueError("Cannot verify current pacman inventory before quarantine; no changes")
+    from xdg_sources import verified_native_source
+    verified_native_source(current_inventory)
     if current_health:
         failures = sorted(name for name, state in current_health.items()
                           if name != "pacman_foreign" and state not in ("ok", "absent"))
@@ -1081,6 +1116,18 @@ def commit_quarantine(chosen: list[Item], roots: dict[str, Path], home: Path,
     for it in chosen:
         if normalize(it.path.name) in protected_names:
             raise ValueError(f'Entry is explicitly protected in current settings: {it.path}')
+        if it.scope in ('snap', 'flatpak'):
+            provider = it.scope
+            canonical = getattr(current_inventory, provider + '_ids', None)
+            if canonical is None:
+                canonical = current_snaps if provider == 'snap' else current_flatpaks
+            if current_health is not None and current_health.get(provider) != 'ok':
+                raise ValueError(f'Cannot verify current {provider} inventory before quarantine; no changes')
+            if it.path.name.casefold() in canonical:
+                raise ValueError(f'Application is present now; refusing quarantine: {it.path}')
+            if nonpacman_matches(it.path.name, current_processes, alias_map):
+                raise ValueError(f'Application is running now; refusing quarantine: {it.path}')
+            continue  # native package names do not own Snap/Flatpak namespaces
         installed, _helpers = match_installed_packages(it.path.name, current_packages, alias_map)
         live_distro = any(match_installed_packages(it.path.name, names, alias_map)[0]
                           for names in getattr(current_inventory, "distro", {}).values())
@@ -1532,6 +1579,7 @@ def main(argv=None):
         inventory = read_active_names(home, roots)
         packages, flatpaks, snaps, appimages, _units, _processes, _desktops, _active = inventory
         print(json.dumps({
+            'native_package_source': getattr(inventory, 'native_source', None),
             "health": dict(getattr(inventory, "status", {})),
             "counts": {"pacman": len(packages),
                        "foreign_pacman_AUR_or_local": len(getattr(inventory, "foreign", ())),
@@ -1543,7 +1591,8 @@ def main(argv=None):
                        "dpkg": len(getattr(inventory, "distro", {}).get("dpkg", ())),
                        "rpm": len(getattr(inventory, "distro", {}).get("rpm", ())),
                        "snap": len(snaps),
-                       "appimage": len(appimages),
+                       "appimage": len(getattr(inventory, 'appimage_paths', None)
+                                       if getattr(inventory, 'appimage_paths', None) is not None else appimages),
                        "manual_binary_hints": len(getattr(inventory, "manual", ()))},
             "notes": dict(getattr(inventory, "provenance", {})),
             "warning": "Provider health and installed hints are not proof that files can be deleted"

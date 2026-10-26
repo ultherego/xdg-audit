@@ -225,11 +225,11 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
                 cards.addWidget(frame,1)
             layout.addLayout(cards)
 
-            scopes = [tr('Wszystko'),tr('Konfiguracja'),tr('Dane'),tr('Stan'),'Cache',tr('Flatpak'),tr('Dotfiles'),tr('Kwarantanna')]
+            scopes = [tr('Wszystko'),tr('Konfiguracja'),tr('Dane'),tr('Stan'),'Cache',tr('Flatpak'),tr('Snap'),tr('Dotfiles'),tr('Kwarantanna')]
             self.scope_tabs = QtWidgets.QTabBar()
             self.scope_tabs.setExpanding(False)
             self.scope_tabs.setDrawBase(False)
-            self.scope_values = ['all','config','data','state','cache','flatpak','dotfiles']
+            self.scope_values = ['all','config','data','state','cache','flatpak','snap','dotfiles']
             for title in scopes: self.scope_tabs.addTab(title)
             self.scope_tabs.setCurrentIndex(self.scope_values.index(args.scope))
             self.scope_tabs.currentChanged.connect(self.scope_tab_changed)
@@ -239,7 +239,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
             self.scope_combo = QtWidgets.QComboBox()
             for title,value in [(tr('Wszystko'),'all'),('~/.config','config'),
                          ('~/.local/share','data'),('~/.local/state','state'),('~/.cache','cache'),
-                         (tr('Flatpak'),'flatpak'),(tr('Dotfiles'),'dotfiles')]:
+                         (tr('Flatpak'),'flatpak'),(tr('Snap'),'snap'),(tr('Dotfiles'),'dotfiles')]:
                 self.scope_combo.addItem(title,value)
             self.scope_combo.setCurrentIndex(self.scope_combo.findData(args.scope))
             self.scope_combo.hide()
@@ -935,12 +935,13 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
             self.scan_progress.setFormat(tr('Skanowanie…'))
             for index,(_,scope) in enumerate([('Wszystko','all'),('Konfiguracja','config'),
                     ('Dane','data'),('Stan','state'),('Cache','cache'),('Flatpak','flatpak'),
-                    ('Dotfiles','dotfiles'),('Kwarantanna','quarantine')]):
-                title=('Wszystko','Konfiguracja','Dane','Stan','Cache','Flatpak','Dotfiles','Kwarantanna')[index]
+                    ('Snap','snap'),('Dotfiles','dotfiles'),('Kwarantanna','quarantine')]):
+                title=('Wszystko','Konfiguracja','Dane','Stan','Cache','Flatpak','Snap','Dotfiles','Kwarantanna')[index]
                 self.scope_tabs.setTabText(index,tr(title))
             self.scope_combo.setItemText(0,tr('Wszystko'))
             self.scope_combo.setItemText(5,tr('Flatpak'))
-            self.scope_combo.setItemText(6,tr('Dotfiles'))
+            self.scope_combo.setItemText(6,tr('Snap'))
+            self.scope_combo.setItemText(7,tr('Dotfiles'))
             self.audit_model.headerDataChanged.emit(Qt.Orientation.Horizontal,0,4)
             self.visible_count.setText(entries_count(self.audit_model.rowCount(),_language))
             self.update_selection_status(reveal=False)

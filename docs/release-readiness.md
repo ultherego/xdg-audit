@@ -33,7 +33,7 @@ blokujący force-push/usunięcie `main` i sprawdzający testy Python,
 GUI Xvfb, benchmark oraz archiwum źródeł.
 
 **Istotny szczegół:** check `Source ZIP and tar.gz` ma w workflow
-`needs: [test, gui-smoke, wayland-smoke, benchmark, quarantine-cycle]`.
+`needs: [test, gui-smoke, wayland-smoke, benchmark, quarantine-cycle, native-sources]`.
 Zatem poprawne zbudowanie archiwum wymaga także sukcesu testu Wayland
 i testu `Quarantine and restore E2E (isolated)`, mimo że nie są wpisane
 bezpośrednio na listę wymaganych kontekstów rulesetu.
@@ -59,8 +59,9 @@ potwierdzenie użytkownika nie wymienia.
 - [ ] GNOME/Wayland — cały przepływ od skanu do przywrócenia i PURGE.
 - [ ] KDE Plasma/Wayland — analogicznie, z zachowaniem motywu.
 - [ ] Xfce/X11 — uruchomienie i przebieg na backendzie Tk/GTK.
-- [x] Brak pacmana: rzeczywisty odczyt dpkg i skan działają, MOVE pozostaje
-  zablokowany — [wykonany test](verification-2026-10-26.md).
+- [x] Natywne APT/dpkg i RPM: przed MOVE jest sprawdzana właściwa baza
+  systemu; nie jest wymagany pacman. Testy natywnego cyklu Ubuntu/Fedora
+  są obowiązkowym warunkiem zbudowania archiwów w CI.
 - [x] Obsługa pełnego dysku i braku praw: testy silnika ENOSPC/EACCES,
   brak nadpisywania danych oraz natywny smoke komunikatu ENOSPC w GTK —
   [wyniki](verification-2026-10-26.md). Nie oznacza to testu fizycznego
@@ -68,8 +69,8 @@ potwierdzenie użytkownika nie wymienia.
 
 ## 4. Publikacja (P1)
 
-- [ ] Wybrać **licencję** (MIT/Apache-2.0/GPL-3.0 lub inna) i dopiero
-  po decyzji właściciela dodać jej pełny tekst. Nie zgadywać licencji.
+- [x] **Licencja MIT**: właściciel zlecił wybór licencji (2026-10-26).
+  Pełny tekst w [LICENSE](../LICENSE), również w archiwach źródeł.
 - [x] Zaktualizować README, CHANGELOG i RELEASE_NOTES do kodu RC2.
 - [x] Zweryfikować bieżące screenshoty, neutralne ścieżki oraz wejścia do
   archiwów źródeł; wykluczyć przypadkowe pliki z checkoutu —
@@ -81,9 +82,10 @@ potwierdzenie użytkownika nie wymienia.
   [opis i testy](desktop-installation.md).
 - [ ] Opublikować **nowy RC** po akceptacji, dopiero potem wersję stabilną.
 
-## 5. Po stabilizacji: źródła instalacji aplikacji
+## 5. Źródła instalacji aplikacji
 
 Rozwijać **inwentaryzację aplikacji**, nie paczki xdg-audit:
-Arch/AUR/foreign → Flatpak/Snap/AppImage/binarki → dpkg i rpm.
+Arch/AUR/foreign, Flatpak, Snap, AppImage, binarki oraz APT/dpkg i RPM są obsługiwane.
+MOVE nadal wymaga jawnej decyzji i sprawnej natywnej bazy systemu.
 Projekt adapterów i warunki bezpieczeństwa:
 [installation-source-support.md](installation-source-support.md).

@@ -14,7 +14,7 @@
   <img alt="No automatic deletion" src="https://img.shields.io/badge/deletion-manual%20only-a6e3a1?style=flat-square&labelColor=1e1e2e">
 </p>
 
-xdg-audit scans user-scoped configuration, data, state, cache, Flatpak directories and selected dotfiles. It highlights **possible leftovers** while distinguishing active, protected and uncertain application data. **Nothing is deleted automatically.**
+xdg-audit scans user-scoped configuration, data, state, cache, Flatpak/Snap directories and selected dotfiles. It highlights **possible leftovers** while distinguishing active, protected and uncertain application data. **Nothing is deleted automatically.**
 
 ## 🖥️ Preview
 
@@ -163,7 +163,7 @@ sudo pacman -S --needed python python-gobject gtk4
 sudo pacman -S --needed python pyside6
 ```
 
-**System tools:** `coreutils` (`du`) for directory sizes, `procps-ng` (`ps`) for process evidence. `pacman` verifies installed packages on Arch/CachyOS and is **required before quarantine moves** (fail closed if the inventory cannot be verified). Optional integrations: `flatpak`, `snap`, `systemctl --user`, and `xdg-open`.
+**System tools:** `coreutils` (`du`) for directory sizes, `procps-ng` (`ps`) for process evidence. The native database (`pacman`, `dpkg-query` or `rpm`, selected using `os-release`) must be verified before quarantine moves. Missing, incomplete or failed inventories block MOVE. Optional integrations: `flatpak`, `snap`, `systemctl --user`, and `xdg-open`.
 
 ### Wykrywanie źródeł instalacji aplikacji
 
@@ -185,11 +185,20 @@ Zestawienie tylko do odczytu pokazuje stan inwentarzy pacman, pacman-foreign,
 Flatpak, Snap, AppImage, zainstalowanych pakietów DEB/RPM i ochronnych wskazówek dla ręcznie instalowanych
 binarek (`~/.local/bin`, `~/bin`, `/usr/local/bin`, `/opt`).
 Pakiety foreign mogą pochodzić z AUR **lub** lokalnej instalacji.
-Błąd aktywnego dostawcy nie oznacza odinstalowania programu i blokuje MOVE
-do czasu poprawnego ponownego sprawdzenia. Odczyt `dpkg-query` i `rpm -qa` służy obecnie do ochrony
-**zainstalowanych** aplikacji. MOVE na systemach Debian/RPM pozostaje
-zablokowany do czasu walidacji właściwego dostawcy pakietów przed zmianami;
-obecnie MOVE nadal wymaga sprawnego pacmana.
+MOVE na Debianie/Ubuntu oraz systemach RPM korzysta z właściwej natywnej bazy,
+bez wymagania pacmana. Przed operacją inwentarze są odczytywane ponownie;
+błąd, timeout, stan `partial` dpkg lub nieznana rodzina systemu blokują MOVE.
+Dane REVIEW/UNKNOWN nadal wymagają osobnego potwierdzenia niepewności.
+
+Zakres **Snap** obejmuje `~/snap`, rozróżnia dokładne instancje (np.
+`firefox` i `firefox_work`) i wymaga sprawnej listy Snapa przed MOVE.
+**AppImage** obsługuje typowe katalogi, wersjonowane nazwy oraz bezpieczne
+launchery `.desktop`, również dla ścieżek poza katalogami domyślnymi.
+Obrazy, polecenia `Exec` i skrypty nie są uruchamiane.
+
+```fish
+python3 xdg_audit.py --scope snap --quick --json
+```
 
 
 
@@ -282,7 +291,7 @@ reguł kwalifikowania osieroconych danych. Zobacz
 
 Podstawowe inwentarze pacmana/foreign, Flatpaka, Snapa, AppImage,
 binarek ręcznych, npm/pipx oraz `dpkg` i `rpm` już działają.
-Przed rozszerzeniem operacji MOVE poza Arch kończymy walidację P0/P1.
+MOVE obsługuje natywne bazy Arch, DEB i RPM, z aktualną weryfikacją przed zmianami.
 Szczegółowy stan i ograniczenia bezpieczeństwa:
 [installation-source-support](docs/installation-source-support.md).
 
@@ -290,7 +299,7 @@ Szczegółowy stan i ograniczenia bezpieczeństwa:
 
 The unreleased development version on `main` is **`1.7.0-rc2`**. The most recent tagged prerelease is **[v1.7.0-rc1](https://github.com/ultherego/xdg-audit/releases/tag/v1.7.0-rc1)**.
 
-GitHub Actions runs Python 3.10–3.14 tests, GTK4/Qt6/Tk GUI startup under Xvfb, native GTK4/Qt6 Wayland startup with headless Weston, a synthetic benchmark, the isolated end-to-end quarantine/restore/purge test, real SIGKILL recovery checkpoints, a Gio desktop-launch test, GTK disk-full error handling, and source ZIP/tar.gz integrity checks. The owner confirmed the tested GUI functionality on 2026-10-26. Additional GNOME/KDE/Xfce session coverage remains separately recorded in the readiness checklist.
+GitHub Actions runs Python 3.10–3.14 tests, GTK4/Qt6/Tk GUI startup under Xvfb, native GTK4/Qt6 Wayland startup with headless Weston, a synthetic benchmark, the isolated end-to-end quarantine/restore/purge test, real SIGKILL recovery checkpoints, native Ubuntu/dpkg and Fedora/RPM lifecycle checks, a Gio desktop-launch test, GTK disk-full error handling, and source ZIP/tar.gz integrity checks. The owner confirmed the tested GUI functionality on 2026-10-26. Additional GNOME/KDE/Xfce session coverage remains separately recorded in the readiness checklist.
 
 ```bash
 python3 -m unittest discover -s tests -v
@@ -305,3 +314,10 @@ Optional per-user desktop-menu registration, updating and safe unregistration ar
 Source archives use the explicit allowlist in `scripts/archive-files.json`.
 Add intended source files there when extending the project; incidental checkout
 files and symbolic links must never enter a release archive.
+
+
+## License
+
+xdg-audit is available under the [MIT License](LICENSE), copyright 2026 Ulther Ego (ultherego).
+Optional GTK/Qt/Tk dependencies retain their own licenses and are not bundled
+with the source archives.

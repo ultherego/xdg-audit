@@ -2,6 +2,17 @@
 
 ## 1.7.0-rc2 (unreleased)
 
+- Adopt the MIT License and include it in both source archive formats.
+- Authorize native DEB/RPM quarantine using the OS-selected fresh installed
+  database; APT uses dpkg. Incomplete dpkg states block mutation.
+- Read bounded dpkg removal history, including compressed rotation, without
+  overriding currently installed applications.
+- Add the Snap user-data scope to CLI/GTK/Qt/Tk with exact instance IDs,
+  strict complete inventory parsing and fresh namespace checks before MOVE.
+- Recognize version/architecture AppImage aliases, portable-data names and
+  safe direct launcher targets without running images or desktop commands.
+- Gate archives and releases on native Ubuntu/dpkg and Fedora/RPM lifecycle CI.
+
 - Verify interruption recovery with eight real SIGKILL checkpoints covering
   MOVE, RESTORE, partial PURGE and abandoned journal temporary files.
 - Anchor all MOVE/RESTORE journal writes; preserve the original ENOSPC/EACCES
@@ -32,8 +43,8 @@
   shallow /opt installation hints. Failed probes never imply uninstallation.
 - Expose read-only `--installed-sources` health/count diagnostics.
 - Add installed-only dpkg-query and RPM probes to keep currently installed
-  applications ACTIVE on Debian/Fedora-derived systems. Non-Arch MOVE stays
-  blocked pending separate security validation.
+  applications ACTIVE on Debian/Fedora-derived systems. MOVE now uses the
+  actual native database, with the same quarantine safety checks.
 
 - Finalize manual PURGE with v3 SHA-256 inventory, fail-closed preflight,
   inode checking and resumable journal states.

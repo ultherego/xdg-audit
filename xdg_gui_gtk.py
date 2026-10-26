@@ -27,7 +27,7 @@ def align_header_edges(header: Any, left: Any, right: Any, gtk: Any) -> None:
 
 
 SCOPES = [('Wszystko','all'),('Konfiguracja','config'),('Dane','data'),
-          ('Stan','state'),('Cache','cache'),('Flatpak','flatpak'),('Dotfiles','dotfiles')]
+          ('Stan','state'),('Cache','cache'),('Flatpak','flatpak'),('Snap','snap'),('Dotfiles','dotfiles')]
 
 
 def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict, backend: str) -> int:

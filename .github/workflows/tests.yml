@@ -32,7 +32,7 @@ jobs:
 
   archives:
     name: Source ZIP and tar.gz
-    needs: [test, gui-smoke, wayland-smoke, benchmark, quarantine-cycle]
+    needs: [test, gui-smoke, wayland-smoke, benchmark, quarantine-cycle, native-sources]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -60,7 +60,7 @@ jobs:
   release:
     name: GitHub release on version tag
     if: startsWith(github.ref, 'refs/tags/v') && github.event_name == 'push'
-    needs: [test, gui-smoke, wayland-smoke, benchmark, quarantine-cycle, archives]
+    needs: [test, gui-smoke, wayland-smoke, benchmark, quarantine-cycle, native-sources, archives]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -109,16 +109,16 @@ jobs:
         run: xvfb-run -a /usr/bin/python3 scripts/gui_smoke.py --backend qt6
       - name: Tk widget/model
         run: xvfb-run -a /usr/bin/python3 scripts/gui_smoke.py --backend tk
-      - name: GTK4 full application startup
-        run: xvfb-run -a /usr/bin/python3 scripts/gui_app_smoke.py --backend gtk4
+      - name: GTK4 full application startup with Snap scope
+        run: xvfb-run -a /usr/bin/python3 scripts/gui_app_smoke.py --backend gtk4 --scope snap
       - name: GTK4 PURGE preview remains responsive
         run: xvfb-run -a /usr/bin/python3 scripts/gui_async_purge_smoke.py
       - name: GTK4 shows disk-full error and refuses PURGE confirmation
         run: xvfb-run -a /usr/bin/python3 scripts/gui_async_purge_smoke.py --disk-full
-      - name: Qt6 full application startup
-        run: xvfb-run -a /usr/bin/python3 scripts/gui_app_smoke.py --backend qt6
-      - name: Tk full application startup
-        run: xvfb-run -a /usr/bin/python3 scripts/gui_app_smoke.py --backend tk
+      - name: Qt6 full application startup with Snap scope
+        run: xvfb-run -a /usr/bin/python3 scripts/gui_app_smoke.py --backend qt6 --scope snap
+      - name: Tk full application startup with Snap scope
+        run: xvfb-run -a /usr/bin/python3 scripts/gui_app_smoke.py --backend tk --scope snap
       - name: Desktop registration and real launcher path escaping
         run: /usr/bin/python3 scripts/desktop_entry_smoke.py
 
@@ -147,6 +147,37 @@ jobs:
           python-version: '3.12'
       - name: Safe full cycle on disposable XDG data
         run: python scripts/smoke_quarantine_cycle.py --synthetic-inventory
+
+  native-sources:
+    name: Native ${{ matrix.provider }} inventory and lifecycle
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: ubuntu:24.04
+            provider: dpkg
+          - image: fedora:43
+            provider: rpm
+    container:
+      image: ${{ matrix.image }}
+    steps:
+      - name: Install native test prerequisites
+        shell: sh
+        run: |
+          if command -v apt-get >/dev/null; then
+            apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=25 update -qq
+            DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=25 install -y --no-install-recommends python3 git passwd util-linux ca-certificates
+          else
+            dnf -y --setopt=timeout=30 --setopt=retries=2 install python3 git shadow-utils util-linux
+          fi
+          useradd --create-home audit-test
+      - uses: actions/checkout@v4
+      - name: Native distribution regressions as an unprivileged user
+        run: runuser -u audit-test -- env PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -q
+      - name: Real native inventory and complete quarantine lifecycle
+        run: runuser -u audit-test -- env PYTHONDONTWRITEBYTECODE=1 python3 scripts/smoke_native_sources.py --expect ${{ matrix.provider }}
 
   benchmark:
     name: Synthetic scan benchmark

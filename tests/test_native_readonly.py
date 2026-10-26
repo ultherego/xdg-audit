@@ -1,4 +1,4 @@
-"""Read the real dpkg database; never authorize a native non-Arch MOVE."""
+"""Read the real dpkg database and complete a native, isolated lifecycle."""
 import os
 from pathlib import Path
 import shutil
@@ -13,8 +13,8 @@ import xdg_sources as sources
 
 @unittest.skipUnless(shutil.which('dpkg-query') and not shutil.which('pacman'),
                      'requires a native dpkg host without pacman')
-class NativeReadOnlyTests(unittest.TestCase):
-    def test_real_dpkg_scan_and_mutation_refusal_preserve_fixture(self):
+class NativeDpkgTests(unittest.TestCase):
+    def test_real_dpkg_scan_and_explicit_quarantine_restore_preserve_bytes(self):
         with tempfile.TemporaryDirectory(prefix='xdg-native-readonly-') as temp:
             home = Path(temp)
             db = home / 'fixture-dpkg-db'
@@ -44,7 +44,12 @@ class NativeReadOnlyTests(unittest.TestCase):
                 self.assertEqual(report['installed_sources']['dpkg'], 'ok')
                 self.assertEqual(report['installed_sources']['pacman'], 'absent')
                 selected = next(row for row in rows if row.path == source)
-                with self.assertRaisesRegex(ValueError, 'pacman inventory'):
-                    audit.commit_quarantine([selected], roots, home, allow_uncertain=True, emit=lambda _: None)
+                self.assertEqual(report['native_package_source'], 'dpkg')
+                with self.assertRaisesRegex(ValueError, 'Blocked entry'):
+                    audit.commit_quarantine([selected], roots, home, emit=lambda _: None)
+                moved = audit.commit_quarantine([selected], roots, home, allow_uncertain=True, emit=lambda _: None)
+                self.assertEqual(moved['moved'], [str(source)])
+                self.assertFalse(source.exists())
+                restored = audit.restore_quarantine_run(home, roots, moved['run_id'], emit=lambda _: None)
+                self.assertEqual(restored['restored'], 1)
             self.assertEqual((source / 'settings').read_bytes(), b'preserve\x00\xff')
-            self.assertFalse(audit.quarantine_dir(home, roots).exists())

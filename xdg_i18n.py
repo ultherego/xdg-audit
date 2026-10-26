@@ -7,6 +7,7 @@ from __future__ import annotations
 
 LANGUAGES = {'pl': 'Polski', 'en': 'English'}
 EN = {
+    'Snap': 'Snap',
     "Test uprawnień ~/.config…": "Test ~/.config permissions…",
     "Test uprawnień ~/.config": "Test ~/.config permissions",
     "pkexec lub systemowy /usr/bin/id jest niedostępny.": "pkexec or the trusted system /usr/bin/id program is unavailable.",
@@ -364,6 +365,10 @@ _PL_EVIDENCE_EXACT = {
     'user allowlist': 'pozycja z listy Zachowaj użytkownika',
     'Flatpak app-id is not currently installed; check manually': 'identyfikator aplikacji Flatpak nie jest zainstalowany; sprawdź ręcznie',
     'pacman package inventory unavailable; cannot confirm removal': 'lista pakietów pacman niedostępna; nie można potwierdzić odinstalowania',
+    'native package inventory unavailable; cannot confirm removal': 'natywna lista pakietów niedostępna; nie można potwierdzić odinstalowania',
+    'not a canonical Snap instance directory': 'nazwa nie odpowiada katalogowi instancji Snap',
+    'Snap instance is not verified as installed; check manually': 'instancja Snap nie jest potwierdzona jako zainstalowana; sprawdź ręcznie',
+    'Snap inventory unavailable; cannot verify instance': 'lista aplikacji Snap jest niedostępna; nie można zweryfikować instancji',
     'no verified installed application or owner (NOT proof of orphan)': 'nie ustalono zainstalowanej aplikacji ani właściciela (to NIE dowód osierocenia)',
     'checksum manifest in XDG config, not an application ID; inspect contents': 'manifest sum kontrolnych w konfiguracji XDG; nie jest identyfikatorem aplikacji, sprawdź zawartość',
     'protected: potential account credentials or authentication data (ownership not verified)': 'chronione: potencjalne dane logowania lub uwierzytelniania (właściciel niezweryfikowany)',
@@ -385,6 +390,7 @@ _PL_EVIDENCE_PREFIXES = (
     ('desktop entry exists; may be stale: ', 'istnieje plik .desktop, ale może być nieaktualny: '),
     ('historical removed package: ', 'historycznie odinstalowany pakiet: '),
     ('removed in pacman.log: ', 'odinstalowany według pacman.log: '),
+    ('removed in dpkg.log: ', 'odinstalowany według dpkg.log (APT/dpkg): '),
     ('mentioned in user session config: ', 'wzmianka w konfiguracji sesji użytkownika: '),
 )
 

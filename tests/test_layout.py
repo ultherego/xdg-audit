@@ -21,7 +21,7 @@ class LayoutTests(unittest.TestCase):
         from xdg_gui_tk import STATES, SCOPE_LABELS
         self.assertEqual(set(STATES), {'CANDIDATE','REVIEW','UNKNOWN','ACTIVE','PROTECTED'})
         self.assertEqual({scope for _, scope in SCOPE_LABELS},
-                         {'all','config','data','state','cache','flatpak','dotfiles'})
+                         {'all','config','data','state','cache','flatpak','snap','dotfiles'})
 
     def test_gtk_header_information_is_right_anchored(self):
         from types import SimpleNamespace
