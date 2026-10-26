@@ -1150,21 +1150,30 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
             retention=Gtk.Button(label=tr('Ustaw retencję…'))
             retention.connect('clicked',lambda *_:self.configure_retention())
             append(tools_box,retention)
+            history=Gtk.Button(label=tr('Wyczyść starą historię…'))
+            history.connect('clicked',lambda *_:self.cleanup_expired_history())
+            append(tools_box,history)
             tools_row.set_child(tools_box) if GTK4 else tools_row.add(tools_box)
             append(self.qlist,tools_row)
             for run in engine.quarantine_runs(home,engine.xdg_roots(home)):
                 row=Gtk.ListBoxRow()
                 box=Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL,spacing=12)
-                append(box,label(run['run_id']+'   |   '+tf('{count} przeniesionych / {total} w manifest',count=run['moved'],total=len(run['items']))),True)
+                append(box,label(run['run_id']+'   |   '+tr(run['status'])+'   |   '+
+                    tf('{count} przeniesionych / {total} w manifest',count=run['moved'],total=len(run['items']))),True)
                 preview=Gtk.Button(label=tr('Podgląd'))
                 preview.connect('clicked',lambda _,r=run:self.quarantine_preview(r))
                 append(box,preview)
-                button=Gtk.Button(label=tr('Przywróć…'))
-                button.connect('clicked',lambda _,rid=run['run_id']:self.restore(rid))
-                append(box,button)
-                purge=Gtk.Button(label=tr('Usuń trwale…'))
-                purge.connect('clicked',lambda _,rid=run['run_id']:self.purge_runs([rid]))
-                append(box,purge)
+                if run['status'] in ('PURGED','RESTORED','COMPLETED'):
+                    history_button=Gtk.Button(label=tr('Usuń historię…'))
+                    history_button.connect('clicked',lambda _,rid=run['run_id']:self.cleanup_history([rid]))
+                    append(box,history_button)
+                else:
+                    button=Gtk.Button(label=tr('Przywróć…'))
+                    button.connect('clicked',lambda _,rid=run['run_id']:self.restore(rid))
+                    append(box,button)
+                    purge=Gtk.Button(label=tr('Usuń trwale…'))
+                    purge.connect('clicked',lambda _,rid=run['run_id']:self.purge_runs([rid]))
+                    append(box,purge)
                 row.set_child(box) if GTK4 else row.add(box)
                 append(self.qlist,row)
             if not GTK4:self.qlist.show_all()
@@ -1203,6 +1212,38 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
             append(actions,button)
             set_child(dialog,content)
             dialog.present() if GTK4 else dialog.show_all()
+
+        def cleanup_expired_history(self):
+            try:
+                ids=engine.expired_quarantine_history(home,engine.xdg_roots(home))
+                if ids:
+                    self.cleanup_history(ids)
+                else:
+                    self.status.set_text(tr('Brak wygasłych manifestów.'))
+            except (ValueError,OSError) as exc:
+                self.status.set_text(tf('Błąd retencji: {error}',error=exc))
+
+        def cleanup_history(self,run_ids):
+            try:
+                plans=[engine.cleanup_quarantine_history(home,engine.xdg_roots(home),rid)
+                       for rid in run_ids]
+            except (ValueError,OSError) as exc:
+                self.status.set_text(tf('Błąd historii: {error}',error=exc))
+                return
+            details='\\n'.join(plan['run_id']+' ('+plan['status']+')' for plan in plans)
+            def execute():
+                try:
+                    for plan in plans:
+                        engine.cleanup_quarantine_history(
+                            home,engine.xdg_roots(home),plan['run_id'],dry_run=False)
+                    self.refresh_quarantine()
+                    self.status.set_text(tr('Usunięto zakończone manifesty.'))
+                except (ValueError,OSError) as exc:
+                    self.refresh_quarantine()
+                    self.status.set_text(tf('Błąd historii: {error}',error=exc))
+            self.prompt(tr('Usuń historię'),details+'\\n\\n'+
+                        tr('Zostaną usunięte tylko zakończone dzienniki.'),
+                        'HISTORY',execute)
 
         def purge_runs(self,run_ids):
             plans=[]
