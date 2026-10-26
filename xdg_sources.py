@@ -7,6 +7,7 @@ commands below requests package installation or root privileges.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from itertools import islice
 import os
 from pathlib import Path
 import re
@@ -248,13 +249,37 @@ def manual_binaries(home: Path) -> Probe:
     return Probe("manual_binary", "ok", frozenset(names))
 
 
-def _package_directories(base: Path, *, scoped=False) -> tuple[set[str], str]:
-    """Inspect only bounded package directory names; never execute packages."""
-    if base.is_symlink() or not base.is_dir():
+def _source_directory_status(home: Path, base: Path) -> str:
+    """Reject symlinked/interrupted ancestors below HOME before reading names."""
+    try:
+        parts = base.relative_to(home).parts
+    except ValueError:
+        return "unsafe"
+    current = home
+    try:
+        for part in parts:
+            current = current / part
+            info = current.lstat()
+            if not stat.S_ISDIR(info.st_mode):
+                return "unsafe"
+    except FileNotFoundError:
+        return "absent"
+    except OSError:
+        return "failed"
+    return "ok"
+
+
+def _package_directories(base: Path, *, scoped=False, home: Path | None = None) -> tuple[set[str], str]:
+    """Read bounded package directory names without following ancestor symlinks."""
+    if home is not None:
+        status = _source_directory_status(home, base)
+        if status != "ok":
+            return set(), status
+    elif base.is_symlink() or not base.is_dir():
         return set(), "absent" if not base.exists() else "unsafe"
     names = set()
     try:
-        entries = list(base.iterdir())
+        entries = list(islice(base.iterdir(), 2001))
         if len(entries) > 2000:
             return set(), "failed"
         for item in entries:
@@ -264,7 +289,7 @@ def _package_directories(base: Path, *, scoped=False) -> tuple[set[str], str]:
             if item.name.startswith("."):
                 continue
             if scoped and item.name.startswith("@"):
-                nested = list(item.iterdir())
+                nested = list(islice(item.iterdir(), 2001))
                 if len(nested) > 2000:
                     return set(), "failed"
                 for child in nested:
@@ -287,28 +312,32 @@ def npm_global_packages(home: Path) -> Probe:
                   home / ".local/share/npm/lib/node_modules")
     names, problems = set(), []
     for folder in candidates:
-        found, state = _package_directories(folder, scoped=True)
+        found, state = _package_directories(folder, scoped=True, home=home)
         names.update(found)
         if state in ("failed", "unsafe"):
             problems.append(str(folder))
     # NVM-managed installations have versioned subdirectories.
     versions = home / ".nvm/versions/node"
-    if versions.is_dir() and not versions.is_symlink():
+    version_status = _source_directory_status(home, versions)
+    if version_status == "ok":
         try:
-            items = list(versions.iterdir())
+            items = list(islice(versions.iterdir(), 65))
             if len(items) > 64:
                 problems.append(str(versions))
             else:
                 for item in items:
-                    if stat.S_ISDIR(item.lstat().st_mode):
+                    info = item.lstat()
+                    if stat.S_ISLNK(info.st_mode):
+                        problems.append(str(item))
+                    elif stat.S_ISDIR(info.st_mode):
                         found, state = _package_directories(
-                            item / "lib/node_modules", scoped=True)
+                            item / "lib/node_modules", scoped=True, home=home)
                         names.update(found)
                         if state in ("failed", "unsafe"):
                             problems.append(str(item))
         except OSError:
             problems.append(str(versions))
-    elif versions.is_symlink():
+    elif version_status in ("unsafe", "failed"):
         problems.append(str(versions))
     return Probe("npm_global", "failed" if problems else "ok",
                  frozenset(names), note="cannot inspect some directories" if problems else
@@ -320,7 +349,7 @@ def pipx_environments(home: Path) -> Probe:
     names, problems = set(), []
     for folder in (home / ".local/share/pipx/venvs",
                    home / ".local/pipx/venvs"):
-        found, state = _package_directories(folder)
+        found, state = _package_directories(folder, home=home)
         names.update(found)
         if state in ("failed", "unsafe"):
             problems.append(str(folder))
