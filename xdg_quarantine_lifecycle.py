@@ -286,7 +286,7 @@ def _delete_entry(scopefd: int, name: str, expected_identity: tuple[int, int, in
     os.fsync(scopefd)
 
 
-def inspect_run(home: Path, roots: dict[str, Path], run_id: str, mounts_checker) -> dict:
+def inspect_run(home: Path, roots: dict[str, Path], run_id: str, mounts_checker, *, allow_unsealed=False) -> dict:
     """Strictly preflight the complete run, including untracked files."""
     if not RUN_ID.fullmatch(run_id):
         raise ValueError("Invalid quarantine run ID")
@@ -371,11 +371,18 @@ def inspect_run(home: Path, roots: dict[str, Path], run_id: str, mounts_checker)
                             raise ValueError("Quarantine inode substitution")
                         if entry["status"] in ("purged", "restored"):
                             raise ValueError("Journal claims object absent, but it exists")
-                        expected = _validated_inventory(row.get("tree_inventory"), entry["identity"])
                         if stat.S_ISDIR(info.st_mode) and mounts_checker(entry["destination"]) is not False:
                             raise ValueError("Nested mounts or unavailable mount inventory")
                         current = capture_inventory(entry["destination"])
-                        _match_inventory(expected, current, partial=(entry["status"] == "purging"))
+                        if allow_unsealed and row.get("tree_inventory") is None:
+                            if entry["status"] not in ("moved", "moving"):
+                                raise ValueError("Cannot adopt an interrupted destructive operation")
+                            entry["unsealed"] = True
+                        else:
+                            expected = _validated_inventory(row.get("tree_inventory"), entry["identity"])
+                            _match_inventory(expected, current, partial=(entry["status"] == "purging"))
+                            entry["unsealed"] = False
+                        entry["inventory"] = current
                         size = sum(node.get("size", 0) for node in current)
                         entry["present"] = True
                         entry["bytes"] = size
@@ -385,6 +392,40 @@ def inspect_run(home: Path, roots: dict[str, Path], run_id: str, mounts_checker)
             return {"run_id": run_id, "payload": payload, "entries": entries,
                     "run_identity": _identity(run_stat),
                     "bytes": total, "present": sum(e["present"] for e in entries)}
+        finally:
+            os.close(runfd)
+    finally:
+        os.close(basefd)
+
+
+def adopt_legacy_run(home: Path, roots: dict[str, Path], run_id: str, mounts_checker) -> dict:
+    """After explicit user confirmation, bind CURRENT legacy data for future purge.
+
+    Adoption does not prove contents match the day of quarantine; it only
+    guarantees a subsequent purge cannot silently include later additions.
+    """
+    report = inspect_run(home, roots, run_id, mounts_checker, allow_unsealed=True)
+    entries = [entry for entry in report["entries"] if entry.get("unsealed")]
+    if not entries:
+        return {"run_id": run_id, "adopted": 0}
+    base = roots.get("data", home / ".local/share") / "xdg-audit-quarantine"
+    basefd = _open_path(base)
+    try:
+        runfd = _directory(basefd, run_id)
+        try:
+            device = os.fstat(runfd).st_dev
+            if _identity(os.fstat(runfd)) != report["run_identity"]:
+                raise ValueError("Quarantine run swapped while adopting")
+            payload = report["payload"]
+            if _load_manifest(runfd, device) != payload:
+                raise ValueError("Journal changed while adopting")
+            for entry in entries:
+                current = capture_inventory(entry["destination"])
+                if current != entry["inventory"]:
+                    raise ValueError("Data changed while adopting")
+                entry["row"]["tree_inventory"] = current
+            _write_manifest(runfd, payload)
+            return {"run_id": run_id, "adopted": len(entries)}
         finally:
             os.close(runfd)
     finally:
