@@ -41,6 +41,23 @@ Adoption requires typing `ADOPT`. It does not prove that the current content
 is the same as when the item was first quarantined. Legacy v2 journals remain
 restore-only and are not eligible for adoption or purge.
 
+## Recovery after interruption
+
+If a process was interrupted while writing a journal, a leftover
+`.manifest-*.tmp` file may block purge until explicitly reviewed. The
+recovery command verifies the run and removes only valid abandoned temporary
+journal files, never the manifest or quarantined data:
+
+```fish
+python3 xdg_audit.py --recover-journal RUN_ID --dry-run
+python3 xdg_audit.py --recover-journal RUN_ID
+```
+
+The second command requires a TTY and the exact `RECOVER` token.
+Interrupted `purging` entries are resumable with the usual `--purge` after
+reinspection. Legacy interrupted `moving` entries can be restored or
+explicitly adopted if their destination exists.
+
 ## Retention
 
 Default retention threshold: 30 days, **automatic cleanup disabled**.
