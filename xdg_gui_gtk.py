@@ -1194,6 +1194,9 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                     access=Gtk.Button(label=tr('Sprawdź dostęp…'))
                     access.connect('clicked',lambda _,rid=run['run_id']:self.access_diagnostics(rid))
                     append(box,access)
+                    adopt=Gtk.Button(label=tr('Zatwierdź stan…'))
+                    adopt.connect('clicked',lambda _,rid=run['run_id']:self.adopt_inventory(rid))
+                    append(box,adopt)
                 row.set_child(box) if GTK4 else row.add(box)
                 append(self.qlist,row)
             if not GTK4:self.qlist.show_all()
@@ -1299,6 +1302,24 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
             set_child(dialog,pane)
             dialog.present() if GTK4 else dialog.show_all()
             close.grab_focus()
+
+        def adopt_inventory(self, run_id):
+            explanation=(tf('Operacja: {run_id}',run_id=run_id)+'\n'+
+                         tr('Zatwierdzisz stan plików widoczny TERAZ. Nie oznacza to, że zawartość jest identyczna jak w dniu przeniesienia. PURGE nadal wymaga osobnej zgody.'))
+            def commit():
+                def done(ok, result):
+                    if not ok:
+                        self._quarantine_notice(tf('Naprawa zablokowana: {error}',error=result))
+                    else:
+                        self.refresh_quarantine()
+                        self._quarantine_notice(
+                            tf('Zatwierdzono aktualny stan: {count} obiektów.',count=result['adopted'])+
+                            '\n'+tr('Nie wykonano PURGE. Ponownie sprawdź dostęp i osobno potwierdź usunięcie.'))
+                self._quarantine_job(
+                    lambda:engine.adopt_quarantine_inventory(
+                        home,engine.xdg_roots(home),run_id),
+                    done,'Weryfikacja kwarantanny')
+            self.prompt(tr('Zatwierdź aktualny stan'),explanation,'ADOPT',commit)
 
         def access_diagnostics(self, run_id):
             """Investigate one run without granting elevated privileges."""
