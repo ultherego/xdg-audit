@@ -508,7 +508,11 @@ def names_for(name: str, aliases: dict[str, list[str]] | None = None) -> set[str
     values = {name, name.lower(), stem_package(name)}
     values.update(aliases.get(name.casefold(), []))
     if "." in name:
-        values.add(name.split(".")[-1])
+        suffix = name.rsplit(".", 1)[-1]
+        # A version tail like ".1" in a zcompdump file is not an app ID.
+        # Only sufficiently descriptive alphabetic app-id components qualify.
+        if len(suffix) >= 3 and re.search(r"[a-z]", suffix, re.I):
+            values.add(suffix)
     return {normalize(x) for x in values if x}
 
 
@@ -589,6 +593,25 @@ def scan(home: Path, scopes: list[str], keeps: set[str], extra_aliases: dict[str
                 it.state, it.protected = "PROTECTED", True
                 it.reasons.append("user allowlist")
             else:
+                if scope == "flatpak":
+                    # ~/.var/app/<id> belongs to the Flatpak installation
+                    # namespace. Native pacman/dpkg/rpm Firefox and arbitrary
+                    # executables cannot prove that the *Flatpak app ID* is
+                    # installed. Preserve REVIEW for old/unverified data.
+                    flatpak_health = (health or {}).get("flatpak")
+                    if path.name.casefold() in flatpaks and flatpak_health in (None, "ok"):
+                        it.state = "ACTIVE"
+                        it.reasons.append("installed Flatpak: " + path.name)
+                    else:
+                        it.state = "REVIEW"
+                        if flatpak_health not in (None, "ok"):
+                            it.reasons.append(
+                                "Flatpak inventory unavailable; cannot verify app ID")
+                        else:
+                            it.reasons.append(
+                                "Flatpak app-id is not currently installed; check manually")
+                    items.append(it)
+                    continue
                 # Current installed inventory is authoritative. An old removal
                 # event must not override a package now present under a new
                 # variant (brave-bin -> brave-browser, opera -> opera-stable).
@@ -609,8 +632,6 @@ def scan(home: Path, scopes: list[str], keeps: set[str], extra_aliases: dict[str
                 found_exec = [x for x in {path.name, path.name.lower(), stem_package(path.name),
                                          *alias_map.get(path.name.casefold(), [])}
                               if re.fullmatch(r"[A-Za-z][A-Za-z0-9_.-]{2,}", x) and shutil.which(x)]
-                if scope == "flatpak" and path.name.casefold() in flatpaks:
-                    installed_flatpak.append(path.name)
                 if (installed or installed_distro or installed_flatpak or installed_snap
                         or installed_appimage or found_units or found_processes or found_exec):
                     it.state = "ACTIVE"
@@ -640,10 +661,7 @@ def scan(home: Path, scopes: list[str], keeps: set[str], extra_aliases: dict[str
                     it.reasons = reasons
                 else:
                     removed = [removed_normal[k] for k in keys if k in removed_normal]
-                    if scope == "flatpak":
-                        it.state = "REVIEW"
-                        it.reasons.append("Flatpak app-id is not currently installed; check manually")
-                    elif helpers or found_desktops or manual_matches:
+                    if helpers or found_desktops or manual_matches:
                         it.state = "REVIEW"
                         if helpers:
                             it.reasons.append("auxiliary installed package, not proof of app: "
