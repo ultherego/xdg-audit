@@ -644,7 +644,12 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
             notes=[]
             try:
                 result=engine.commit_quarantine(chosen,self.roots,home,allow_uncertain=bool(uncertain),emit=notes.append,extra_aliases=aliases,keep_names=args.keep)
-                messagebox.showinfo(tr('Kwarantanna'),tf('Operacja {run_id}',run_id=result['run_id'])+'\n'+tf('Przeniesiono {moved}/{total}.',moved=len(result['moved']),total=len(chosen)),parent=root)
+                message=tf('Operacja {run_id}',run_id=result['run_id'])+'\n'+tf('Przeniesiono {moved}/{total}.',moved=len(result['moved']),total=len(chosen))
+                if any('purge inventory unavailable' in line for line in notes):
+                    messagebox.showwarning(tr('Kwarantanna'),message+'\n\n'+
+                        tr('Pliki przeniesiono, ale nie można było sprawdzić całej zawartości. Przed PURGE użyj „Sprawdź dostęp…”, następnie osobno „Zatwierdź stan…” (ADOPT).'),parent=root)
+                else:
+                    messagebox.showinfo(tr('Kwarantanna'),message,parent=root)
             except (ValueError, OSError, SystemExit) as exc:
                 messagebox.showerror(tr('Błąd'),str(exc),parent=root)
             self.start_scan()
