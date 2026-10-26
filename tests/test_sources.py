@@ -45,6 +45,20 @@ class SourceProviderTests(unittest.TestCase):
             sources.Probe("flatpak", "ok"), "broken-single-column")):
             self.assertEqual(sources.flatpak_apps().status, "parse_error")
 
+    def test_flatpak_incomplete_installation_column_fails_closed(self):
+        # A truncated successful command must not masquerade as a complete list.
+        for output in (
+            "org.example.App\tExample\n",
+            "org.example.App\tExample\t\n",
+            "org.example.App\tExample\tuser\textra\n",
+        ):
+            with self.subTest(output=output), patch.object(sources, "_run", return_value=(
+                sources.Probe("flatpak", "ok"), output)):
+                probe = sources.flatpak_apps()
+            self.assertEqual(probe.status, "parse_error")
+            self.assertFalse(probe.names)
+            self.assertFalse(probe.app_ids)
+
     def test_snap_list_parses_name_not_untrusted_header(self):
         content = "Name Version Rev Tracking Publisher Notes\nopera 4.1 42 stable somebody -\n"
         with patch.object(sources, "_run", return_value=(
