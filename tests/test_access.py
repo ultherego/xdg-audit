@@ -140,7 +140,7 @@ class AccessTests(unittest.TestCase):
             info = authority_context()
         self.assertEqual(info["uid"], os.getuid())
         self.assertEqual(info["session_type"], "wayland")
-        self.assertEqual(info["authorization"], "delegated_to_system")
+        self.assertEqual(info["authorization"], "not_requested")
         self.assertIsInstance(info["pkexec_installed"], bool)
 
 
