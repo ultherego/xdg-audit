@@ -373,6 +373,12 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
             qrestore=QtWidgets.QPushButton(tr('Przywróć wybraną…'))
             qrestore.clicked.connect(self.restore_dialog)
             qb.addWidget(qrestore)
+            qpurge=QtWidgets.QPushButton(tr('Usuń trwale wybraną…'))
+            qpurge.clicked.connect(self.purge_dialog)
+            qb.addWidget(qpurge)
+            qexpired=QtWidgets.QPushButton(tr('Usuń wygasłe…'))
+            qexpired.clicked.connect(self.purge_expired_dialog)
+            qb.addWidget(qexpired)
             qlayout.addLayout(qb)
             self.content_stack.addWidget(qpage)
             layout.addWidget(self.content_stack,1)
@@ -463,6 +469,56 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
             if run:
                 QtWidgets.QMessageBox.information(self,tr('Zawartość kwarantanny'),
                     '\n'.join(x.get('source','?') for x in run['items'][:45]) or tr('(brak danych)'))
+
+        def purge_dialog(self):
+            entry=self.qtree.currentItem()
+            if entry is None:
+                return
+            self._purge_runs([entry.data(0,Role)])
+
+        def purge_expired_dialog(self):
+            try:
+                run_ids=engine.expired_quarantine_runs(home,engine.xdg_roots(home))
+            except (ValueError,OSError) as exc:
+                QtWidgets.QMessageBox.warning(self,tr('Kwarantanna'),str(exc))
+                return
+            if not run_ids:
+                QtWidgets.QMessageBox.information(self,tr('Kwarantanna'),
+                    tr('Nie znaleziono wygasłych kwarantann.'))
+                return
+            self._purge_runs(run_ids)
+
+        def _purge_runs(self,run_ids):
+            plans=[]
+            try:
+                for run_id in run_ids:
+                    plans.append(engine.purge_quarantine_run(home,engine.xdg_roots(home),run_id))
+            except (ValueError,OSError) as exc:
+                QtWidgets.QMessageBox.critical(self,tr('Zablokowano PURGE'),str(exc))
+                return
+            description='\\n'.join(
+                str(plan['run_id'])+': '+str(plan['objects'])+' entries / '+str(plan['bytes'])+' B'
+                for plan in plans)
+            if QtWidgets.QMessageBox.question(self,tr('Trwałe usuwanie'),
+                    description+'\\n\\n'+tr('Tej operacji nie da się cofnąć. Kontynuować?'),
+                    QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No,
+                    QtWidgets.QMessageBox.StandardButton.No) != QtWidgets.QMessageBox.StandardButton.Yes:
+                return
+            answer, ok=QtWidgets.QInputDialog.getText(self,tr('Potwierdzenie PURGE'),tr('Wpisz PURGE:'))
+            if not ok or answer != 'PURGE':
+                return
+            removed=0
+            try:
+                for plan in plans:
+                    result=engine.purge_quarantine_run(home,engine.xdg_roots(home),
+                                                       plan['run_id'],dry_run=False)
+                    removed+=result['objects']
+                self.refresh_quarantine()
+                QtWidgets.QMessageBox.information(self,tr('Kwarantanna'),
+                    tr('Usunięto obiektów: ')+str(removed))
+            except (ValueError,OSError) as exc:
+                QtWidgets.QMessageBox.critical(self,tr('Zablokowano PURGE'),str(exc))
+                self.refresh_quarantine()
 
         def compare_report_gui(self):
             if not self.scan_complete:return
