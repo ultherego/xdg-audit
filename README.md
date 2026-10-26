@@ -253,6 +253,20 @@ See [Quarantine lifecycle](docs/quarantine-lifecycle.md) for recovery,
 history-only cleanup, manual/automatic retention, user-scoped systemd
 timer, legacy adoption, and safeguards.
 
+### Jakość dowodów w JSON
+
+Skan `--quick --json` zwraca teraz `size_bytes: null`, jeśli rozmiaru
+**nie mierzono** (nie należy mylić tego z pustym plikiem, `0`).
+Pole `size_calculated` rozróżnia te przypadki.
+
+`evidence_level` rozróżnia `installed_evidence`, `protective_hint`,
+`historical_only`, `policy_protected` i `unknown`. Historia
+`pacman.log` jest tylko wskazówką: `orphan_ownership_verified: false`
+nie oznacza, że użytkownik może bezpiecznie usunąć dane. Każda pozycja
+`CANDIDATE` oparta wyłącznie na historii dostaje dodatkowo
+`risk_flags: ["unverified_owner", "history_only"]` i nadal wymaga
+odrębnego świadomego MOVE oraz weryfikacji przed PURGE.
+
 ## 🧭 Kolejne etapy projektu
 
 Najpierw domykamy bezpieczeństwo i jakość wersji 1.7.0 — bez zmiany
