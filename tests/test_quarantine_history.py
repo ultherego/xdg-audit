@@ -10,6 +10,7 @@ import unittest
 import xdg_audit as audit
 from xdg_quarantine_history import (
     HISTORY_DAYS, cleanup_history, history_candidates, history_expired, history_info,
+    completed_history_candidates,
 )
 from xdg_quarantine_lifecycle import capture_inventory
 
@@ -165,6 +166,39 @@ class CompletedHistoryTests(unittest.TestCase):
         runs = audit.quarantine_runs(self.home, self.roots)
         self.assertEqual(runs[0]["status"], "PURGED")
         self.assertEqual(runs[0]["moved"], 0)
+
+    def test_manual_all_history_includes_fresh_purge(self):
+        # Automatic retention must *not* expire a new tombstone.
+        self.payload["purged_at"] = "2030-01-01T00:00:00+00:00"
+        self.write()
+        self.assertEqual(completed_history_candidates(self.home, self.roots), [self.run_id])
+        self.assertFalse(history_expired(history_info(self.home, self.roots, self.run_id),
+                                         now=dt.datetime(2026, 10, 26, tzinfo=dt.timezone.utc)))
+        self.assertEqual(audit.completed_quarantine_history(self.home, self.roots), [self.run_id])
+
+    def test_manual_all_history_includes_restored_runs(self):
+        self.entry["move_status"] = "restored"
+        self.payload.pop("purged_at")
+        self.write()
+        self.assertEqual(completed_history_candidates(self.home, self.roots), [self.run_id])
+
+    def test_manual_all_history_never_includes_incomplete(self):
+        for status in ("planned", "moving", "moved", "restoring", "purging"):
+            with self.subTest(status=status):
+                self.entry["move_status"] = status
+                self.write()
+                self.assertEqual(completed_history_candidates(self.home, self.roots), [])
+                self.assertTrue((self.run / "manifest.json").exists())
+
+    def test_manual_all_history_never_includes_corrupt_or_nonempty(self):
+        unexpected = self.run / "config" / "do-not-delete"
+        unexpected.write_text("untouched")
+        self.assertEqual(completed_history_candidates(self.home, self.roots), [])
+        self.assertTrue(unexpected.exists())
+        unexpected.unlink()
+        (self.run / "manifest.json").write_text("broken json", encoding="utf-8")
+        self.assertEqual(completed_history_candidates(self.home, self.roots), [])
+        self.assertTrue((self.run / "manifest.json").exists())
 
     def test_purge_creates_timestamp(self):
         # Place new quarantined bytes and record a complete hash inventory.

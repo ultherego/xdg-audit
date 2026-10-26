@@ -77,6 +77,38 @@ class HistoryCLITests(unittest.TestCase):
             self.assertEqual(self.run_cli("--cleanup-history", self.run_id), 0)
         self.assertFalse(self.run.exists())
 
+    def test_all_history_preview_includes_fresh_purged_tombstone(self):
+        self.payload["purged_at"] = "2030-01-01T00:00:00+00:00"
+        (self.run / "manifest.json").write_text(json.dumps(self.payload))
+        before = (self.run / "manifest.json").read_bytes()
+        with contextlib.redirect_stdout(io.StringIO()) as buf:
+            self.assertEqual(audit.main(["--home", str(self.home),
+                                         "--cleanup-all-history"]), 0)
+        self.assertIn("HISTORY PLAN", buf.getvalue())
+        self.assertEqual(before, (self.run / "manifest.json").read_bytes())
+        self.assertTrue(self.run.exists())
+
+    def test_all_history_requires_explicit_history_confirmation(self):
+        self.payload["purged_at"] = "2030-01-01T00:00:00+00:00"
+        (self.run / "manifest.json").write_text(json.dumps(self.payload))
+        class TTY:
+            @staticmethod
+            def isatty():
+                return True
+        with patch.object(audit.sys, "stdin", TTY()), patch("builtins.input", return_value="PURGE"):
+            with self.assertRaises(SystemExit):
+                self.run_cli("--cleanup-all-history", "--execute")
+        self.assertTrue(self.run.exists())
+        with patch.object(audit.sys, "stdin", TTY()), patch("builtins.input", return_value="HISTORY"):
+            self.assertEqual(self.run_cli("--cleanup-all-history", "--execute"), 0)
+        self.assertFalse(self.run.exists())
+
+    def test_all_history_does_not_touch_active_quarantine(self):
+        self.payload["items"][0]["move_status"] = "moved"
+        (self.run / "manifest.json").write_text(json.dumps(self.payload))
+        self.assertEqual(self.run_cli("--cleanup-all-history", "--execute"), 0)
+        self.assertTrue((self.run / "manifest.json").exists())
+
     def test_automatic_cleanup_is_default_off(self):
         with self.assertRaises(SystemExit):
             self.run_cli("--automatic-purge")

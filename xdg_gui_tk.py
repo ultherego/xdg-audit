@@ -255,8 +255,8 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
             ttk.Button(qbuttons,text=tr('Usuń wygasłe…'),command=self.purge_expired).pack(side='right',padx=6)
             ttk.Button(qbuttons,text=tr('Ustaw retencję…'),command=self.configure_retention).pack(side='right',padx=6)
             ttk.Button(qbuttons,text=tr('Usuń historię…'),command=self.cleanup_history).pack(side='right',padx=6)
-            ttk.Button(qbuttons,text=tr('Wyczyść starą historię…'),
-                       command=self.cleanup_expired_history).pack(side='right',padx=6)
+            ttk.Button(qbuttons,text=tr('Wyczyść całą zakończoną historię…'),
+                       command=self.cleanup_all_history).pack(side='right',padx=6)
             idx=next((i for i,(_,scope) in enumerate(SCOPE_LABELS) if scope==args.scope),0)
             self.tabs.select(idx)
             self.tabs.bind('<<NotebookTabChanged>>',self._on_tab_changed)
@@ -717,6 +717,20 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
             run_gui_job(operation, lambda *_:None,
                         lambda _cb, ok, value:self.jobs.put(
                             ('quarantine-job',(ok,value))))
+
+        def cleanup_all_history(self):
+            def done(ok, result):
+                if not ok:
+                    messagebox.showerror(tr('Historia'),str(result),parent=root)
+                elif result:
+                    self._cleanup_history_runs(result)
+                else:
+                    messagebox.showinfo(tr('Historia'),
+                        tr('Brak zakończonych operacji do wyczyszczenia. Aktywne i niedokończone pozostają chronione.'),
+                        parent=root)
+            self._quarantine_job(
+                lambda:engine.completed_quarantine_history(home,engine.xdg_roots(home)),
+                done,'Sprawdzanie historii…')
 
         def cleanup_expired_history(self):
             def done(ok, result):
