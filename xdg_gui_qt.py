@@ -412,7 +412,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
             self.move_button.setToolTip(tr('Wymaga zaznaczenia i wpisania MOVE; dane pozostają do przywrócenia.'))
             actions.addWidget(self.move_button)
             layout.addLayout(actions)
-            self.statusBar().showMessage(tr('Audyt tylko do odczytu · przeniesienie wymaga MOVE · bez trwałego kasowania'))
+            self.statusBar().showMessage(tr('Audyt tylko do odczytu · MOVE i PURGE wymagają potwierdzenia'))
 
         def update_metric_borders(self):
             for state,button in self.metric_buttons.items():
