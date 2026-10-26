@@ -1255,6 +1255,7 @@ def main(argv=None):
     parser.add_argument("--purge-expired", action="store_true", help="Preview expired quarantine runs")
     parser.add_argument("--retention-days", type=int, default=None, metavar="DAYS")
     parser.add_argument("--adopt-quarantine", metavar="RUN_ID", help="Approve current legacy contents for later purge")
+    parser.add_argument("--recover-journal", metavar="RUN_ID", help="Preview or clean abandoned manifest temp files")
     parser.add_argument("--automatic-purge", action="store_true", help="Run opt-in scheduled cleanup without TTY")
     parser.add_argument("--configure-retention", type=int, metavar="DAYS", help="Save retention days")
     parser.add_argument("--enable-retention", action="store_true", help="Enable scheduled purge (requires explicit confirmation)")
@@ -1281,7 +1282,7 @@ def main(argv=None):
     if args.allow_uncertain and not args.remove:
         parser.error("--allow-uncertain requires --remove")
     operations = (args.restore, args.list_quarantine, args.quarantine_info, args.purge,
-                  args.purge_expired, args.adopt_quarantine, args.automatic_purge,
+                  args.purge_expired, args.adopt_quarantine, args.recover_journal, args.automatic_purge,
                   args.configure_retention is not None, args.enable_retention,
                   args.disable_retention)
     if sum(bool(x) for x in operations) > 1:
@@ -1297,7 +1298,7 @@ def main(argv=None):
     if lifecycle:
         from xdg_retention import load as load_retention, save as save_retention
         from xdg_quarantine_lifecycle import (inspect_run, purge_run, expired_run_ids,
-                                              adopt_legacy_run)
+                                              adopt_legacy_run, recover_manifest_temps)
         if args.configure_retention is not None or args.enable_retention or args.disable_retention:
             policy = load_retention(home, roots)
             if args.configure_retention is not None:
@@ -1312,6 +1313,15 @@ def main(argv=None):
                 policy["automatic"] = False
             save_retention(home, roots, policy)
             print(json.dumps(policy))
+            return 0
+        if args.recover_journal:
+            preview = recover_manifest_temps(home, roots, args.recover_journal, dry_run=True)
+            print("RECOVERY PLAN: %d abandoned temporary journals" % preview["temporary_files"])
+            if args.dry_run or not preview["temporary_files"]:
+                return 0
+            if not sys.stdin.isatty() or input("Type RECOVER to delete only abandoned temp journals: ").strip() != "RECOVER":
+                raise SystemExit("ERROR: journal recovery cancelled")
+            print(recover_manifest_temps(home, roots, args.recover_journal, dry_run=False))
             return 0
         if args.adopt_quarantine:
             report = inspect_run(home, roots, args.adopt_quarantine, nested_mounts_status,
