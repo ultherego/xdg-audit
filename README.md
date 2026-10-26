@@ -165,6 +165,25 @@ sudo pacman -S --needed python pyside6
 
 **System tools:** `coreutils` (`du`) for directory sizes, `procps-ng` (`ps`) for process evidence. `pacman` verifies installed packages on Arch/CachyOS and is **required before quarantine moves** (fail closed if the inventory cannot be verified). Optional integrations: `flatpak`, `snap`, `systemctl --user`, and `xdg-open`.
 
+### Wykrywanie źródeł instalacji aplikacji
+
+To dotyczy tego, **jak zainstalowane zostały audytowane aplikacje**,
+a nie metody instalacji samego xdg-audit.
+
+```fish
+python3 xdg_audit.py --installed-sources
+```
+
+Zestawienie tylko do odczytu pokazuje stan inwentarzy pacman, pacman-foreign,
+Flatpak, Snap, AppImage i ochronnych wskazówek dla ręcznie instalowanych
+binarek (`~/.local/bin`, `~/bin`, `/usr/local/bin`, `/opt`).
+Pakiety foreign mogą pochodzić z AUR **lub** lokalnej instalacji.
+Błąd aktywnego dostawcy nie oznacza odinstalowania programu i blokuje MOVE
+do czasu poprawnego ponownego sprawdzenia. Dostawcy dpkg i rpm będą
+następnym etapem; do tego czasu MOVE nadal wymaga inwentarza pacmana.
+
+
+
 ## 🛡️ Safety model
 
 | Status | Meaning |
