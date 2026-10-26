@@ -80,6 +80,59 @@ class SourceProviderTests(unittest.TestCase):
             run.assert_not_called()
             self.assertIn("mytool", found.names)
 
+    def test_manual_and_appimage_do_not_follow_symlinked_parent(self):
+        with tempfile.TemporaryDirectory() as temp:
+            home = Path(temp)
+            outside = home / "external"
+            (outside / "bin").mkdir(parents=True)
+            (outside / "share/applications").mkdir(parents=True)
+            tool = outside / "bin/private-binary"
+            tool.write_text("#!/bin/sh\\nexit 0\\n")
+            tool.chmod(0o700)
+            (outside / "share/applications/private.AppImage").write_bytes(b"not executed")
+            (home / ".local").symlink_to(outside, target_is_directory=True)
+            with patch.object(sources.subprocess, "run") as execute:
+                manual = sources.manual_binaries(home)
+                image = sources.user_appimages(home)
+            execute.assert_not_called()
+            self.assertEqual(manual.status, "failed")
+            self.assertEqual(image.status, "failed")
+            self.assertNotIn("private-binary", manual.names)
+            self.assertNotIn("private", image.names)
+
+    def test_manual_probe_rejects_symlinked_opt_parent(self):
+        with tempfile.TemporaryDirectory() as temp:
+            home = Path(temp)
+            external = home / "external"
+            (external / "tool").mkdir(parents=True)
+            (home / ".local").symlink_to(external, target_is_directory=True)
+            names, state = sources._app_directories(
+                home / ".local/opt", anchor=home)
+            self.assertEqual(state, "unsafe")
+            self.assertFalse(names)
+
+    def test_appimage_probe_stops_after_directory_entry_limit(self):
+        with tempfile.TemporaryDirectory() as temp:
+            home = Path(temp)
+            folder = home / "Applications"
+            folder.mkdir()
+            seen = []
+            def many(_):
+                for idx in range(100_000):
+                    seen.append(idx)
+                    yield folder / f"item-{idx}.AppImage"
+            original_lstat = Path.lstat
+            def fake_lstat(path):
+                if path.name.startswith("item-"):
+                    return original_lstat(folder)  # Simulate harmless non-regular entries.
+                return original_lstat(path)
+            with patch.object(Path, "iterdir", many), patch.object(Path, "lstat", fake_lstat):
+                names, status = sources._safe_direct_children(
+                    folder, extensions=(".appimage",), anchor=home)
+            self.assertEqual(status, "failed")
+            self.assertFalse(names)
+            self.assertEqual(len(seen), 2001)
+
     def test_opt_style_dirs_are_shallow_protective_only(self):
         with tempfile.TemporaryDirectory() as temp:
             base = Path(temp) / "opt"

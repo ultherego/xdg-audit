@@ -168,12 +168,19 @@ def snap_apps() -> Probe:
     return Probe("snap", "ok", frozenset(names))
 
 
-def _safe_direct_children(base: Path, *, extensions=(), require_exec=False):
-    if base.is_symlink() or not base.is_dir():
+def _safe_direct_children(base: Path, *, extensions=(), require_exec=False,
+                          anchor: Path | None = None):
+    if anchor is not None:
+        status = _source_directory_status(anchor, base)
+        if status != "ok":
+            return set(), status
+    elif base.is_symlink() or not base.is_dir():
         return set(), "absent" if not base.exists() else "unsafe"
     names = set()
     try:
-        for item in base.iterdir():
+        for idx, item in enumerate(base.iterdir()):
+            if idx >= 2000:
+                return set(), "failed"
             info = item.lstat()
             if not stat.S_ISREG(info.st_mode) or info.st_uid not in (0, os.getuid()):
                 continue
@@ -198,7 +205,7 @@ def user_appimages(home: Path) -> Probe:
     problems = []
     for folder in (home / "Applications", home / ".local/bin", home / "bin",
                    home / ".local/share/applications"):
-        found, state = _safe_direct_children(folder, extensions=(".appimage",))
+        found, state = _safe_direct_children(folder, extensions=(".appimage",), anchor=home)
         names.update(found)
         if state in ("failed", "unsafe"):
             problems.append(str(folder))
@@ -208,9 +215,13 @@ def user_appimages(home: Path) -> Probe:
     return Probe("appimage", "ok", frozenset(names))
 
 
-def _app_directories(base: Path) -> tuple[set[str], str]:
-    """Shallow /opt-style directory evidence; no traversal or code execution."""
-    if base.is_symlink() or not base.is_dir():
+def _app_directories(base: Path, *, anchor: Path | None = None) -> tuple[set[str], str]:
+    """Shallow /opt-style directory hints with checked ancestor directories."""
+    if anchor is not None:
+        status = _source_directory_status(anchor, base)
+        if status != "ok":
+            return set(), status
+    elif base.is_symlink() or not base.is_dir():
         return set(), "absent" if not base.exists() else "unsafe"
     names = set()
     try:
@@ -231,7 +242,8 @@ def manual_binaries(home: Path) -> Probe:
     problems = []
     for folder in (home / ".local/bin", home / "bin", home / "Applications",
                    Path("/usr/local/bin")):
-        found, state = _safe_direct_children(folder, require_exec=True)
+        found, state = _safe_direct_children(folder, require_exec=True,
+                                             anchor=home if folder.is_relative_to(home) else Path("/"))
         names.update(found)
         if state in ("failed", "unsafe"):
             problems.append(str(folder))
@@ -239,7 +251,8 @@ def manual_binaries(home: Path) -> Probe:
     # expose a bin symlink or desktop launcher. Top-level directory names
     # are hints only; they must NEVER become ownership/deletion evidence.
     for folder in (Path("/opt"), home / ".local/opt"):
-        found, state = _app_directories(folder)
+        found, state = _app_directories(folder,
+                                        anchor=home if folder.is_relative_to(home) else Path("/"))
         names.update(found)
         if state in ("failed", "unsafe"):
             problems.append(str(folder))
