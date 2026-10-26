@@ -603,7 +603,10 @@ def scan(home: Path, scopes: list[str], keeps: set[str], extra_aliases: dict[str
                     it.state = "ACTIVE"
                     reasons = []
                     if installed:
-                        reasons += [f"installed pacman package: {pkg} (match: {pat})" for pkg, pat in installed[:5]]
+                        foreign = getattr(inventory, "foreign", ())
+                        reasons += [f"installed pacman package: {pkg} (match: {pat})" +
+                                    (" [foreign: AUR or local]" if pkg in foreign else "")
+                                    for pkg, pat in installed[:5]]
                     if installed_flatpak:
                         reasons.append("installed Flatpak: " + ",".join(installed_flatpak[:3]))
                     if installed_snap:
