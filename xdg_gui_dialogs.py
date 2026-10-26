@@ -84,14 +84,24 @@ def configure_gtk_dialog(dialog, content, Gtk, Gdk, Pango):
     for widget in children:
         prepare(widget)
         append(body, widget)
-    scrolling = Gtk.ScrolledWindow()
-    scrolling.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-    scrolling.set_propagate_natural_width(True)
-    scrolling.set_propagate_natural_height(True)
-    scrolling.set_max_content_width(inner_width)
-    scrolling.set_max_content_height(max_body_height)
-    scrolling.set_child(body) if gtk4 else scrolling.add(body)
-    append(content, scrolling)
+    if not gtk4:
+        body.show_all()
+    natural_width = (body.measure(Gtk.Orientation.HORIZONTAL, -1)[1] if gtk4
+                     else body.get_preferred_width()[1])
+    measured_width = max(1, min(inner_width, natural_width))
+    natural_height = (body.measure(Gtk.Orientation.VERTICAL, measured_width)[1] if gtk4
+                      else body.get_preferred_height_for_width(measured_width)[1])
+    if natural_height > max_body_height:
+        scrolling = Gtk.ScrolledWindow()
+        scrolling.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        scrolling.set_propagate_natural_width(True)
+        scrolling.set_propagate_natural_height(True)
+        scrolling.set_max_content_width(inner_width)
+        scrolling.set_max_content_height(max_body_height)
+        scrolling.set_child(body) if gtk4 else scrolling.add(body)
+        append(content, scrolling)
+    else:
+        append(content, body)
     for widget in footer:
         append(content, widget)
     for side in ('top', 'bottom', 'start', 'end'):
@@ -179,7 +189,7 @@ def fit_qt_dialog(dialog, QtWidgets, QtCore, tr=lambda value: value):
 
 def qt_dialog_helpers(QtWidgets, QtCore, tr):
     """Create native-looking bounded message/input dialogs without global patches."""
-    def shell(parent, title, text):
+    def shell(parent, title, text, icon=None):
         dialog = QtWidgets.QDialog(parent)
         dialog.setWindowTitle(title)
         layout = QtWidgets.QVBoxLayout(dialog)
@@ -190,7 +200,7 @@ def qt_dialog_helpers(QtWidgets, QtCore, tr):
         label.setWordWrap(True)
         metrics = label.fontMetrics()
         natural = max((metrics.horizontalAdvance(line) for line in str(text).split('\n')), default=0)
-        width = min(720, max_width - 2 * DIALOG_PADDING - 24, max(140, natural))
+        width = min(720, max_width - 2 * DIALOG_PADDING - (70 if icon else 24), max(140, natural))
         label.setFixedWidth(width)
         label.setMinimumHeight(max(metrics.lineSpacing(), label.heightForWidth(width)))
         scroll = QtWidgets.QScrollArea()
@@ -201,14 +211,22 @@ def qt_dialog_helpers(QtWidgets, QtCore, tr):
         scroll.setFixedWidth(width + 22)
         scroll.setFixedHeight(min(label.minimumHeight() + 4,
             max(55, max_height - 2 * DIALOG_PADDING - 125)))
-        layout.addWidget(scroll)
+        if icon is not None:
+            row = QtWidgets.QHBoxLayout()
+            emblem = QtWidgets.QLabel()
+            emblem.setPixmap(QtWidgets.QApplication.style().standardIcon(icon).pixmap(32, 32))
+            row.addWidget(emblem, 0, QtCore.Qt.AlignmentFlag.AlignTop)
+            row.addWidget(scroll)
+            layout.addLayout(row)
+        else:
+            layout.addWidget(scroll)
         dialog._xdg_padding = DIALOG_PADDING
         return dialog, layout
 
-    def message(parent, title, text, buttons=None, default=None, question=False):
+    def message(parent, title, text, buttons=None, default=None, question=False, icon=None):
         flags = QtWidgets.QMessageBox.StandardButton
         wanted = buttons if buttons is not None else (flags.Yes | flags.No if question else flags.Ok)
-        dialog, layout = shell(parent, title, text)
+        dialog, layout = shell(parent, title, text, icon)
         box = QtWidgets.QDialogButtonBox()
         response = [flags.No if question else flags.Cancel]
         default_button = None
@@ -228,10 +246,20 @@ def qt_dialog_helpers(QtWidgets, QtCore, tr):
         return response[0]
 
     def information(parent, title, text, buttons=None, defaultButton=None):
-        return message(parent, title, text, buttons, defaultButton)
+        return message(parent, title, text, buttons, defaultButton,
+                       icon=QtWidgets.QStyle.StandardPixmap.SP_MessageBoxInformation)
+
+    def warning(parent, title, text, buttons=None, defaultButton=None):
+        return message(parent, title, text, buttons, defaultButton,
+                       icon=QtWidgets.QStyle.StandardPixmap.SP_MessageBoxWarning)
+
+    def critical(parent, title, text, buttons=None, defaultButton=None):
+        return message(parent, title, text, buttons, defaultButton,
+                       icon=QtWidgets.QStyle.StandardPixmap.SP_MessageBoxCritical)
 
     def question(parent, title, text, buttons=None, defaultButton=None):
-        return message(parent, title, text, buttons, defaultButton, True)
+        return message(parent, title, text, buttons, defaultButton, True,
+                       QtWidgets.QStyle.StandardPixmap.SP_MessageBoxQuestion)
 
     def input_dialog(parent, title, text, editor):
         dialog, layout = shell(parent, title, text)
@@ -271,7 +299,7 @@ def qt_dialog_helpers(QtWidgets, QtCore, tr):
         dialog, ok = input_dialog(parent, title, label, editor)
         return editor.currentText(), ok
 
-    return (SimpleNamespace(information=information, warning=information, critical=information,
+    return (SimpleNamespace(information=information, warning=warning, critical=critical,
                             question=question),
             SimpleNamespace(getText=get_text, getInt=get_int, getItem=get_item))
 

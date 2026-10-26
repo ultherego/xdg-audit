@@ -312,6 +312,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
             self.stack.set_hexpand(True);self.stack.set_vexpand(True)
             self.stack.set_transition_type(Gtk.StackTransitionType.SLIDE_LEFT_RIGHT)
             switcher=Gtk.StackSwitcher(stack=self.stack)
+            self.scope_switcher = switcher
             append(outer,switcher)
 
             self.results_or_loading = Gtk.Stack()
@@ -1008,7 +1009,9 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                 self.stack.set_visible_child_name('all')
             for scope in ('flatpak', 'snap'):
                 page = self.stack.get_child_by_name(scope)
-                if not GTK4:
+                if GTK4:
+                    self.stack.get_page(page).set_visible(scope in visible)
+                else:
                     page.set_no_show_all(scope not in visible)
                 page.set_visible(scope in visible)
 

@@ -20,6 +20,7 @@ from xdg_gui_layout import DIALOG_PADDING
 
 LONG_TEXT = ('Review the selected disposable application data before confirming.\n' * 100
              + '/temporary/' + 'long-path-component-' * 60 + '\nThe action still requires its own token.')
+PATH_TEXT = '/temporary/' + 'long-component-' * 300
 
 
 def capture(output, name):
@@ -50,7 +51,18 @@ def run(backend, output):
                 row = engine.Item('snap', roots['snap'] / 'layout-fixture', state='REVIEW')
                 if backend.startswith('gtk'):
                     apply = lambda rows, stats: controller.finish((rows, roots, stats))
-                    shown = lambda scope: controller.stack.get_child_by_name(scope).get_visible()
+                    def shown(scope):
+                        switcher = controller.scope_switcher
+                        if backend == 'gtk4':
+                            buttons = []
+                            child = switcher.get_first_child()
+                            while child is not None:
+                                buttons.append(child)
+                                child = child.get_next_sibling()
+                        else:
+                            buttons = switcher.get_children()
+                        button = next(w for w in buttons if w.get_label() == scope.title())
+                        return button.get_visible()
                     select = lambda scope: controller.stack.set_visible_child_name(scope)
                     current = lambda: controller.stack.get_visible_child_name()
                 elif backend == 'qt6':
@@ -138,6 +150,16 @@ def run(backend, output):
                         try:
                             inspect('Long prompt')
                             assert heights[1] > heights[0], heights
+                            controller[0].prompt('Long path', PATH_TEXT, 'MOVE',
+                                lambda: errors.append('unexpected MOVE'))
+                            GLib.timeout_add(200, path)
+                        except BaseException:
+                            errors.append(traceback.format_exc()); Gio.Application.get_default().quit()
+                        return False
+
+                    def path():
+                        try:
+                            inspect('Long path')
                             controller[0].open_settings()
                             GLib.timeout_add(200, settings)
                         except BaseException:
@@ -198,6 +220,8 @@ def run(backend, output):
                             result = messages.question(window, 'Long prompt', LONG_TEXT)
                             assert result == QtWidgets.QMessageBox.StandardButton.No
                             assert heights[1] > heights[0], heights
+                            QtCore.QTimer.singleShot(150, lambda: dismiss('Long path'))
+                            messages.information(window, 'Long path', PATH_TEXT)
                             QtCore.QTimer.singleShot(150, lambda: dismiss('Token prompt', True))
                             token, accepted = inputs.getText(window, 'Token prompt', 'Type MOVE:')
                             assert token == 'MOVE' and not accepted, 'cancel accepted a typed token'
@@ -253,6 +277,8 @@ def run(backend, output):
                             root.after(150, lambda: dismiss('Long prompt'))
                             assert not messages.askyesno('Long prompt', LONG_TEXT, parent=root)
                             assert heights[1] > heights[0], heights
+                            root.after(150, lambda: dismiss('Long path'))
+                            messages.showinfo('Long path', PATH_TEXT, parent=root)
                             root.after(150, lambda: dismiss('Token prompt', True))
                             assert inputs.askstring('Token prompt', 'Type MOVE:', parent=root) is None
                             controller.open_settings()
