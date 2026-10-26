@@ -1,53 +1,107 @@
-# Quarantine lifecycle (experimental)
+# Quarantine lifecycle
 
-Available on the feature branch only. Existing `--remove` and `--restore`
-are unchanged.
+New quarantine runs keep the v3 intent journal format for compatibility,
+with an additional complete `tree_inventory` containing inode identities,
+SHA-256 file hashes and symlink destinations. All destructive operations
+require valid manifests. No delete operation follows symbolic links.
 
-## Commands
+## Inspect and restore
 
-```sh
+```fish
 python3 xdg_audit.py --list-quarantine
-python3 xdg_audit.py --quarantine-info 20261025-103000-123456
-python3 xdg_audit.py --purge 20261025-103000-123456 --dry-run
+python3 xdg_audit.py --quarantine-info RUN_ID
+python3 xdg_audit.py --restore RUN_ID
+```
+
+`--quarantine-info` reports the number of objects, recorded bytes, statuses
+and which older entries need adoption. Restores remain non-overwriting.
+
+## Manual purge
+
+```fish
+python3 xdg_audit.py --purge RUN_ID --dry-run
+python3 xdg_audit.py --purge RUN_ID
+```
+
+The second command requires an interactive terminal and the exact token
+`PURGE`. A preview alone never writes files. The journal is retained as a
+`purged` tombstone. Repeating a completed purge does not delete more files.
+
+For older v3 journals without the recursive inventory, purge is blocked.
+To explicitly validate and bind what exists **now**, first inspect and then
+adopt (current data might differ from the original snapshot):
+
+```fish
+python3 xdg_audit.py --quarantine-info RUN_ID
+python3 xdg_audit.py --adopt-quarantine RUN_ID
+python3 xdg_audit.py --purge RUN_ID --dry-run
+```
+
+Adoption requires typing `ADOPT`. It does not prove that the current content
+is the same as when the item was first quarantined. Legacy v2 journals remain
+restore-only and are not eligible for adoption or purge.
+
+## Retention
+
+Default retention threshold: 30 days, **automatic cleanup disabled**.
+No background process is created or enabled by scanning/quarantining.
+
+```fish
 python3 xdg_audit.py --purge-expired --retention-days 30
+python3 xdg_audit.py --purge-expired --execute --retention-days 30
+python3 xdg_audit.py --configure-retention 30
 ```
 
-After reviewing the preview, interactive deletion is:
+The first command is preview-only. The second asks for `PURGE` on an
+interactive terminal. In GTK, Qt and Tk, the Quarantine tab exposes purge
+of selected and expired runs and always asks for `PURGE`.
 
-```sh
-python3 xdg_audit.py --purge 20261025-103000-123456
-python3 xdg_audit.py --purge-expired --retention-days 30 --execute
+For an optional **user-scoped** systemd timer, enable the policy and install
+the timer. Do not use `sudo`:
+
+```fish
+python3 xdg_audit.py --enable-retention
+python3 scripts/install_retention_timer.py --install-only
+python3 scripts/install_retention_timer.py --enable
+systemctl --user status xdg-audit-retention.timer
 ```
 
-The program requires a TTY and an exact `PURGE` confirmation for
-destructive operations. Expired-run deletion is never automatic.
-A run's `manifest.json` is retained after its objects are deleted, with
-each entry marked `purged`. To test safely, use an isolated disposable
-`--home` and data created only for testing.
+`--enable-retention` requires the exact `ENABLE` confirmation.
+The timer executes once daily with `Persistent=true` and a 10-minute
+randomized delay. It executes `--automatic-purge`, which refuses to delete
+unless the persistent automatic setting is true. Changing the setting does
+not silently create or activate a timer.
 
-## Safety rules
+To turn it off:
 
-- Only v3 journals with valid inode/device/file-type identities are eligible.
-- Each source/destination must match the expected XDG root and run path.
-- The run may not contain untracked top-level objects.
-- Nested mounts, special files, foreign-owner objects and regular files with
-  multiple hard links are rejected.
-- An object whose inode has been substituted is not deleted.
-- The implementation uses Linux directory descriptors and does not traverse
-  symbolic links.
-- Interrupted `purging` journal states may be resumed after verification.
-- A corrupt journal blocks removal. A stale, legacy v2 journal can still be
-  restored by the legacy restore mechanism, but cannot be purged here.
+```fish
+python3 xdg_audit.py --disable-retention
+python3 scripts/install_retention_timer.py --disable
+```
 
-## Limitations before release
+The installer writes user units at `~/.config/systemd/user/` (or under the
+configured XDG_CONFIG_HOME). It uses the absolute script path at installation
+time; reinstall if the repository is moved.
 
-The current v3 journal records top-level object identity, not a cryptographic
-inventory of all nested content. A modified directory with the same top-level
-identity can still contain new nested data. Do not treat this feature as
-a secure shredder or as protection against concurrent writers modifying a
-quarantined directory. Keep the feature in draft until additional adversarial
-tests and nested-content protections are complete.
+## Fail-closed behavior and boundaries
 
-The GTK/Qt/Tk frontends do not expose purge or retention controls yet.
-The retention threshold applies to CLI preview and manually triggered cleanup,
-not a scheduled background service.
+- Deletion is anchored to already-open directory descriptors.
+- Before destructive work, inventories and object identity are revalidated;
+  untracked files, changed bytes, inode substitutions, special files, nested
+  mounts and unexpected hard links block purge.
+- Interrupted `purging` states can be resumed with the original journal.
+- A corrupt or unsupported journal cannot authorize deletion. If an item
+  could not be inventoried immediately after quarantine, it is restore-only
+  until explicitly adopted.
+- The claimed saved-byte count represents file sizes, not physically freed
+  disk blocks. A purge is **not** secure erasure on SSD/CoW filesystems.
+- Like any user-scoped cleanup tool, it cannot fully protect against a
+  malicious concurrent process running as the same Unix UID mutating the
+  filesystem mid-operation. Stop affected applications before purging.
+
+Run the isolated verification suite:
+
+```fish
+python3 -m unittest discover -s tests -q
+python3 scripts/smoke_quarantine_cycle.py --synthetic-inventory
+```
