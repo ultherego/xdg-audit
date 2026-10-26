@@ -387,6 +387,9 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
             qaccess=QtWidgets.QPushButton(tr('Sprawdź dostęp…'))
             qaccess.clicked.connect(self.access_diagnostics_dialog)
             qb.addWidget(qaccess)
+            qadopt=QtWidgets.QPushButton(tr('Zatwierdź stan…'))
+            qadopt.clicked.connect(self.adopt_inventory_dialog)
+            qb.addWidget(qadopt)
             qhistory=QtWidgets.QPushButton(tr('Usuń historię…'))
             qhistory.clicked.connect(self.cleanup_history_dialog)
             qb.addWidget(qhistory)
@@ -592,6 +595,30 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
                 lambda:[engine.cleanup_quarantine_history(
                     home,engine.xdg_roots(home),rid) for rid in run_ids],
                 completed,'Sprawdzanie historii…')
+
+        def adopt_inventory_dialog(self):
+            entry=self.qtree.currentItem()
+            if entry is None:return
+            run_id=entry.data(0,Role)
+            explanation=(tf('Operacja: {run_id}',run_id=run_id)+'\n'+
+                tr('Zatwierdzisz stan plików widoczny TERAZ. Nie oznacza to, że zawartość jest identyczna jak w dniu przeniesienia. PURGE nadal wymaga osobnej zgody.'))
+            if QtWidgets.QMessageBox.question(self,tr('Zatwierdź aktualny stan'),explanation,
+                QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No,
+                QtWidgets.QMessageBox.StandardButton.No) != QtWidgets.QMessageBox.StandardButton.Yes:return
+            token,ok=QtWidgets.QInputDialog.getText(self,tr('Zatwierdź aktualny stan'),tr('Wpisz ADOPT:'))
+            if not ok or token!='ADOPT':return
+            def done(success,outcome):
+                if not success:
+                    QtWidgets.QMessageBox.warning(self,tr('Zatwierdź aktualny stan'),str(outcome))
+                else:
+                    self.refresh_quarantine()
+                    QtWidgets.QMessageBox.information(self,tr('Zatwierdź aktualny stan'),
+                        tf('Zatwierdzono aktualny stan: {count} obiektów.',count=outcome['adopted'])+
+                        '\n'+tr('Nie wykonano PURGE. Ponownie sprawdź dostęp i osobno potwierdź usunięcie.'))
+            self._quarantine_job(
+                lambda:engine.adopt_quarantine_inventory(
+                    home,engine.xdg_roots(home),run_id),
+                done,'Weryfikacja kwarantanny')
 
         def access_diagnostics_dialog(self, run_id=None):
             if run_id is None:
