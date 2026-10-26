@@ -1332,7 +1332,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                     return
                 issues=result['issues']
                 who=result['identity']['user']
-                polkit_text=tf('Polkit dostępny: {state}',
+                polkit_text=tf('pkexec zainstalowany: {state}',
                                state=tr('tak') if result['identity']['pkexec_installed'] else tr('nie'))
                 if not issues:
                     note=tr('Nie znaleziono problemów z odczytem. Sprawdź pozostałe komunikaty PURGE.')
