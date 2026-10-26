@@ -1,128 +1,128 @@
-# Wykrywanie źródeł instalacji — stan i plan po v1.7.0
+# Installation sources: Arch, APT/dpkg, RPM, Flatpak, Snap and AppImage
 
-> Etap 1 wdrożony w PR #20: `xdg_sources.py` odczytuje zdrowie
-> źródeł danych, pacman foreign, Flatpak, Snap, AppImage oraz ochronne
-> sygnały ręcznych binarek (włącznie z katalogami `/opt`).
-> Komenda `python3 xdg_audit.py --installed-sources` przedstawia
-> stan każdego dostawcy. Kolejny etap PR #21 dodaje tylko odczyt
-> **zainstalowanych** pakietów z `dpkg-query` i `rpm -qa`.
-> Debian/RPM nadal **nie są uprawnione do MOVE** — osobna walidacja przed
-> zmianami będzie przedmiotem kolejnej kontroli.
+This document covers application detection and protection of user data.
+APT/RPM support does not mean building xdg-audit distribution packages.
+The application does not install or uninstall software.
 
-Ten dokument dotyczy **rozpoznawania zainstalowanych aplikacji i osieroconych danych XDG**.
-Nie dotyczy tworzenia paczek instalacyjnych xdg-audit. Rozszerzanie źródeł
-nie może pogorszyć reguł MOVE/RESTORE/PURGE ani klasyfikować błędu narzędzia
-jako dowodu odinstalowania aplikacji.
+## Native package database and MOVE authorization
 
-## Stan w v1.7.0-rc2
-
-| Źródło | Obecne wykrywanie | Ważne ograniczenie |
+| OS family | Currently installed package database | Behavior |
 | --- | --- | --- |
-| Repozytoria Arch + AUR + lokalne pakiety pacmana | `pacman -Qq` + `pacman -Qmq` (foreign) | Foreign jest oznaczony jako AUR **lub** lokalny; nie zgadujemy pochodzenia |
-| Flatpak | `flatpak list --app --columns=application,name,installation` | Lista aplikacji, także user/system; nadal brakuje pełnego modelu metadanych |
-| Snap | `snap list` z walidacją i raportowaniem błędów | Podstawowa ochrona aktywnych Snapów; ograniczone metadane |
-| AppImage | Płytki skan *.AppImage w wybranych katalogach użytkownika bez uruchamiania | Warianty nazw i launchery nie są jeszcze wiarygodnie mapowane na XDG |
-| Instalacje ręczne / binarne | `ps`, `systemctl --user`, `.desktop`, `~/.local/bin`, `~/bin`, `~/Applications`, `/usr/local/bin`, `/opt`, `~/.local/opt` | Tylko sygnały ochronne; bez wiarygodnej własności plików |
-| Debian/Ubuntu (DEB/APT) | `dpkg-query` rozpoznaje pakiety w stanie `installed` | Odczyt i ochrona ACTIVE; MOVE nadal zablokowany |
-| Fedora/RHEL/openSUSE i podobne (RPM) | `rpm -qa` czyta bazę zainstalowanych pakietów | Odczyt i ochrona ACTIVE; MOVE nadal zablokowany |
+| Arch/CachyOS and derivatives | `pacman -Qq`; `pacman -Qmq` for foreign packages | ACTIVE evidence, pacman history and explicitly confirmed quarantine |
+| Debian/Ubuntu/APT and derivatives | `dpkg-query -W` with complete package status | ACTIVE evidence, dpkg history including APT operations, and explicitly confirmed quarantine |
+| Fedora/RHEL/openSUSE and derivatives | `rpm -qa --qf` | ACTIVE evidence and explicitly confirmed quarantine; no inferred DNF/Zypper removal history |
 
-**Nie utożsamiać „nie znaleziono” z „odinstalowano”.**
-Dopiero skutecznie odczytana lista pakietów i odpowiednie dowody pozwalają
-przejść z `UNKNOWN/REVIEW` do `CANDIDATE`. Dodatkowo `CANDIDATE` jest
-propozycją do ręcznej analizy, nie pozwoleniem na automatyczne usunięcie.
+The native database is selected using `ID`, then `ID_LIKE`, from `os-release`.
+Installing a foreign package manager does not replace the native database.
+Unknown OS families remain read-only. The Python API retains compatibility
+with older eight-field pacman inventory tuples.
 
-## Kolejność prac
+Every MOVE reads the providers again. The native database must be read
+successfully and contain package records. Missing, failed, partial and
+unknown-family inventories block the operation. Provider health and record
+count are separate facts: an empty database may be read successfully but is
+not sufficient to authorize moving user data.
 
-### Etap 1 — ujednolicony kontrakt inwentarza
+APT uses dpkg's installed database; the human-oriented `apt list` output is
+not parsed. `deinstall ok installed` and `purge ok installed` still describe
+present packages. Residual configuration (`config-files`) is not treated as
+an active installation. States such as `unpacked`, `half-configured` or
+`reinstreq` produce `partial` health and block MOVE until the user repairs
+the package database. xdg-audit does not perform that repair.
 
-Wydzielić adaptery od `read_active_names()` i oddzielić (początek już działa):
-- `id`, `display_name`, `provider` (`pacman`, `flatpak`, `snap`,
-  `appimage`, `manual_binary`, później `dpkg`, `rpm`);
-- `provenance`: skąd wzięto informację, np. `pacman:localdb`,
-  `desktop:Exec`, `flatpak:user`; 
-- `confidence`: `authoritative_installed`, `protective_hint`,
-  `historical_only`;
-- `health`: `ok`, `unavailable`, `timeout`, `parse_error`,
-  `partial`; wraz z krótkim diagnostycznym opisem.
+Bounded dpkg removal history is read from plain and gzip-rotated logs.
+Missing logs or access permissions do not establish uninstallation.
+Historical records never override current installation. RPM does not have
+an unverified parser for changing DNF/Zypper history formats: ambiguous data
+remains UNKNOWN/REVIEW and requires additional explicit consent before MOVE.
 
-Nie używać `bool(installed_packages)` jako synonimu sprawnego dostawcy:
-pusta, poprawnie odczytana baza nie jest tym samym co błąd wykonania.
-Ponadto każda akcja MOVE musi ponownie odczytać dostawców po ostatnim
-skanowaniu oraz odrzucić zmianę, jeśli wymagane źródło jest niesprawne.
+**CANDIDATE is not verified orphan ownership.** REVIEW/UNKNOWN entries are
+not moved by default. The CLI requires `--allow-uncertain` and the separate
+`UNCERTAIN` and `MOVE` confirmations. The GUI preserves corresponding
+independent confirmations.
 
-### Etap 2 — Arch/CachyOS: oficjalne i AUR (wykonane w podstawowym zakresie)
+## Snap user-data namespace
 
-`pacman -Qq` pozostaje podstawowym, autorytatywnym inwentarzem.
-Można dodatkowo korzystać z `pacman -Qm` (pakiety **foreign**), lecz
-**foreign ≠ AUR**: dotyczy też pakietów zainstalowanych ręcznie oraz
-pakietów, które wypadły z aktualnych repozytoriów. `yay` i `paru`
-nie mogą być obowiązkowe. Etykieta w UI: „pacman (foreign / AUR lub lokalny)”.
+The `snap` scope contains only immediate entries under `~/snap` and is
+available in the CLI, GTK, Qt and Tk. A read-only scan:
 
-### Etap 3 — Flatpak, Snap, AppImage i ręczne binarki (w toku)
+```fish
+python3 xdg_audit.py --scope snap --quick --json
+```
 
-- Flatpak: zainstalowane identyfikatory aplikacji, widok instalacji
-  użytkownika i systemowej (również dodatkowe instalacje, gdy występują).
-  Runtimes/extensions nie są aplikacjami do kwalifikowania po samej nazwie.
-- Snap: lista rzeczywiście zainstalowanych Snapów oraz oddzielna
-  klasyfikacja stanu `~/snap`; nie usuwać w ciemno danych/snapshotów.
-- AppImage: pliki w jawnie skonfigurowanych katalogach oraz powiązane
-  launchery `.desktop`. Nie wykonywać `Exec` ani nie uruchamiać AppImage;
-  dane launchera traktować jako *przesłankę ochronną*, nie dowód braku aplikacji.
-- Binarki manualne: `~/.local/bin`, `~/bin`, `~/Applications`,
-  `/usr/local/bin`, `/opt` i bezpieczne metadane launcherów.
-  Nie przeszukiwać rekurencyjnie całego systemu ani nie wykonywać binarek.
-  Bez potwierdzonego właściciela obiekt pozostaje co najmniej `REVIEW`.
+- `snap list` runs with a fixed C locale. The complete header, six columns,
+  revision and instance identifiers are validated. Malformed records discard
+  partial inventory results.
+- Identifiers are exact: `firefox` and `firefox_work` are different instances.
+  A native Firefox package does not establish a Snap installation.
+- Installed instances, including disabled instances, remain ACTIVE. An instance
+  not verified as installed becomes REVIEW, without automatic deletion eligibility.
+- Rechecking before MOVE blocks an instance installed after the scan.
+  A failed or absent Snap provider blocks MOVE in the Snap scope.
+- RESTORE and PURGE use the same v3 journal, inode checks, SHA-256 inventory
+  and explicit confirmations as other scopes.
 
-### Etap 3b — npm global i pipx (ochronne odczyty statyczne)
+System data in `/var/snap`, mounts under `/snap` and snapshots under
+`/var/lib/snapd` are outside this user-data audit.
+The Flatpak scope similarly requires a healthy inventory and exact application
+ID; a native package name does not establish ownership of Flatpak data.
 
-Narzędzie sprawdza bez uruchamiania kodu zainstalowanych aplikacji
-wybrane katalogi pakietów npm global (w tym `~/.npm-global`, `~/.local/lib`,
-lokalne wersje nvm) i środowisk pipx (`~/.local/share/pipx/venvs`,
-`~/.local/pipx/venvs`). Symlinki i nieczytelne źródła nie są
-podążane; błąd istniejącego źródła blokuje MOVE.
+## AppImage
 
-Odnalezione nazwy są wyłącznie **przesłankami ochronnymi**. Nie wolno
-traktować braku wyniku jako dowodu odinstalowania: niestandardowe prefixy
-npm, Volta/mise, Node Corepack i alternatywne lokalizacje pipx nie mają
-jeszcze pełnego pokrycia. Obsługa skanowania nie wykonuje `npm` ani `pipx`.
+Detection is static and bounded. It inspects immediate `*.AppImage` files in
+`~/Applications`, `~/AppImages`, `~/Downloads`, `~/.local/bin`, `~/bin` and
+`~/.local/share/applications`, plus desktop launchers in
+`$XDG_DATA_HOME/applications`.
 
-Flatpak dostarcza zarówno nazwy wyświetlane, jak i kanoniczne
-`application ID`. Katalog `~/.var/app/<ID>` wolno oznaczyć ACTIVE
-wyłącznie na podstawie tego kanonicznego ID, nie nazwy wyświetlanej.
+Launchers can identify images elsewhere, including paths containing spaces.
+A safe, existing file must be referenced by direct `Exec` (including a simple
+`env` wrapper), `TryExec` or `X-AppImage-Path`. A title or stale launcher
+without an existing image is not installed-application evidence.
+The detector does not interpret `sh -c` or arbitrary wrapper scripts.
 
-### Etap 4 — Debian/Ubuntu i rodzina RPM (wykrywanie ACTIVE wykonane; MOVE w planie)
+Filename aliases remove common version and architecture suffixes. For example,
+`Obsidian-1.8.2-x86_64.AppImage` also protects the name `obsidian`.
+Adjacent portable-data names ending in `.AppImage.home` and `.AppImage.config`
+are recognized as protective aliases. This does not add a whole-disk scan or
+move application binaries. Portable directories outside the supported XDG
+scopes are not audited here.
 
-- Debian/Ubuntu: status rzeczywiście zainstalowanych pakietów
-  odczytywać przez `dpkg-query`; `apt` służy przede wszystkim do
-  zarządzania/repozytoriów/historii, nie jest substytutem bazy dpkg.
-- RPM: `rpm -qa` i odpowiednie bezpieczne zapytania do bazy pakietów.
-  `dnf` lub `zypper` mogą dostarczać historii, ale historyczny brak
-  aplikacji nie dowodzi automatycznie, że jej dane można usunąć.
-- Każdy backend testować na rzeczywistym systemie oraz na sztucznych
-  rekordach zawierających kolizje nazw, niepełne źródła i timeouty.
+Images are never executed or mounted, and `Exec` commands are never run.
+Symlinks and symlinked ancestors are not followed. Launcher size and directory
+entry counts are bounded; inspection failures do not masquerade as complete
+inventories. Absence is not proof of AppImage uninstallation. An image found
+during the fresh pre-MOVE inventory blocks moving matching XDG data.
+Image-file counts are kept separate from protective filename/display aliases.
 
-## Warunki akceptacyjne
+## Other sources and limits
 
-1. Aktywna aplikacja nie może być `CANDIDATE` wyłącznie na podstawie
-   podobnego prefiksu nazwy lub starego wpisu historii.
-2. Awaria dowolnego wymaganego dostawcy blokuje MOVE lub obniża wynik
-   do `REVIEW/UNKNOWN`; nie zamienia się po cichu na pustą listę.
-3. System rozpoznaje zainstalowane AUR już dziś przez pacmana,
-   lecz nie przedstawia pakietu foreign jako pewnego AUR.
-4. Flatpak user/system, Snap, AppImage i binarka manualna mają
-   osobne, testowalne przesłanki i diagnostykę.
-5. Dla DEB/RPM testy MOVE wymagają działającego odpowiedniego dostawcy,
-   bez sztucznego uzależnienia od `pacman`.
-6. Operacje destrukcyjne pozostają w katalogu użytkownika; mechanizm
-   Polkit dla dowolnych obcych plików nie jest częścią adapterów.
+- **foreign ≠ AUR**: pacman foreign records also include local packages and
+  packages no longer available from repositories. Neither yay nor paru is required.
+- Manual binaries, `/opt` directories, npm global and pipx provide protective
+  hints. Missing hints do not prove absence; custom prefixes may not be covered.
+- Protection for secrets, profiles, backups, games and session data remains active.
+- Installed-application evidence does not verify XDG-directory ownership.
+  `orphan_ownership_verified` remains `false`.
 
-## Materiały źródłowe
+## Verification
 
-- ArchWiki, AUR i pacman foreign: https://wiki.archlinux.org/title/Arch_User_Repository
-- pacman `-Qm` i `-Qn`: https://wiki.archlinux.org/title/Pacman/Tips_and_tricks
-- Flatpak instalacje user/system: https://docs.flatpak.org/en/latest/using-flatpak.html
-- Flatpak list: https://man.archlinux.org/man/flatpak-list.1.en
-- Snap aplikacje i launchery: https://snapcraft.io/docs/commands-and-aliases/
-- AppImage integracja bez instalacji: https://docs.appimage.org/user-guide/run-appimages.html
-- dpkg-query — status bazy i format dla maszyn: https://man7.org/linux/man-pages/man1/dpkg-query.1.html
-- RPM — zapytania do zainstalowanych pakietów: https://rpm.org/docs/latest/man/rpm-queryformat.7
+Tests cover native database selection, incomplete output, timeouts, installation
+after scanning, Snap/Flatpak namespace isolation, static AppImage metadata,
+non-execution of binaries, and fixture-only MOVE/RESTORE/PURGE.
+
+Before archive building, CI requires regressions and
+`scripts/smoke_native_sources.py` to run as an unprivileged user on Ubuntu 24.04
+(dpkg) and Fedora 43 (RPM), using real native package inventories.
+Snap parser and lifecycle coverage uses fixtures; it does not claim a live
+snapd installation inside the test container. AppImage tests use static fixture
+files, matching the non-execution contract.
+
+## Sources
+
+- [os-release and ID_LIKE](https://www.freedesktop.org/software/systemd/man/latest/os-release.html)
+- [dpkg-query and package states](https://manpages.debian.org/bookworm/dpkg/dpkg-query.1.en.html)
+- [RPM query formats](https://rpm.org/docs/latest/man/rpm-queryformat.7)
+- [Snap data locations](https://snapcraft.io/docs/reference/administration/data-locations/)
+- [Install modes and snap list columns](https://snapcraft.io/docs/explanation/snap-development/install-modes/)
+- [Parallel Snap instances](https://canonical.com/blog/parallel-installs-test-and-run-multiple-instances-of-snaps)
+- [AppImage portable data](https://docs.appimage.org/user-guide/portable-mode.html)

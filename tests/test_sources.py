@@ -52,7 +52,7 @@ class SourceProviderTests(unittest.TestCase):
         with patch.object(sources, "_run", return_value=(
             sources.Probe("dpkg", "ok"), output)):
             probe = sources.dpkg_packages()
-        self.assertEqual(probe.status, "ok")
+        self.assertEqual(probe.status, "partial")
         self.assertEqual(probe.names, {"active", "active:amd64"})
 
     def test_flatpak_lists_apps_not_runtimes(self):

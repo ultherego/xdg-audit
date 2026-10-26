@@ -11,7 +11,7 @@ import re
 import tempfile
 from pathlib import Path
 
-SCOPES = ('all', 'config', 'data', 'state', 'cache', 'flatpak', 'dotfiles')
+SCOPES = ('all', 'config', 'data', 'state', 'cache', 'flatpak', 'snap', 'dotfiles')
 NAME = re.compile(r'^[A-Za-z0-9.][A-Za-z0-9._+ -]{0,127}$')
 PATTERN = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._+*?-]{0,127}$')
 

@@ -7,19 +7,25 @@ commands below requests package installation or root privileges.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import configparser
 from itertools import islice
+import gzip
 import os
 from pathlib import Path
+import platform
 import re
+import shlex
 import shutil
 import stat
 import subprocess
+
+_UNSET = object()
 
 
 @dataclass(frozen=True)
 class Probe:
     source: str
-    status: str  # ok | absent | failed | timeout | parse_error
+    status: str  # ok | absent | failed | timeout | parse_error | partial
     names: frozenset[str] = frozenset()
     note: str = ""
     app_ids: frozenset[str] = frozenset()
@@ -33,7 +39,8 @@ class ActiveInventory(tuple):
     """Backward-compatible 8-field tuple carrying provider health metadata."""
 
     def __new__(cls, values, *, status=None, foreign=(), manual=(),
-                distro=None, provenance=None, npm_global=(), pipx=(), flatpak_ids=None):
+                distro=None, provenance=None, npm_global=(), pipx=(), flatpak_ids=None,
+                native_source=_UNSET, snap_ids=None, appimage_paths=None):
         obj = super().__new__(cls, values)
         if len(obj) != 8:
             raise ValueError("Invalid installed-application inventory shape")
@@ -43,9 +50,79 @@ class ActiveInventory(tuple):
         obj.npm_global = frozenset(npm_global)
         obj.pipx = frozenset(pipx)
         obj.flatpak_ids = (frozenset(flatpak_ids) if flatpak_ids is not None else None)
+        obj.snap_ids = (frozenset(snap_ids) if snap_ids is not None else None)
+        obj.appimage_paths = (frozenset(appimage_paths) if appimage_paths is not None else None)
         obj.distro = {name: frozenset(values) for name, values in (distro or {}).items()}
         obj.provenance = dict(provenance or {})
+        # Compatibility for older Python callers; production always supplies
+        # the OS-selected source, including explicit None for unknown systems.
+        obj.native_source = (('pacman' if obj[0] and obj.status.get('pacman') == 'ok' else None)
+                             if native_source is _UNSET else native_source)
         return obj
+
+
+def native_package_source() -> str | None:
+    """Identify the OS package database, never an arbitrary installed tool."""
+    try:
+        release = platform.freedesktop_os_release()
+    except (OSError, ValueError, UnicodeError):
+        return None
+    families = {
+        'pacman': {'arch', 'cachyos', 'manjaro', 'endeavouros'},
+        'dpkg': {'debian', 'ubuntu', 'linuxmint', 'pop', 'kali', 'raspbian', 'neon'},
+        'rpm': {'fedora', 'rhel', 'centos', 'rocky', 'almalinux', 'ol', 'suse',
+                'opensuse', 'opensuse-leap', 'opensuse-tumbleweed', 'mageia'},
+    }
+    for identity in (release.get('ID', ''), *release.get('ID_LIKE', '').split()):
+        for source, ids in families.items():
+            if identity.casefold() in ids:
+                return source
+    return None
+
+
+def verified_native_source(inventory) -> str:
+    """Require a fresh, nonempty native database before authorizing MOVE."""
+    health = getattr(inventory, 'status', None)
+    source = getattr(inventory, 'native_source', 'pacman')
+    if source not in ('pacman', 'dpkg', 'rpm'):
+        raise ValueError('Cannot determine native package inventory before quarantine; no changes')
+    names = inventory[0] if source == 'pacman' else inventory.distro.get(source, ())
+    if not names or (health is not None and health.get(source) != 'ok'):
+        raise ValueError(f'Cannot verify current {source} inventory before quarantine; no changes')
+    return source
+
+
+def dpkg_removals(logs: list[Path] | None = None) -> dict[str, list[str]]:
+    """Bounded historical dpkg actions, including APT-triggered removals.
+
+    Missing/unreadable/truncated logs provide no evidence. Historical records
+    never override a currently installed package or authorize removal alone.
+    """
+    if logs is None:
+        logs = [Path('/var/log/dpkg.log'),
+                *sorted(Path('/var/log').glob('dpkg.log.*'))[:15]]
+    pattern = re.compile(r'^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) '
+                         r'(?:remove|purge) ([a-z0-9][a-z0-9+.-]*)(?::[a-z0-9-]+)? \S+ \S+$')
+    result = {}
+    for path in logs[:16]:
+        try:
+            if path.is_symlink() or not path.is_file():
+                continue
+            opener = gzip.open if path.suffix == '.gz' else open
+            if path.suffix in ('.xz', '.zst'):
+                continue
+            with opener(path, 'rb') as stream:
+                raw = stream.read(16 * 1024 * 1024 + 1)
+            if len(raw) > 16 * 1024 * 1024:
+                continue
+            content = raw.decode('utf-8')
+        except (OSError, EOFError, UnicodeError):
+            continue
+        for line in content.splitlines():
+            match = pattern.fullmatch(line)
+            if match:
+                result.setdefault(match[2], []).append(match[1])
+    return result
 
 
 def _run(source: str, args: list[str], timeout: int) -> tuple[Probe, str]:
@@ -54,7 +131,8 @@ def _run(source: str, args: list[str], timeout: int) -> tuple[Probe, str]:
     try:
         proc = subprocess.run(args, text=True, stdout=subprocess.PIPE,
                               stderr=subprocess.PIPE, timeout=timeout,
-                              check=False, errors="replace")
+                              check=False, errors="replace",
+                              env={**os.environ, 'LC_ALL': 'C', 'LC_MESSAGES': 'C', 'LANG': 'C'})
     except subprocess.TimeoutExpired:
         return Probe(source, "timeout", note="query exceeded time limit"), ""
     except OSError as exc:
@@ -63,10 +141,21 @@ def _run(source: str, args: list[str], timeout: int) -> tuple[Probe, str]:
         return Probe(source, "failed", note=f"exit code {proc.returncode}"), ""
     if len(proc.stdout) > 16 * 1024 * 1024:
         return Probe(source, "parse_error", note="oversized query output"), ""
-    return Probe(source, "ok"), proc.stdout
+    output = proc.stdout
+    if source == 'snap' and not output.strip() and proc.stderr.strip() == SNAP_EMPTY:
+        output = SNAP_EMPTY
+    return Probe(source, "ok"), output
 
 
 _PACKAGE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9+_.@-]{0,199}$")
+SNAP_EMPTY = "No snaps are installed yet. Try 'snap install hello-world'."
+_SNAP_ID = re.compile(r'(?=.{2,51}$)[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:_[a-z0-9]{1,10})?')
+
+
+def valid_snap_id(value: str) -> bool:
+    base = value.partition('_')[0]
+    return bool(_SNAP_ID.fullmatch(value) and 2 <= len(base) <= 40
+                and '--' not in base and re.search('[a-z]', base))
 
 
 def pacman_packages() -> Probe:
@@ -97,6 +186,7 @@ def dpkg_packages() -> Probe:
     if base.status != "ok":
         return base
     names = set()
+    incomplete = False
     for line in output.splitlines():
         if not line.strip():
             continue
@@ -122,7 +212,10 @@ def dpkg_packages() -> Probe:
         if state[1:] == ["ok", "installed"]:
             names.add(base_name)
             names.add(name)
-    return Probe("dpkg", "ok", frozenset(names))
+        if state[1] != 'ok' or state[2] not in ('installed', 'config-files', 'not-installed'):
+            incomplete = True
+    return Probe("dpkg", "partial" if incomplete else "ok", frozenset(names),
+                 note='package configuration is incomplete; MOVE is blocked' if incomplete else '')
 
 
 def rpm_packages() -> Probe:
@@ -165,22 +258,25 @@ def snap_apps() -> Probe:
     base, output = _run("snap", ["snap", "list"], 15)
     if base.status != "ok":
         return base
+    if output.strip() == SNAP_EMPTY:
+        return Probe('snap', 'ok', app_ids=frozenset())
     lines = [line for line in output.splitlines() if line.strip()]
     if not lines:
         return Probe("snap", "parse_error", note="missing snap list header")
-    if lines[0].split()[0].casefold() != "name":
+    if lines[0].split() != ['Name', 'Version', 'Rev', 'Tracking', 'Publisher', 'Notes']:
         return Probe("snap", "parse_error", note="unexpected snap list header")
     names = set()
     for line in lines[1:]:
         fields = line.split()
-        if len(fields) < 2 or not _PACKAGE.fullmatch(fields[0]):
+        if (len(fields) != 6 or not valid_snap_id(fields[0])
+                or not re.fullmatch(r'x?[0-9]+', fields[2])):
             return Probe("snap", "parse_error", note="invalid installed snap row")
         names.add(fields[0].casefold())
-    return Probe("snap", "ok", frozenset(names))
+    return Probe("snap", "ok", frozenset(names), app_ids=frozenset(names))
 
 
 def _safe_direct_children(base: Path, *, extensions=(), require_exec=False,
-                          anchor: Path | None = None):
+                          anchor: Path | None = None, paths: set[str] | None = None):
     if anchor is not None:
         status = _source_directory_status(anchor, base)
         if status != "ok":
@@ -188,11 +284,15 @@ def _safe_direct_children(base: Path, *, extensions=(), require_exec=False,
     elif base.is_symlink() or not base.is_dir():
         return set(), "absent" if not base.exists() else "unsafe"
     names = set()
+    unsafe_image = False
     try:
         for idx, item in enumerate(base.iterdir()):
             if idx >= 2000:
                 return set(), "failed"
             info = item.lstat()
+            if (extensions and item.name.casefold().endswith(extensions)
+                    and (stat.S_ISLNK(info.st_mode) or info.st_uid not in (0, os.getuid()))):
+                unsafe_image = True
             if not stat.S_ISREG(info.st_mode) or info.st_uid not in (0, os.getuid()):
                 continue
             if require_exec and not info.st_mode & 0o111:
@@ -205,25 +305,144 @@ def _safe_direct_children(base: Path, *, extensions=(), require_exec=False,
                 name = item.name
             if name:
                 names.add(name.casefold())
+                if paths is not None:
+                    paths.add(str(item))
     except OSError:
         return set(), "failed"
-    return names, "ok"
+    return names, "failed" if unsafe_image else "ok"
 
 
-def user_appimages(home: Path) -> Probe:
-    """Static filename evidence only; never run or mount an AppImage."""
+def _appimage_aliases(path: Path) -> set[str]:
+    stem = path.name[:-len('.AppImage')].casefold()
+    candidate = stem
+    for _ in range(2):
+        candidate = re.sub(r'[-_.](?:x86_64|amd64|aarch64|arm64|x64|i[3-6]86)$', '', candidate)
+        candidate = re.sub(r'[-_](?:v)?[0-9][0-9a-z.+_-]*$', '', candidate)
+    names = {stem, path.name.casefold() + '.home', path.name.casefold() + '.config'}
+    if len(candidate) >= 3:
+        names.add(candidate)
+    return names
+
+
+def _safe_appimage(path: Path, home: Path) -> bool:
+    if not path.is_absolute() or '..' in path.parts or path.suffix.casefold() != '.appimage':
+        return False
+    anchor = home if path.is_relative_to(home) else Path('/')
+    status = _source_directory_status(anchor, path.parent)
+    if status in ('failed', 'unsafe'):
+        raise ValueError('Cannot safely inspect AppImage target')
+    if status != 'ok':
+        return False
+    try:
+        info = path.lstat()
+    except FileNotFoundError:
+        return False
+    if stat.S_ISLNK(info.st_mode):
+        raise ValueError('AppImage target is a symlink')
+    return stat.S_ISREG(info.st_mode) and info.st_uid in (0, os.getuid())
+
+
+def _read_launcher(path: Path) -> str:
+    from xdg_quarantine_lifecycle import _open_path
+    parent = _open_path(path.parent)
+    try:
+        fd = os.open(path.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=parent)
+        with os.fdopen(fd, 'rb') as stream:
+            info = os.fstat(stream.fileno())
+            if not stat.S_ISREG(info.st_mode) or info.st_uid not in (0, os.getuid()):
+                raise ValueError('Unsafe launcher')
+            raw = stream.read(65537)
+            if len(raw) > 65536:
+                raise ValueError('Launcher exceeds inspection limit')
+            return raw.decode('utf-8')
+    finally:
+        os.close(parent)
+
+
+def _appimage_launchers(home: Path, data: Path) -> tuple[set[str], set[str], bool]:
+    """Inspect bounded user launchers; never invoke Exec, wrappers or images."""
+    folder = data / 'applications'
+    status = _source_directory_status(home, folder)
+    if status == 'absent':
+        return set(), set(), False
+    if status != 'ok':
+        return set(), set(), True
+    names, paths, failed = set(), set(), False
+    try:
+        entries = list(islice(folder.iterdir(), 2001))
+        if len(entries) > 2000:
+            return set(), set(), True
+        for entry in entries:
+            info = entry.lstat()
+            if (entry.suffix != '.desktop' or not stat.S_ISREG(info.st_mode)
+                    or info.st_uid not in (0, os.getuid())):
+                continue
+            # Unknown oversized launchers cannot establish image absence.
+            if info.st_size > 65536:
+                failed = True
+                continue
+            text = _read_launcher(entry)
+            if '.appimage' not in text.casefold():
+                continue
+            parser = configparser.ConfigParser(interpolation=None, strict=False)
+            parser.optionxform = str
+            try:
+                parser.read_string(text)
+                section = parser['Desktop Entry']
+                if section.get('Type') != 'Application':
+                    continue
+                raw = section.get('Exec', '')
+                escapes = {'s': ' ', 'n': '\n', 't': '\t', 'r': '\r', '\\': '\\'}
+                raw = re.sub(r'\\([sntr\\])', lambda m: escapes[m[1]], raw)
+                tokens = shlex.split(raw)
+                if tokens and Path(tokens[0]).name == 'env':
+                    tokens = tokens[1:]
+                    while tokens and (tokens[0] == '--' or re.match(r'^[A-Za-z_][A-Za-z0-9_]*=', tokens[0])):
+                        tokens = tokens[1:]
+                targets = [section.get('TryExec', ''), section.get('X-AppImage-Path', '')]
+                if tokens:
+                    targets.append(tokens[0])
+                present = [Path(value) for value in targets if value and _safe_appimage(Path(value), home)]
+                if not present:
+                    continue  # stale launchers remain weak desktop hints in the engine
+                for image in present:
+                    names.update(_appimage_aliases(image))
+                    paths.add(str(image))
+                for alias in (section.get('Name', ''), section.get('X-AppImage-Name', ''), entry.stem):
+                    if 3 <= len(alias) <= 200 and not any(ord(c) < 32 for c in alias):
+                        names.add(alias.casefold())
+            except (ValueError, KeyError, configparser.Error):
+                failed = True
+    except (OSError, UnicodeError, ValueError):
+        failed = True
+    return names, paths, failed
+
+
+def user_appimages(home: Path, data: Path | None = None) -> Probe:
+    """Bounded file/launcher evidence, with version aliases; never execute code."""
     names = set()
+    image_paths = set()
     problems = []
-    for folder in (home / "Applications", home / ".local/bin", home / "bin",
+    for folder in (home / "Applications", home / 'AppImages', home / 'Downloads',
+                   home / ".local/bin", home / "bin",
                    home / ".local/share/applications"):
-        found, state = _safe_direct_children(folder, extensions=(".appimage",), anchor=home)
+        found, state = _safe_direct_children(folder, extensions=(".appimage",), anchor=home, paths=image_paths)
         names.update(found)
+        for stem in found:
+            names.update(_appimage_aliases(Path(stem + '.AppImage')))
         if state in ("failed", "unsafe"):
             problems.append(str(folder))
+    launcher_names, launcher_paths, failed = _appimage_launchers(home, data or home / '.local/share')
+    names.update(launcher_names)
+    image_paths.update(launcher_paths)
+    if failed:
+        problems.append('desktop launchers')
     if problems:
         return Probe("appimage", "failed", frozenset(names),
-                     note="cannot safely inspect: " + ",".join(problems[:3]))
-    return Probe("appimage", "ok", frozenset(names))
+                     note="cannot safely inspect: " + ",".join(problems[:3]), app_ids=frozenset(image_paths))
+    return Probe("appimage", "ok", frozenset(names),
+                 note='static filenames, version aliases and verified launcher targets; no execution',
+                 app_ids=frozenset(image_paths))
 
 
 def _app_directories(base: Path, *, anchor: Path | None = None) -> tuple[set[str], str]:

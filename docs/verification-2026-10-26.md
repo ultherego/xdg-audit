@@ -1,94 +1,103 @@
-# Weryfikacja P0/P1 — 2026-10-26
+# P0/P1 verification — 2026-10-26
 
-Zmiany: [PR #27](https://github.com/ultherego/xdg-audit/pull/27) i
+> Historical results for PRs #27/#28. The owner's subsequent request covers
+> MIT licensing, native APT/dpkg and RPM MOVE, the Snap scope and expanded
+> AppImage detection. Current behavior is defined by the
+> [installation-source contract](installation-source-support.md).
+> References below to blocked RPM/MOVE and pending license selection describe
+> those earlier commits, rather than the current specification.
+
+Changes: [PR #27](https://github.com/ultherego/xdg-audit/pull/27) and
 [PR #28](https://github.com/ultherego/xdg-audit/pull/28).
-Dokładny SHA oraz wyniki każdej wersji Pythona i natywnych smoke testów
-udostępnia [CI PR #28](https://github.com/ultherego/xdg-audit/pull/28/checks).
-Nie opublikowano nowego RC ani stabilnego wydania.
+Exact commits, Python matrix results and native smoke tests are available in
+[PR #28 checks](https://github.com/ultherego/xdg-audit/pull/28/checks).
+No new RC or stable release was published during this verification.
 
-## Wykonane kontrole
+## Completed checks
 
-Lokalnie: Ubuntu 24.04.3 LTS, Python 3.12.14, bez pacmana. Testy korzystały
-wyłącznie z tymczasowych katalogów. Kontener wykonawczy mapuje tylko UID 0;
-nie wyłączano zabezpieczenia roota w CLI ani instalatorze produktu.
-Test instalatora używa kontrolowanej atrapy sprawdzenia UID; natywny test
-launchera w CI wymaga zwykłego użytkownika.
+Local environment: Ubuntu 24.04.3 LTS, Python 3.12.14, without pacman.
+Tests used temporary directories only. The execution container maps only
+UID 0; product CLI and installer root guards were not disabled.
+Installer unit tests use a controlled UID-check stub; the native launcher
+smoke test in CI requires a regular user.
 
-| Kontrola | Wynik i zakres |
+| Check | Result and scope |
 | --- | --- |
-| `python3 -m unittest discover -s tests -q` | PASS: 297 testów lokalnie i zielona macierz Python 3.10–3.14 w CI; szczegółowe przypadki poniżej |
-| Osiem rzeczywistych SIGKILL | PASS: przed/po rename MOVE, przed/po rename RESTORE, przed usuwaniem, po pierwszym unlink, po usunięciu przed zapisem końcowym oraz podczas wymiany dziennika |
-| Powrót po przerwaniu | PASS: identyczne bajty przy RESTORE, kontynuacja częściowego PURGE, jawne odzyskanie wyłącznie tymczasowego dziennika, plik kontrolny poza operacją nietknięty |
-| ENOSPC / EACCES / EIO | PASS: zachowany właściwy kod błędu i poprzedni dziennik; brak niezatwierdzonych zmian; poprawne liczniki po wykonanym rename; ponowienie po usunięciu błędu |
-| Rzeczywisty dpkg bez pacmana | PASS: odczyt bazy dpkg, skan fixture i jawna odmowa MOVE; bajty fixture niezmienione |
-| Instalacja / aktualizacja / usunięcie rejestracji | PASS: dziewięć regresji; brak zmian cudzych wpisów i kwarantanny; odmowa symlinków i hardlinków, zachowanie wpisu po nieudanym zapisie |
-| Archiwa ZIP i tar.gz | PASS lokalnie i w CI: budowanie, integralność, powtarzalność oraz identyczne odtworzenie z rozpakowanych źródeł bez Git; wyłącznie jawna lista `scripts/archive-files.json` |
-| Prywatność wejść archiwum | PASS: dodatkowe `.env`, raport JSON, prywatny plik Python i PEM nie trafiają do archiwum; zadeklarowany symlink lub wyjście poza projekt blokuje budowanie |
-| Natywny Gio / błąd ENOSPC w GTK | PASS w [zadaniu GUI 121701281841](https://github.com/ultherego/xdg-audit/actions/runs/40359634579/job/121701281841): uruchomienie ścieżki ze znakami specjalnymi, responsywność GTK, widoczny błąd ENOSPC i brak potwierdzenia PURGE |
+| `python3 -m unittest discover -s tests -q` | PASS: 297 tests locally and a green Python 3.10–3.14 CI matrix; detailed cases below |
+| Eight real SIGKILL checkpoints | PASS: before/after MOVE rename, before/after RESTORE rename, before deletion, after the first unlink, after deletion before final journal write, and during journal replacement |
+| Restart recovery | PASS: identical restored bytes, resumed partial PURGE, explicit recovery from a temporary-only journal, and an untouched outside-operation sentinel |
+| ENOSPC / EACCES / EIO | PASS: original error codes and previous journal preserved; no unapproved changes; accurate counts after rename; retry after fault removal |
+| Real dpkg without pacman | PASS at these historical commits: read the dpkg database, scanned fixtures and explicitly refused MOVE; fixture bytes unchanged |
+| Desktop registration installation/update/removal | PASS: nine regressions; unrelated registrations and quarantine unchanged; symlink/hardlink refusal; previous entry preserved after write failure |
+| ZIP and tar.gz archives | PASS locally and in CI: build, integrity, reproducibility and identical rebuilding from extracted sources without Git; explicit `scripts/archive-files.json` contents only |
+| Archive input privacy | PASS: incidental `.env`, JSON report, private Python and PEM files excluded; a declared symlink or path outside the project blocks building |
+| Native Gio / GTK ENOSPC message | PASS in [GUI job 121701281841](https://github.com/ultherego/xdg-audit/actions/runs/40359634579/job/121701281841): launch from a path containing special characters, responsive GTK, visible ENOSPC error and no PURGE confirmation |
 
-PR #27, commit `8d7a70535134fce903f470fca7a8a9098af78999`, przeszedł
-Python 3.10–3.14, Xvfb, Weston, E2E, benchmark i archiwa:
+PR #27, commit `8d7a70535134fce903f470fca7a8a9098af78999`, passed
+Python 3.10–3.14, Xvfb, Weston, E2E, benchmark and archive checks:
 [run 40356697307](https://github.com/ultherego/xdg-audit/actions/runs/40356697307).
-Po tym wyniku PR został scalony.
+The PR was merged after those results.
 
-Kod PR #28, commit `9b389f6776d69eabc71b0c673d83a2667e31c222`, przeszedł
-macierz Python, Xvfb (w tym nowe kontrole Gio/ENOSPC), Weston, E2E, benchmark i archiwa:
+PR #28 code, commit `9b389f6776d69eabc71b0c673d83a2667e31c222`, passed
+the Python matrix, Xvfb (including Gio/ENOSPC), Weston, E2E, benchmark and archives:
 [run 40359634579](https://github.com/ultherego/xdg-audit/actions/runs/40359634579).
-Zależności zadania Xvfb mają teraz limity czasu, ograniczone ponowienia
-i tryb nieinteraktywny; instalacja pakietów nie może blokować zadania bez końca.
+Xvfb dependency installation has time limits, bounded retries and
+noninteractive mode, preventing indefinite package-installation waits.
 
-Pobrano również rzeczywisty artefakt CI `12666463359` z tego uruchomienia.
-Zweryfikowano digest z metadanych GitHuba, wewnętrzne SHA256SUMS, dokładną
-listę 93 plików, zgodność zawartości ZIP z tar.gz oraz zgodność wszystkich
-plików Python z lokalnie testowanymi źródłami. Nie wykryto dodatkowych
-plików spoza jawnego manifestu.
+The actual CI artifact `12666463359` from that run was also downloaded.
+Verification covered the digest in GitHub metadata, internal SHA256SUMS,
+the exact 93-file inventory, ZIP/tar.gz content parity and byte-for-byte
+agreement of all Python files with locally tested sources. No files outside
+the explicit manifest were found.
 
-## Poprawione usterki
+## Fixed defects
 
-1. Dane testowe dpkg miały dosłowne `\\t`/`\\n`; test poprawnego rekordu
-   nie testował rzeczywistego formatu. Zastąpiono je tabulatorami i końcami linii.
-2. Zapis dziennika przy błędzie flush/fsync zamykał deskryptor drugi raz,
-   maskując ENOSPC jako EBADF. Własność deskryptora jest teraz jednoznaczna.
-3. MOVE i RESTORE zapisywały dziennik przez ścieżkę z potencjalnym symlinkiem
-   nadrzędnym. Korzystają teraz z tego samego zakotwiczonego zapisu co PURGE.
-4. RESTORE przerwany po rename pozostawiał dane na miejscu, ale nie kończył
-   dziennika przy ponowieniu. Uzgodnienie wymaga zgodnego oryginalnego inode;
-   nowa kolizja pozostaje nietknięta i nie jest uznawana za przywrócony obiekt.
-5. Błąd synchronizacji po rename zaniżał liczbę już przeniesionych obiektów.
-6. Instalator desktopowy nie sprawdzał wszystkich katalogów nadrzędnych,
-   zapisywał bezpośrednio i nie obsługiwał poprawnie procentów w Exec.
-7. Archiwizator zbierał dowolne pliki z checkoutu. Obecnie wymaga jawnego
-   manifestu, również przy budowaniu poza repozytorium Git.
-8. dpkg może zwrócić `deinstall ok installed` albo `purge ok installed`:
-   to żądanie przyszłej akcji, a pakiet nadal jest zainstalowany. Takie rekordy
-   chronią dane tak samo jak `install ok installed`; potwierdza to także
-   zapytanie rzeczywistego dpkg do izolowanej testowej bazy statusów.
+1. dpkg fixtures contained literal backslash-t/backslash-n sequences, so the
+   valid-record test did not exercise the actual format. Fixtures now use
+   real tabs and newlines.
+2. Journal writes closed a descriptor twice after flush/fsync failure,
+   masking ENOSPC with EBADF. Descriptor ownership is now unambiguous.
+3. MOVE and RESTORE wrote journals through paths with potentially symlinked
+   ancestors. They now use the same anchored writer as PURGE.
+4. RESTORE interrupted after rename left data restored but did not finish
+   the journal on retry. Reconciliation requires the original inode;
+   a new collision remains untouched and is not accepted as restored data.
+5. Synchronization errors after rename undercounted objects already moved.
+6. The desktop installer did not check every ancestor, wrote directly and
+   mishandled percent signs in Exec.
+7. Archive building collected arbitrary checkout files. It now requires an
+   explicit manifest, including when building outside a Git repository.
+8. dpkg can return `deinstall ok installed` or `purge ok installed`: these
+   request a future action while the package remains installed. Such records
+   protect data just like `install ok installed`, verified by real dpkg queries
+   against an isolated fixture status database.
 
-## Przegląd screenshotów i plików projektu
+## Screenshot and project-file review
 
-Sprawdzono wizualnie wszystkie dziewięć obrazów `docs/screenshots/*.webp`
-oraz ich tekst przez OCR. Odczytano metadane obrazów; nie zawierały pól EXIF/XMP.
-Nie zaobserwowano wartości haseł, tokenów, pełnych osobistych ścieżek HOME
-ani nazw hostów. Widoczne pozostają nazwy aplikacji i neutralne ścieżki `~/…`.
-Wzorzec OCR `@` dopasował ikonę Settings, nie adresy e-mail.
-To przegląd zawartości, nie matematyczny dowód braku każdego możliwego sekretu.
+All nine `docs/screenshots/*.webp` images were inspected visually and with OCR.
+Image metadata contained no EXIF/XMP fields. No password/token values, complete
+personal HOME paths or hostnames were observed. Application names and neutral
+`~/…` paths remain visible. The OCR `@` match was a Settings icon, not an email
+address. This was a content review, not proof that every possible secret is absent.
 
-README oznacza te screenshoty jako historyczne: klasyfikacje i przyciski
-mogą różnić się od obecnego kodu. Archiwa są ponadto ograniczone do
-przejrzanych plików projektu; wyniki skanów i lokalne logi nie są publikowane.
-Odbiór binarnych załączników ostatniego opublikowanego RC1 nie był częścią
-tej kontroli. Nowe artefakty nadal wymagają odbioru przed publikacją.
+The README identifies these screenshots as historical: classifications and
+controls may differ from current code. Archives are additionally limited to
+reviewed project files; scan reports and local logs are not published.
+Binary attachments from the last published RC1 were outside this review.
+New release artifacts still require acceptance before publication.
 
-## Pozostałe decyzje i zewnętrzne dowody
+## Decisions and external evidence pending at that time
 
-- Licencję wybiera właściciel; nie dodano domyślnej licencji.
-- Niezależny przegląd bezpieczeństwa wymaga innego recenzenta niż autor zmian.
-- Potwierdzenie GUI właściciela jest przyjęte. Osobne sesje GNOME/KDE/Xfce
-  nie zostały na tej podstawie oznaczone jako wykonane.
-- Nowy RC/stable wymaga decyzji o wydaniu i przejścia wymaganych kontroli.
-- Rozszerzenie RPM/MOVE pozostaje wstrzymane zgodnie z kolejnością P0/P1.
+- License selection belonged to the owner; no default license had been added
+  in PR #28. The subsequent owner-authorized change selects MIT.
+- Independent security review requires a reviewer other than the change author.
+- The owner's GUI confirmation was accepted. Separate GNOME/KDE/Xfce sessions
+  were not marked complete on that basis.
+- A new RC/stable release requires a release decision and successful required checks.
+- RPM/MOVE expansion was deferred under the earlier P0/P1 sequence. The current
+  installation-source contract supersedes that historical hold.
 
-## Powtórzenie kontroli
+## Reproducing the checks
 
 ```fish
 python3 -m unittest discover -s tests -q
@@ -101,5 +110,5 @@ sha256sum -c SHA256SUMS
 cd ..
 ```
 
-Testy natywne Gio i GTK uruchamia CI z odpowiednimi zależnościami.
-Nie uruchamiać CLI ani instalatora przez sudo.
+CI runs native Gio and GTK tests with the required dependencies.
+Run the CLI and desktop installer as a regular user.

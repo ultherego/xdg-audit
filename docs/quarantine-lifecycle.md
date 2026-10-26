@@ -48,9 +48,9 @@ a read while xdg-audit was inventorying quarantine data. The path may refer
 to a directory with mode `111`: it can be entered but not listed.
 Failure to inspect **blocks deletion**, not restoration.
 
-The normal GUI path starts at **Usuń trwale…**. When the verified
+The normal GUI path starts at **Delete permanently…**. When the verified
 PURGE preview finds an inaccessible user-owned object, GTK/Qt/Tk run
-**Sprawdź dostęp…** automatically and explain its exact path, owner,
+**Check access…** automatically and explain its exact path, owner,
 current permissions and proposed change. No test buttons are shown in
 the application.
 

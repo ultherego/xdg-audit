@@ -14,7 +14,7 @@
   <img alt="No automatic deletion" src="https://img.shields.io/badge/deletion-manual%20only-a6e3a1?style=flat-square&labelColor=1e1e2e">
 </p>
 
-xdg-audit scans user-scoped configuration, data, state, cache, Flatpak directories and selected dotfiles. It highlights **possible leftovers** while distinguishing active, protected and uncertain application data. **Nothing is deleted automatically.**
+xdg-audit scans user-scoped configuration, data, state, cache, Flatpak/Snap directories and selected dotfiles. It highlights **possible leftovers** while distinguishing active, protected and uncertain application data. **Nothing is deleted automatically.**
 
 ## 🖥️ Preview
 
@@ -163,35 +163,42 @@ sudo pacman -S --needed python python-gobject gtk4
 sudo pacman -S --needed python pyside6
 ```
 
-**System tools:** `coreutils` (`du`) for directory sizes, `procps-ng` (`ps`) for process evidence. `pacman` verifies installed packages on Arch/CachyOS and is **required before quarantine moves** (fail closed if the inventory cannot be verified). Optional integrations: `flatpak`, `snap`, `systemctl --user`, and `xdg-open`.
+**System tools:** `coreutils` (`du`) for directory sizes, `procps-ng` (`ps`) for process evidence. The native database (`pacman`, `dpkg-query` or `rpm`, selected using `os-release`) must be verified before quarantine moves. Missing, incomplete or failed inventories block MOVE. Optional integrations: `flatpak`, `snap`, `systemctl --user`, and `xdg-open`.
 
-### Wykrywanie źródeł instalacji aplikacji
+### Installed-application sources
 
-**Nowe ochronne źródła:** `npm_global` i `pipx` wykrywają statycznie
-nazwy z wybranych katalogów instalacji. Ich obecność wstrzymuje
-kwestionowany MOVE, lecz brak wpisu **nie** dowodzi odinstalowania
-aplikacji. Kod pakietów nie jest uruchamiany. `flatpak_app_ids`
-zlicza rzeczywiste identyfikatory, a nie dodatkowe nazwy wyświetlane.
+The `npm_global` and `pipx` providers inspect selected directory names without
+executing package code. Their presence protects matching data from MOVE;
+their absence does not establish that an application was uninstalled.
+`flatpak_app_ids` counts canonical application IDs separately from display aliases.
 
-
-To dotyczy tego, **jak zainstalowane zostały audytowane aplikacje**,
-a nie metody instalacji samego xdg-audit.
+These sources describe how **audited applications** were installed. They are
+independent of how xdg-audit itself is distributed.
 
 ```fish
 python3 xdg_audit.py --installed-sources
 ```
 
-Zestawienie tylko do odczytu pokazuje stan inwentarzy pacman, pacman-foreign,
-Flatpak, Snap, AppImage, zainstalowanych pakietów DEB/RPM i ochronnych wskazówek dla ręcznie instalowanych
-binarek (`~/.local/bin`, `~/bin`, `/usr/local/bin`, `/opt`).
-Pakiety foreign mogą pochodzić z AUR **lub** lokalnej instalacji.
-Błąd aktywnego dostawcy nie oznacza odinstalowania programu i blokuje MOVE
-do czasu poprawnego ponownego sprawdzenia. Odczyt `dpkg-query` i `rpm -qa` służy obecnie do ochrony
-**zainstalowanych** aplikacji. MOVE na systemach Debian/RPM pozostaje
-zablokowany do czasu walidacji właściwego dostawcy pakietów przed zmianami;
-obecnie MOVE nadal wymaga sprawnego pacmana.
+The read-only diagnostic reports provider health for pacman, foreign packages,
+Flatpak, Snap, AppImage, installed DEB/RPM packages, and protective hints for
+manual binaries in `~/.local/bin`, `~/bin`, `/usr/local/bin` and `/opt`.
+Foreign packages can come from AUR **or** local installation.
 
+On Debian/Ubuntu and RPM-family systems, MOVE verifies the actual native
+package database without requiring pacman. Inventories are read again before
+each operation. Failed queries, timeouts, partial dpkg configuration and unknown
+OS families block MOVE. REVIEW/UNKNOWN entries still require separate
+acknowledgement of uncertain ownership.
 
+The **Snap** scope covers `~/snap`, distinguishes exact instance IDs such as
+`firefox` and `firefox_work`, and requires a healthy Snap inventory before MOVE.
+**AppImage** detection recognizes conventional locations, versioned filenames,
+and safe desktop launchers pointing to existing images elsewhere.
+Images, `Exec` commands and wrapper scripts are never executed.
+
+```fish
+python3 xdg_audit.py --scope snap --quick --json
+```
 
 ## 🛡️ Safety model
 
@@ -235,15 +242,15 @@ python3 xdg_audit.py --polkit-test-repair      # ACCESS TEST: owner-only repair
 python3 xdg_audit.py --polkit-test-delete      # DELETE TEST: clean test-only fixture
 ```
 
-Available scopes: `all`, `config`, `data`, `state`, `cache`, `flatpak`, `dotfiles`.
+Available scopes: `all`, `config`, `data`, `state`, `cache`, `flatpak`, `snap`, `dotfiles`.
 
 Completed PURGE operations remain visible in the GUI as **PURGED** until
 their manifest is cleaned up; that history may be automatically removed 30
 days after full PURGE, but only with explicit opt-in to automatic retention.
 Incomplete or corrupted journals are never auto-removed.
 
-**Normal operation:** In GTK, Qt and Tk, **Usuń trwale…** checks the
-quarantine and, when needed, automatically opens **Sprawdź dostęp…**.
+**Normal operation:** In GTK, Qt and Tk, **Delete permanently…** checks the
+quarantine and, when needed, automatically opens **Check access…**.
 For user-owned files/directories with restricted permissions it offers
 an individually confirmed `ACCESS` change. If the original inventory was
 unsealed, it then requires separate `ADOPT` confirmation, followed by a
@@ -260,37 +267,35 @@ See [Quarantine lifecycle](docs/quarantine-lifecycle.md) for recovery,
 history-only cleanup, manual/automatic retention, user-scoped systemd
 timer, legacy adoption, and safeguards.
 
-### Jakość dowodów w JSON
+### JSON evidence quality
 
-Skan `--quick --json` zwraca teraz `size_bytes: null`, jeśli rozmiaru
-**nie mierzono** (nie należy mylić tego z pustym plikiem, `0`).
-Pole `size_calculated` rozróżnia te przypadki.
+A `--quick --json` scan returns `size_bytes: null` when size has **not been
+measured**. This is different from an empty file or directory with size `0`;
+`size_calculated` distinguishes these cases.
 
-`evidence_level` rozróżnia `installed_evidence`, `protective_hint`,
-`historical_only`, `policy_protected` i `unknown`. Historia
-`pacman.log` jest tylko wskazówką: `orphan_ownership_verified: false`
-nie oznacza, że użytkownik może bezpiecznie usunąć dane. Każda pozycja
-`CANDIDATE` oparta wyłącznie na historii dostaje dodatkowo
-`risk_flags: ["unverified_owner", "history_only"]` i nadal wymaga
-odrębnego świadomego MOVE oraz weryfikacji przed PURGE.
+`evidence_level` distinguishes `installed_evidence`, `protective_hint`,
+`historical_only`, `policy_protected` and `unknown`. Package-removal history
+is only a hint. `orphan_ownership_verified: false` means the application has
+not verified that the data can be removed safely. Every CANDIDATE based only
+on history also carries `risk_flags: ["unverified_owner", "history_only"]`
+and still requires explicit MOVE consent and fresh verification before PURGE.
 
-## 🧭 Kolejne etapy projektu
+## 🧭 Project roadmap
 
-Najpierw domykamy bezpieczeństwo i jakość wersji 1.7.0 — bez zmiany
-reguł kwalifikowania osieroconych danych. Zobacz
-[release-readiness checklist](docs/release-readiness.md).
+The current priority is completing the safety and quality requirements for
+1.7.0. See the [release-readiness checklist](docs/release-readiness.md).
 
-Podstawowe inwentarze pacmana/foreign, Flatpaka, Snapa, AppImage,
-binarek ręcznych, npm/pipx oraz `dpkg` i `rpm` już działają.
-Przed rozszerzeniem operacji MOVE poza Arch kończymy walidację P0/P1.
-Szczegółowy stan i ograniczenia bezpieczeństwa:
-[installation-source-support](docs/installation-source-support.md).
+Providers already cover pacman/foreign, Flatpak, Snap, AppImage, manual
+binaries, npm/pipx, dpkg and RPM. MOVE verifies the native database on Arch,
+DEB and RPM systems immediately before changes.
+See [installation-source support](docs/installation-source-support.md)
+for the current contract and its limitations.
 
 ## 🧪 Testing & release status
 
 The unreleased development version on `main` is **`1.7.0-rc2`**. The most recent tagged prerelease is **[v1.7.0-rc1](https://github.com/ultherego/xdg-audit/releases/tag/v1.7.0-rc1)**.
 
-GitHub Actions runs Python 3.10–3.14 tests, GTK4/Qt6/Tk GUI startup under Xvfb, native GTK4/Qt6 Wayland startup with headless Weston, a synthetic benchmark, the isolated end-to-end quarantine/restore/purge test, real SIGKILL recovery checkpoints, a Gio desktop-launch test, GTK disk-full error handling, and source ZIP/tar.gz integrity checks. The owner confirmed the tested GUI functionality on 2026-10-26. Additional GNOME/KDE/Xfce session coverage remains separately recorded in the readiness checklist.
+GitHub Actions runs Python 3.10–3.14 tests, GTK4/Qt6/Tk GUI startup under Xvfb, native GTK4/Qt6 Wayland startup with headless Weston, a synthetic benchmark, the isolated end-to-end quarantine/restore/purge test, real SIGKILL recovery checkpoints, native Ubuntu/dpkg and Fedora/RPM lifecycle checks, a Gio desktop-launch test, GTK disk-full error handling, and source ZIP/tar.gz integrity checks. The owner confirmed the tested GUI functionality on 2026-10-26. Additional GNOME/KDE/Xfce session coverage remains separately recorded in the readiness checklist.
 
 ```bash
 python3 -m unittest discover -s tests -v
@@ -305,3 +310,16 @@ Optional per-user desktop-menu registration, updating and safe unregistration ar
 Source archives use the explicit allowlist in `scripts/archive-files.json`.
 Add intended source files there when extending the project; incidental checkout
 files and symbolic links must never enter a release archive.
+
+
+## License
+
+xdg-audit is available under the [MIT License](LICENSE), copyright 2026 Ulther Ego (ultherego).
+Optional GTK/Qt/Tk dependencies retain their own licenses and are not bundled
+with the source archives.
+
+## Repository language
+
+Repository documentation, comments and developer-facing text are written in
+English. Polish is reserved for the application localization and its tests.
+Documentation refers to interface controls by their English labels.

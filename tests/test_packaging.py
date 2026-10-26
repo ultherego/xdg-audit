@@ -24,6 +24,7 @@ class PackageTests(unittest.TestCase):
                 self.assertIn(f'xdg-audit-{version()}/xdg_audit.py', filenames)
                 self.assertTrue(all('__pycache__' not in n and '.pytest_cache' not in n for n in filenames))
                 self.assertIn(f'xdg-audit-{version()}/assets/xdg-audit-128.png', filenames)
+                self.assertIn(f'xdg-audit-{version()}/LICENSE', filenames)
             with tarfile.open(tarred, 'r:gz') as t:
                 self.assertIn(f'xdg-audit-{version()}/xdg_audit.py', t.getnames())
             lines = sums.read_text().splitlines()

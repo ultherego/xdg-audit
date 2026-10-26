@@ -17,24 +17,25 @@ class ReleaseReadinessTests(unittest.TestCase):
         release_notes = (ROOT / "RELEASE_NOTES.md").read_text(encoding="utf-8")
         self.assertIn(version, changelog)
         self.assertIn(version, release_notes)
-        self.assertIn("Niewydany", release_notes)
+        self.assertIn("Unreleased", release_notes)
 
     def test_archive_build_is_gated_by_all_safety_and_gui_jobs(self):
         workflow = (ROOT / ".github/workflows/tests.yml").read_text(encoding="utf-8")
         archives = workflow.split("\n  archives:", 1)[1].split("\n  release:", 1)[0]
         match = re.search(r"needs:\s*\[([^]]+)\]", archives)
         self.assertIsNotNone(match, "Release archive must depend on safety jobs")
-        required = {"test", "gui-smoke", "wayland-smoke", "benchmark", "quarantine-cycle"}
+        required = {"test", "gui-smoke", "wayland-smoke", "benchmark", "quarantine-cycle", "native-sources"}
         actual = {name.strip() for name in match.group(1).split(",")}
         self.assertTrue(required.issubset(actual), f"Missing release safety gates: {required-actual}")
 
-    def test_future_distro_support_is_explicitly_not_a_current_delete_backend(self):
+    def test_native_support_documents_authorization_and_unverified_history(self):
         roadmap = (ROOT / "docs/installation-source-support.md").read_text(encoding="utf-8")
         self.assertIn("dpkg", roadmap)
         self.assertIn("rpm", roadmap)
         self.assertIn("foreign ≠ AUR", roadmap)
-        self.assertIn("MOVE nadal zablokowany", roadmap)
-        self.assertIn("nie są uprawnione do MOVE", roadmap)
+        self.assertIn("ID_LIKE", roadmap)
+        self.assertIn("REVIEW", roadmap)
+        self.assertIn("UNKNOWN", roadmap)
         self.assertTrue((ROOT / "docs/release-readiness.md").is_file())
 
 

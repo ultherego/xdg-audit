@@ -1,4 +1,4 @@
-"""Read-only installed Debian and RPM inventory never authorizes MOVE."""
+"""Native Debian/RPM evidence and fresh database authorization for MOVE."""
 from __future__ import annotations
 
 import os
@@ -23,7 +23,7 @@ class DistroProviderTests(unittest.TestCase):
         with patch.object(sources, "_run", return_value=(
             sources.Probe("dpkg", "ok"), output)) as call:
             packages = sources.dpkg_packages()
-        self.assertEqual(packages.status, "ok")
+        self.assertEqual(packages.status, "partial")
         self.assertIn("firefox", packages.names)
         self.assertIn("curl", packages.names)
         self.assertIn("curl:amd64", packages.names)
@@ -90,7 +90,7 @@ class DistroScanTests(unittest.TestCase):
         for provider in ("dpkg", "rpm"):
             with self.subTest(provider=provider), \
                  patch.object(audit, "read_active_names", return_value=self.inv(provider)):
-                with self.assertRaisesRegex(ValueError, "pacman inventory"):
+                with self.assertRaisesRegex(ValueError, "native package inventory"):
                     audit.commit_quarantine([row], audit.xdg_roots(self.home), self.home,
                                             emit=lambda *_: None)
         self.assertTrue(self.folder.exists())

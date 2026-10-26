@@ -18,7 +18,7 @@ from xdg_gui_jobs import run_gui_job
 
 SCOPE_LABELS = [('Wszystko', 'all'), ('Konfiguracja', 'config'),
                 ('Dane aplikacji', 'data'), ('Stan', 'state'),
-                ('Cache', 'cache'), ('Flatpak', 'flatpak'), ('Dotfiles', 'dotfiles')]
+                ('Cache', 'cache'), ('Flatpak', 'flatpak'), ('Snap', 'snap'), ('Dotfiles', 'dotfiles')]
 STATES = ('CANDIDATE', 'REVIEW', 'UNKNOWN', 'ACTIVE', 'PROTECTED')
 
 

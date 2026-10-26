@@ -67,8 +67,9 @@ does not satisfy a real desktop-session validation.
 On a disposable Debian/RPM-family VM (or a controlled test environment where
 `pacman` cannot be resolved), prove separately:
 - a read-only scan completes and reports package-provider health accurately;
-- MOVE refuses authorization while the relevant non-Arch mutation policy
-  remains unimplemented;
+- MOVE rechecks the native dpkg/RPM database and completes only after explicit
+  confirmation (including uncertain consent for REVIEW/UNKNOWN);
+- missing, failed, partial or wrong-family inventories refuse authorization;
 - an unavailable optional provider is not confused with a provider that
   failed during execution.
 
@@ -92,7 +93,7 @@ Author self-review cannot satisfy this P0 gate.
 
 ## P1 — publication checks
 
-1. **License:** owner selects the actual license. Do not add assumed license.
+1. **License:** owner delegated the selection on 2026-10-26; MIT is recorded in LICENSE and included in source archives.
 2. **Docs:** compare README, CHANGELOG and RELEASE_NOTES against the exact
    release commit; distinguish shipped functionality from planned features.
 3. **Artifact privacy:** inspect screenshots, source archives and release
@@ -109,7 +110,7 @@ Author self-review cannot satisfy this P0 gate.
 
 - Real GNOME/KDE/Xfce sessions and independent
   second-person review require external verified evidence.
-- License choice and release publication require explicit owner decisions.
+- License selection was authorized and MIT was added. Release publication still requires the owner decision.
 - GitHub branch ruleset changes require a separate verified admin action;
   direct CI dependencies already provide the current functional gate.
 

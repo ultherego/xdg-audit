@@ -85,7 +85,7 @@ def load_real_gtk_method():
              'gtk_version':'4.0', 'GTK4':True,
              'GLib':types.SimpleNamespace(markup_escape_text=lambda s:s),
              'SCOPES':[('Wszystko','all'),('Konfiguracja','config'),('Dane','data'),
-                       ('Stan','state'),('Cache','cache'),('Flatpak','flatpak'),('Dotfiles','dotfiles')],
+                       ('Stan','state'),('Cache','cache'),('Flatpak','flatpak'),('Snap','snap'),('Dotfiles','dotfiles')],
              'entries_count': lambda n,lang: f'{n} entries',
              'selected_count': lambda n,lang: f'{n} selected',
              'tr':lambda value: translate(value, globs['_language'])}
