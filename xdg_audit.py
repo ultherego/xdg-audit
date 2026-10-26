@@ -1172,6 +1172,23 @@ def restore_quarantine_run(home: Path, roots: dict[str, Path], run_id: str, emit
             emit(f"ERROR restoring {src}: {exc}")
     return {"restored": count, "skipped": skipped, "run_id": run_id}
 
+def inspect_quarantine_run(home: Path, roots: dict[str, Path], run_id: str) -> dict:
+    from xdg_quarantine_lifecycle import inspect_run
+    return inspect_run(home, roots, run_id, nested_mounts_status, allow_unsealed=True)
+
+
+def purge_quarantine_run(home: Path, roots: dict[str, Path], run_id: str,
+                         dry_run: bool = True, emit=print) -> dict:
+    from xdg_quarantine_lifecycle import purge_run
+    return purge_run(home, roots, run_id, nested_mounts_status, dry_run=dry_run, emit=emit)
+
+
+def expired_quarantine_runs(home: Path, roots: dict[str, Path]) -> list[str]:
+    from xdg_quarantine_lifecycle import expired_run_ids
+    from xdg_retention import load
+    return expired_run_ids(quarantine_runs(home, roots), load(home, roots)["days"])
+
+
 def list_quarantine(home: Path, roots: dict[str, Path]):
     base = quarantine_dir(home, roots)
     if not base.is_dir():
