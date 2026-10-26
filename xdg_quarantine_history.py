@@ -138,6 +138,28 @@ def history_candidates(home: Path, roots: dict[str, Path],
     return result
 
 
+def completed_history_candidates(home: Path, roots: dict[str, Path]) -> list[str]:
+    """Find ALL verified terminal journals, regardless of age.
+
+    This is *manual-cleanup only*: automated cleanup must continue to use
+    history_candidates() with its 30-day post-PURGE restriction.
+    Corrupt, incomplete or non-empty runs are never returned.
+    """
+    base = roots.get("data", home / ".local/share") / "xdg-audit-quarantine"
+    if not base.is_dir() or base.is_symlink():
+        return []
+    eligible = []
+    for path in sorted(base.iterdir(), key=lambda entry: entry.name):
+        if not RUN_ID.fullmatch(path.name) or path.is_symlink():
+            continue
+        try:
+            history_info(home, roots, path.name)
+        except (ValueError, OSError, UnicodeError):
+            continue
+        eligible.append(path.name)
+    return eligible
+
+
 def cleanup_history(home: Path, roots: dict[str, Path], run_id: str, *,
                     dry_run: bool = True) -> dict:
     """Remove only the complete journal and empty run directories.
