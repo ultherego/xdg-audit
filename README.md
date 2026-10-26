@@ -200,6 +200,9 @@ python3 xdg_audit.py --cleanup-history RUN_ID --dry-run
 python3 xdg_audit.py --cleanup-expired-history # 30 days after PURGE
 python3 xdg_audit.py --cleanup-all-history    # Preview all completed history
 python3 xdg_audit.py --cleanup-all-history --execute # Explicit HISTORY confirmation
+python3 xdg_audit.py --polkit-test-status      # Read-only helper/status check
+python3 xdg_audit.py --polkit-test-create      # TEST + Polkit authorization
+python3 xdg_audit.py --polkit-test-delete      # DELETE TEST + Polkit authorization
 ```
 
 Available scopes: `all`, `config`, `data`, `state`, `cache`, `flatpak`, `dotfiles`.
@@ -208,6 +211,13 @@ Completed PURGE operations remain visible in the GUI as **PURGED** until
 their manifest is cleaned up; that history may be automatically removed 30
 days after full PURGE, but only with explicit opt-in to automatic retention.
 Incomplete or corrupted journals are never auto-removed.
+
+For an optional **real Polkit authorization test**, see the
+[system helper installation and isolated test guide](packaging/polkit/README.md).
+GTK, Qt and Tk expose **Test Polkit…** in Quarantine. The helper is a
+root-installed, fixed-purpose executable: it can create/delete only a
+dedicated test directory under /var/lib/xdg-audit, never actual quarantined
+data. It does not grant elevated PURGE capabilities.
 
 See [Quarantine lifecycle](docs/quarantine-lifecycle.md) for recovery,
 history-only cleanup, manual/automatic retention, user-scoped systemd
