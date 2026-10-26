@@ -107,8 +107,17 @@ def dpkg_packages() -> Probe:
         base_name = name.split(":", 1)[0]  # Multi-Arch qualified identifiers
         if not _PACKAGE.fullmatch(base_name):
             return Probe("dpkg", "parse_error", note="invalid dpkg package name")
-        state = fields[1].strip().casefold()
-        if state.endswith(" ok installed") and state.split()[0] in ("install", "hold"):
+        state = fields[1].strip().casefold().split()
+        # dpkg Status is a three-part tuple: Want / Err? / Status.
+        # Malformed rows must not turn a partial inventory into "ok".
+        if (len(state) != 3
+                or state[0] not in ("unknown", "install", "hold", "deinstall", "purge")
+                or state[1] not in ("ok", "reinstreq")
+                or state[2] not in ("not-installed", "config-files", "half-installed",
+                                    "unpacked", "half-configured", "triggers-awaited",
+                                    "triggers-pending", "installed")):
+            return Probe("dpkg", "parse_error", note="invalid dpkg package status")
+        if state[0] in ("install", "hold") and state[1:] == ["ok", "installed"]:
             names.add(base_name)
             names.add(name)
     return Probe("dpkg", "ok", frozenset(names))
