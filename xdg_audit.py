@@ -308,43 +308,50 @@ def read_desktop_names(home: Path, data: Path) -> set[str]:
 
 
 def read_active_names(home: Path, roots: dict[str, Path]):
-    packages = {p.strip().lower() for p in command(["pacman", "-Qq"], 30).splitlines() if p.strip()}
-    flatpaks = set()
-    for line in command(["flatpak", "list", "--app", "--columns=application,name"], 20).splitlines():
-        fields = line.split("\t")
-        if fields:
-            flatpaks.add(fields[0].lower().strip())
-        if len(fields) > 1:
-            flatpaks.add(fields[1].lower().strip())
-    snaps = set()
-    for line in command(["snap", "list"], 12).splitlines()[1:]:
-        if line.split():
-            snaps.add(line.split()[0].lower())
-    appimages = set()
-    for base in (home / "Applications", home / ".local/bin", home / "bin"):
-        if not base.is_dir():
-            continue
-        try:
-            for entry in base.iterdir():
-                if entry.name.lower().endswith(".appimage"):
-                    appimages.add(entry.name[:-9].lower())
-        except OSError:
-            pass
-    # Live processes provide another protective signal for apps installed manually.
-    processes = set()
-    for proc in command(["ps", "-eo", "comm="], 12).splitlines():
-        if proc.strip():
-            processes.add(proc.strip().casefold())
-    # Safe protective aliases for user services, even disabled ones.
+    """Backward-compatible inventory carrying provider health and provenance.
+
+    A failed query is NOT treated as an empty installed-app list; no provider
+    output is executed. pacman -Qmq is informational (foreign is not AUR).
+    """
+    from xdg_sources import (ActiveInventory, pacman_packages, pacman_foreign,
+                             flatpak_apps, snap_apps, user_appimages,
+                             manual_binaries)
+
+    installed = pacman_packages()
+    foreign = pacman_foreign() if installed.status == "ok" else None
+    flatpak = flatpak_apps()
+    snap = snap_apps()
+    appimage = user_appimages(home)
+    manual = manual_binaries(home)
+    probes = {"pacman": installed, "flatpak": flatpak, "snap": snap,
+              "appimage": appimage, "manual_binary": manual}
+    if foreign is not None:
+        probes["pacman_foreign"] = foreign
+
+    packages = set(installed.names)
+    flatpaks = set(flatpak.names)
+    snaps = set(snap.names)
+    appimages = set(appimage.names)
+    # Runtime process and user service checks remain protective, not ownership
+    # evidence, and should not authorize deletion if the package DB is absent.
+    processes = {line.strip().casefold() for line in command(
+        ["ps", "-eo", "comm="], 12).splitlines() if line.strip()}
     units = set()
-    for line in command(["systemctl", "--user", "list-unit-files", "--no-legend", "--plain"], 15).splitlines():
+    for line in command(["systemctl", "--user", "list-unit-files",
+                         "--no-legend", "--plain"], 15).splitlines():
         if line.split():
             units.add(line.split()[0].lower().split(".")[0])
     desktops = read_desktop_names(home, roots.get("data", home / ".local/share"))
-    binary_candidates = {normalize(v) for v in packages | flatpaks | snaps | appimages | units | processes}
+    binary_candidates = {normalize(v) for v in (
+        packages | flatpaks | snaps | appimages | units | processes)}
     binary_candidates |= {normalize(stem_package(x)) for x in packages}
-    return packages, flatpaks, snaps, appimages, units, processes, desktops, binary_candidates
-
+    return ActiveInventory(
+        (packages, flatpaks, snaps, appimages, units, processes, desktops,
+         binary_candidates),
+        status={name: p.status for name, p in probes.items()},
+        foreign=foreign.names if foreign and foreign.status == "ok" else (),
+        manual=manual.names,
+        provenance={name: p.note for name, p in probes.items() if p.note})
 
 def references(home: Path, roots: dict[str, Path], names: set[str]) -> dict[str, set[str]]:
     """Search small session configs in one pass per file, not once per item.
@@ -465,6 +472,8 @@ class Item:
                 ('installed flatpak:', 'flatpak', 'strong'),
                 ('installed snap:', 'snap', 'strong'),
                 ('appimage found:', 'appimage', 'medium'),
+                ('manual executable found', 'manual_binary', 'weak'),
+                ('installed-app inventory failed:', 'source_health', 'weak'),
                 ('executable on path:', 'executable', 'medium'),
                 ('running executable:', 'process', 'medium'),
                 ('user systemd unit:', 'systemd_user', 'medium'),
@@ -516,8 +525,14 @@ def scan(home: Path, scopes: list[str], keeps: set[str], extra_aliases: dict[str
     previous = ['Pakiety i aplikacje']
     stage('Pakiety i aplikacje')
     roots = xdg_roots(home)
-    packages, flatpaks, snaps, appimages, units, processes, desktops, active = read_active_names(home, roots)
-    pacman_available = bool(packages)
+    inventory = read_active_names(home, roots)
+    packages, flatpaks, snaps, appimages, units, processes, desktops, active = inventory
+    health = getattr(inventory, "status", None)
+    pacman_available = bool(packages) and (health is None or health.get("pacman") == "ok")
+    provider_failures = set() if health is None else {
+        name for name, state in health.items()
+        if name != "pacman_foreign" and state not in ("ok", "absent")
+    }
     removals = parse_removals(home)
     removed_normal = {normalize(p): p for p in removals if p not in packages}
     removed_normal.update({normalize(stem_package(p)): p for p in removals if p not in packages})
@@ -575,6 +590,8 @@ def scan(home: Path, scopes: list[str], keeps: set[str], extra_aliases: dict[str
                 installed_flatpak = nonpacman_matches(path.name, flatpaks, alias_map)
                 installed_snap = nonpacman_matches(path.name, snaps, alias_map)
                 installed_appimage = nonpacman_matches(path.name, appimages, alias_map)
+                manual_matches = nonpacman_matches(
+                    path.name, getattr(inventory, "manual", ()), alias_map)
                 found_units = nonpacman_matches(path.name, units, alias_map)
                 found_processes = nonpacman_matches(path.name, processes, alias_map)
                 found_desktops = nonpacman_matches(path.name, desktops, alias_map)
@@ -583,11 +600,15 @@ def scan(home: Path, scopes: list[str], keeps: set[str], extra_aliases: dict[str
                               if re.fullmatch(r"[A-Za-z][A-Za-z0-9_.-]{2,}", x) and shutil.which(x)]
                 if scope == "flatpak" and path.name.casefold() in flatpaks:
                     installed_flatpak.append(path.name)
-                if installed or installed_flatpak or installed_snap or installed_appimage or found_units or found_processes or found_exec:
+                if (installed or installed_flatpak or installed_snap or installed_appimage
+                        or found_units or found_processes or found_exec):
                     it.state = "ACTIVE"
                     reasons = []
                     if installed:
-                        reasons += [f"installed pacman package: {pkg} (match: {pat})" for pkg, pat in installed[:5]]
+                        foreign = getattr(inventory, "foreign", ())
+                        reasons += [f"installed pacman package: {pkg} (match: {pat})" +
+                                    (" [foreign: AUR or local]" if pkg in foreign else "")
+                                    for pkg, pat in installed[:5]]
                     if installed_flatpak:
                         reasons.append("installed Flatpak: " + ",".join(installed_flatpak[:3]))
                     if installed_snap:
@@ -608,20 +629,27 @@ def scan(home: Path, scopes: list[str], keeps: set[str], extra_aliases: dict[str
                     if scope == "flatpak":
                         it.state = "REVIEW"
                         it.reasons.append("Flatpak app-id is not currently installed; check manually")
-                    elif helpers or found_desktops:
+                    elif helpers or found_desktops or manual_matches:
                         it.state = "REVIEW"
                         if helpers:
                             it.reasons.append("auxiliary installed package, not proof of app: "
                                               + ",".join(f"{pkg} ({pat})" for pkg, pat in helpers[:4]))
                         if found_desktops:
                             it.reasons.append("desktop entry exists; may be stale: " + ",".join(found_desktops[:3]))
+                        if manual_matches:
+                            it.reasons.append("manual executable found (protective hint only): " +
+                                              ",".join(manual_matches[:3]))
                         if removed:
                             it.reasons.append("historical removed package: " + ",".join(sorted(set(removed))[:4]))
                     elif removed:
-                        it.state = "CANDIDATE" if pacman_available else "REVIEW"
+                        it.state = ("CANDIDATE" if pacman_available and not provider_failures
+                                    else "REVIEW")
                         it.reasons.append("removed in pacman.log: " + ",".join(sorted(set(removed))[:4]))
                         if not pacman_available:
                             it.reasons.append("pacman package inventory unavailable; cannot confirm removal")
+                        if provider_failures:
+                            it.reasons.append("installed-app inventory failed: " +
+                                              ",".join(sorted(provider_failures)))
                     else:
                         it.state = "UNKNOWN"
                         it.reasons.append("no verified installed application or owner (NOT proof of orphan)")
@@ -665,7 +693,9 @@ def scan(home: Path, scopes: list[str], keeps: set[str], extra_aliases: dict[str
     times[previous[0]] = round((time.perf_counter() - clock) * 1000)
     return items, roots, {"pacman_packages": len(packages), "flatpak_entries": len(flatpaks),
                           "removed_package_names": len(removals), "desktop_names": len(desktops),
-                          "phase_times_ms": times}
+                          "phase_times_ms": times,
+                          "installed_sources": dict(health or {"pacman": "legacy"}),
+                          "pacman_foreign_count": len(getattr(inventory, "foreign", ()))} 
 
 
 def human(size: int) -> str:
@@ -965,9 +995,19 @@ def commit_quarantine(chosen: list[Item], roots: dict[str, Path], home: Path,
     # Revalidate installation evidence immediately before any filesystem move:
     # the application might have been installed after the scan completed.
     # A missing pacman inventory is ambiguous: fail closed for removal.
-    current_packages, current_flatpaks, current_snaps, current_appimages, current_units, current_processes, _desktops, _active = read_active_names(home, roots)
-    if not current_packages:
+    current_inventory = read_active_names(home, roots)
+    (current_packages, current_flatpaks, current_snaps, current_appimages,
+     current_units, current_processes, _desktops, _active) = current_inventory
+    current_health = getattr(current_inventory, "status", None)
+    if not current_packages or (current_health is not None and
+                                current_health.get("pacman") != "ok"):
         raise ValueError("Cannot verify current pacman inventory before quarantine; no changes")
+    if current_health:
+        failures = sorted(name for name, state in current_health.items()
+                          if name != "pacman_foreign" and state not in ("ok", "absent"))
+        if failures:
+            raise ValueError("Installed-app evidence providers failed: " +
+                             ",".join(failures) + "; refusing quarantine")
     # Preferences can change after the original scan; do not trust stale GUI
     # eligibility, even when the user has explicitly selected the entry.
     from xdg_prefs import load as load_preferences
@@ -981,7 +1021,8 @@ def commit_quarantine(chosen: list[Item], roots: dict[str, Path], home: Path,
             raise ValueError(f'Entry is explicitly protected in current settings: {it.path}')
         installed, _helpers = match_installed_packages(it.path.name, current_packages, alias_map)
         live_other = any(nonpacman_matches(it.path.name, source, alias_map) for source in (
-            current_flatpaks, current_snaps, current_appimages, current_units, current_processes))
+            current_flatpaks, current_snaps, current_appimages, current_units,
+            current_processes, getattr(current_inventory, "manual", ())))
         if installed or live_other:
             raise ValueError(f"Application is present now; refusing quarantine: {it.path} ({installed[:3]})")
     root = quarantine_dir(home, roots)
@@ -1289,6 +1330,8 @@ def main(argv=None):
     parser.add_argument("--home", type=Path, default=Path.home(), help="Override HOME (useful for testing)")
     parser.add_argument("--gui", action="store_true", help="Launch native GUI using available system toolkit (GTK/Qt/Tk)")
     parser.add_argument("--theme-info", action="store_true", help="Print detected desktop theme source (read-only)")
+    parser.add_argument("--installed-sources", action="store_true",
+                        help="Show read-only installed-application provider health and package counts")
     parser.add_argument("--polkit-test-status", action="store_true",
                         help="Check installed system Polkit helper (read-only)")
     parser.add_argument("--polkit-test-create", action="store_true",
@@ -1346,6 +1389,9 @@ def main(argv=None):
         parser.error("HOME must be an existing directory")
     if args.gui and args.theme_info:
         parser.error("--gui and --theme-info are mutually exclusive")
+    if args.installed_sources and (args.gui or args.remove or args.json or args.compare or
+                                  args.select or args.repair_target):
+        parser.error("--installed-sources is a standalone read-only command")
     if args.gui and (args.json or args.compare or args.select or args.list_quarantine or args.restore):
         parser.error("--gui cannot be combined with --json/--compare/--select/--list-quarantine/--restore")
     if args.remove and args.json:
@@ -1377,6 +1423,23 @@ def main(argv=None):
     if lifecycle and (args.gui or args.remove or args.json or args.compare or args.select):
         parser.error("Lifecycle commands cannot be combined with GUI, scan or move")
     roots = xdg_roots(home)
+    if args.installed_sources:
+        if any(bool(x) for x in operations) or args.theme_info:
+            parser.error("--installed-sources cannot be combined with lifecycle operations")
+        inventory = read_active_names(home, roots)
+        packages, flatpaks, snaps, appimages, _units, _processes, _desktops, _active = inventory
+        print(json.dumps({
+            "health": dict(getattr(inventory, "status", {})),
+            "counts": {"pacman": len(packages),
+                       "foreign_pacman_AUR_or_local": len(getattr(inventory, "foreign", ())),
+                       "flatpak_evidence": len(flatpaks),
+                       "snap": len(snaps),
+                       "appimage": len(appimages),
+                       "manual_binary_hints": len(getattr(inventory, "manual", ()))},
+            "notes": dict(getattr(inventory, "provenance", {})),
+            "warning": "Provider health and installed hints are not proof that files can be deleted"
+        }, ensure_ascii=False, indent=2))
+        return 0
     if lifecycle:
         if (args.polkit_test_status or args.polkit_test_create or args.polkit_test_delete
                 or args.polkit_test_auth or args.polkit_test_repair):

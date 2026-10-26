@@ -1,4 +1,10 @@
-# Wykrywanie źródeł instalacji — plan po stabilizacji v1.7.0
+# Wykrywanie źródeł instalacji — stan i plan po v1.7.0
+
+> Etap 1 wdrożony w PR #20: `xdg_sources.py` odczytuje zdrowie
+> źródeł danych, pacman foreign, Flatpak, Snap, AppImage oraz ochronne
+> sygnały ręcznych binarek (włącznie z katalogami `/opt`).
+> Komenda `python3 xdg_audit.py --installed-sources` przedstawia
+> stan każdego dostawcy. Adaptery dpkg/rpm pozostają w planie.
 
 Ten dokument dotyczy **rozpoznawania zainstalowanych aplikacji i osieroconych danych XDG**.
 Nie dotyczy tworzenia paczek instalacyjnych xdg-audit. Rozszerzanie źródeł
@@ -9,11 +15,11 @@ jako dowodu odinstalowania aplikacji.
 
 | Źródło | Obecne wykrywanie | Ważne ograniczenie |
 | --- | --- | --- |
-| Repozytoria Arch + AUR + lokalne pakiety pacmana | `pacman -Qq` obejmuje pakiety **zainstalowane** przez pacmana, w tym z AUR | Nie rozróżnia pochodzenia. Pakiet „foreign” nie musi pochodzić z AUR |
-| Flatpak | `flatpak list --app --columns=application,name` | Ograniczona obsługa wariantów nazw, identyfikatorów i instalacji |
-| Snap | `snap list` | Podstawowa ochrona aktywnych Snapów; brak niezależnego modelu stanu źródła |
-| AppImage | Szukanie plików *.AppImage w `~/Applications`, `~/.local/bin`, `~/bin` | Nie rozpoznaje wszystkich ręcznych lokalizacji lub launcherów |
-| Instalacje ręczne / binarne | `ps`, `systemctl --user` i pliki `.desktop` stanowią przesłanki ochronne | Brak wiarygodnej bazy pakietów i własności plików |
+| Repozytoria Arch + AUR + lokalne pakiety pacmana | `pacman -Qq` + `pacman -Qmq` (foreign) | Foreign jest oznaczony jako AUR **lub** lokalny; nie zgadujemy pochodzenia |
+| Flatpak | `flatpak list --app --columns=application,name,installation` | Lista aplikacji, także user/system; nadal brakuje pełnego modelu metadanych |
+| Snap | `snap list` z walidacją i raportowaniem błędów | Podstawowa ochrona aktywnych Snapów; ograniczone metadane |
+| AppImage | Płytki skan *.AppImage w wybranych katalogach użytkownika bez uruchamiania | Warianty nazw i launchery nie są jeszcze wiarygodnie mapowane na XDG |
+| Instalacje ręczne / binarne | `ps`, `systemctl --user`, `.desktop`, `~/.local/bin`, `~/bin`, `~/Applications`, `/usr/local/bin`, `/opt`, `~/.local/opt` | Tylko sygnały ochronne; bez wiarygodnej własności plików |
 | Debian/Ubuntu (DEB/APT) | Brak dostawcy pakietów | MOVE pozostaje zablokowany bez pacmana |
 | Fedora/RHEL/openSUSE i podobne (RPM) | Brak dostawcy pakietów | MOVE pozostaje zablokowany bez pacmana |
 
@@ -26,7 +32,7 @@ propozycją do ręcznej analizy, nie pozwoleniem na automatyczne usunięcie.
 
 ### Etap 1 — ujednolicony kontrakt inwentarza
 
-Wydzielić adaptery od `read_active_names()` i oddzielić:
+Wydzielić adaptery od `read_active_names()` i oddzielić (początek już działa):
 - `id`, `display_name`, `provider` (`pacman`, `flatpak`, `snap`,
   `appimage`, `manual_binary`, później `dpkg`, `rpm`);
 - `provenance`: skąd wzięto informację, np. `pacman:localdb`,
@@ -41,7 +47,7 @@ pusta, poprawnie odczytana baza nie jest tym samym co błąd wykonania.
 Ponadto każda akcja MOVE musi ponownie odczytać dostawców po ostatnim
 skanowaniu oraz odrzucić zmianę, jeśli wymagane źródło jest niesprawne.
 
-### Etap 2 — Arch/CachyOS: oficjalne i AUR
+### Etap 2 — Arch/CachyOS: oficjalne i AUR (wykonane w podstawowym zakresie)
 
 `pacman -Qq` pozostaje podstawowym, autorytatywnym inwentarzem.
 Można dodatkowo korzystać z `pacman -Qm` (pakiety **foreign**), lecz
@@ -49,7 +55,7 @@ Można dodatkowo korzystać z `pacman -Qm` (pakiety **foreign**), lecz
 pakietów, które wypadły z aktualnych repozytoriów. `yay` i `paru`
 nie mogą być obowiązkowe. Etykieta w UI: „pacman (foreign / AUR lub lokalny)”.
 
-### Etap 3 — Flatpak, Snap, AppImage i ręczne binarki
+### Etap 3 — Flatpak, Snap, AppImage i ręczne binarki (w toku)
 
 - Flatpak: zainstalowane identyfikatory aplikacji, widok instalacji
   użytkownika i systemowej (również dodatkowe instalacje, gdy występują).
