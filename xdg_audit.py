@@ -1208,6 +1208,11 @@ def cleanup_quarantine_history(home: Path, roots: dict[str, Path], run_id: str,
     return cleanup_history(home, roots, run_id, dry_run=dry_run)
 
 
+def completed_quarantine_history(home: Path, roots: dict[str, Path]) -> list[str]:
+    from xdg_quarantine_history import completed_history_candidates
+    return completed_history_candidates(home, roots)
+
+
 def expired_quarantine_history(home: Path, roots: dict[str, Path]) -> list[str]:
     from xdg_quarantine_history import history_candidates
     return history_candidates(home, roots,
@@ -1279,6 +1284,8 @@ def main(argv=None):
     parser.add_argument("--purge", metavar="RUN_ID", help="Permanently delete quarantined objects")
     parser.add_argument("--purge-expired", action="store_true", help="Preview expired quarantine runs")
     parser.add_argument("--cleanup-history", metavar="RUN_ID", help="Remove a completed run journal (interactive)")
+    parser.add_argument("--cleanup-all-history", action="store_true",
+                        help="Preview ALL completed history journals, regardless of age")
     parser.add_argument("--cleanup-expired-history", action="store_true",
                         help="Preview fully purged journals older than 30 days")
     parser.add_argument("--retention-days", type=int, default=None, metavar="DAYS")
@@ -1311,6 +1318,7 @@ def main(argv=None):
         parser.error("--allow-uncertain requires --remove")
     operations = (args.restore, args.list_quarantine, args.quarantine_info, args.purge,
                   args.purge_expired, args.cleanup_history, args.cleanup_expired_history,
+                  args.cleanup_all_history,
                   args.adopt_quarantine, args.recover_journal, args.automatic_purge,
                   args.configure_retention is not None, args.enable_retention,
                   args.disable_retention)
@@ -1318,8 +1326,8 @@ def main(argv=None):
         parser.error("Select a single quarantine operation")
     if args.retention_days is not None and not 1 <= args.retention_days <= 3650:
         parser.error("--retention-days must be between 1 and 3650")
-    if args.execute and not (args.purge_expired or args.cleanup_expired_history):
-        parser.error("--execute requires --purge-expired or --cleanup-expired-history")
+    if args.execute and not (args.purge_expired or args.cleanup_expired_history or args.cleanup_all_history):
+        parser.error("--execute requires --purge-expired or a history cleanup flag")
     lifecycle = any(bool(x) for x in operations[2:])
     if lifecycle and (args.gui or args.remove or args.json or args.compare or args.select):
         parser.error("Lifecycle commands cannot be combined with GUI, scan or move")
@@ -1343,11 +1351,16 @@ def main(argv=None):
             save_retention(home, roots, policy)
             print(json.dumps(policy))
             return 0
-        if args.cleanup_history or args.cleanup_expired_history:
-            from xdg_quarantine_history import cleanup_history, history_candidates
-            ids = ([args.cleanup_history] if args.cleanup_history else
-                   history_candidates(home, roots,
-                                      [x["run_id"] for x in quarantine_runs(home, roots)]))
+        if args.cleanup_history or args.cleanup_expired_history or args.cleanup_all_history:
+            from xdg_quarantine_history import (cleanup_history, history_candidates,
+                                                completed_history_candidates)
+            if args.cleanup_history:
+                ids = [args.cleanup_history]
+            elif args.cleanup_all_history:
+                ids = completed_history_candidates(home, roots)
+            else:
+                ids = history_candidates(home, roots,
+                                        [x["run_id"] for x in quarantine_runs(home, roots)])
             previews = []
             for run_id in ids:
                 try:
@@ -1360,7 +1373,8 @@ def main(argv=None):
             if not previews:
                 print("No completed history eligible for cleanup.")
                 return 0
-            if args.dry_run or (args.cleanup_expired_history and not args.execute):
+            if args.dry_run or ((args.cleanup_expired_history or args.cleanup_all_history)
+                                and not args.execute):
                 return 0
             if not sys.stdin.isatty() or input("Type HISTORY to erase these journal records: ").strip() != "HISTORY":
                 raise SystemExit("ERROR: history cleanup cancelled")
