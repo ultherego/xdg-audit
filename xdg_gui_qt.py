@@ -639,7 +639,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
                     return
                 issue=issues[0]
                 message=(tf('Użytkownik: {user}',user=report['identity']['user'])+
-                         '\n'+tf('Polkit dostępny: {state}',
+                         '\n'+tf('pkexec zainstalowany: {state}',
                                    state=tr('tak') if report['identity']['pkexec_installed'] else tr('nie'))+
                          '\n'+tf('Problem: {code}',code=issue['code'])+
                          '\n'+issue['path']+
