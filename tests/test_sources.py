@@ -32,12 +32,12 @@ class SourceProviderTests(unittest.TestCase):
 
     def test_dpkg_rejects_malformed_status_without_partial_results(self):
         for output in (
-            "safe-package\\tinstall ok installed\\n"
-            "broken-package\\tgarbled\\n",
-            "safe-package\\tinstall ok installed\\n"
-            "broken-package\\tinstall invalid installed\\n",
-            "safe-package\\tinstall ok installed\\n"
-            "broken-package\\tinstall ok installed extra\\n",
+            "safe-package\tinstall ok installed\n"
+            "broken-package\tgarbled\n",
+            "safe-package\tinstall ok installed\n"
+            "broken-package\tinstall invalid installed\n",
+            "safe-package\tinstall ok installed\n"
+            "broken-package\tinstall ok installed extra\n",
         ):
             with self.subTest(output=output), patch.object(sources, "_run", return_value=(
                 sources.Probe("dpkg", "ok"), output)):
@@ -46,9 +46,9 @@ class SourceProviderTests(unittest.TestCase):
             self.assertFalse(probe.names)
 
     def test_dpkg_installed_and_residual_config_are_distinct(self):
-        output = ("active:amd64\\tinstall ok installed\\n"
-                  "retired\\tdeinstall ok config-files\\n"
-                  "waiting\\tinstall ok unpacked\\n")
+        output = ("active:amd64\tinstall ok installed\n"
+                  "retired\tdeinstall ok config-files\n"
+                  "waiting\tinstall ok unpacked\n")
         with patch.object(sources, "_run", return_value=(
             sources.Probe("dpkg", "ok"), output)):
             probe = sources.dpkg_packages()
