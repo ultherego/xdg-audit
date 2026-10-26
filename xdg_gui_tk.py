@@ -844,12 +844,15 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                     return
                 issue=issues[0]
                 msg=(tf('Użytkownik: {user}',user=report['identity']['user'])+
+                     '\n'+tf('Polkit dostępny: {state}',
+                               state=tr('tak') if report['identity']['pkexec_installed'] else tr('nie'))+
                      '\n'+tf('Problem: {code}',code=issue['code'])+
                      '\n'+issue['path']+'\n'+
                      tf('Uprawnienia: {mode}',mode=issue['mode']))
                 if not issue['repairable']:
                     messagebox.showwarning(tr('Diagnostyka dostępu'),msg+'\n'+
-                        tr('Nie można automatycznie naprawić. Nie podnoszę uprawnień ani nie omijam kontroli PURGE.'),
+                        tr('Nie można automatycznie naprawić. Nie podnoszę uprawnień ani nie omijam kontroli PURGE.')+
+                        '\n'+tr('Naprawa tego obiektu wymaga dodatkowej analizy. Zasady Polkit określa system; xdg-audit nie uruchamia kodu użytkownika jako root.'),
                         parent=root)
                     return
                 msg+='\n'+tf('Proponowana zmiana: {before} → {after}',
