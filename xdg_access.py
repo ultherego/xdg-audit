@@ -151,7 +151,8 @@ def diagnose_access(home: Path, roots: dict[str, Path], run_id: str) -> dict:
             try:
                 fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=parentfd)
             except PermissionError:
-                problem("FILE_UNREADABLE", path, info)
+                problem("FILE_UNREADABLE", path, info,
+                        repairable=(stat.S_IMODE(info.st_mode) & stat.S_IRUSR == 0))
             else:
                 try:
                     if _identity(os.fstat(fd)) != _identity(info):
@@ -196,7 +197,7 @@ def repair_owner_directory(home: Path, roots: dict[str, Path], run_id: str,
     report = diagnose_access(home, roots, run_id)
     match = next((item for item in report["issues"]
                   if item["relative"] == relative and item["repairable"]
-                  and item["code"] == "DIRECTORY_UNREADABLE"), None)
+                  and item["code"] in ("DIRECTORY_UNREADABLE", "FILE_UNREADABLE")), None)
     if match is None:
         raise ValueError("Target is no longer eligible for owner-only repair")
     base = roots.get("data", home / ".local/share") / "xdg-audit-quarantine"
@@ -204,8 +205,11 @@ def repair_owner_directory(home: Path, roots: dict[str, Path], run_id: str,
     parentfd = _open_path(target.parent)
     try:
         before = os.stat(target.name, dir_fd=parentfd, follow_symlinks=False)
-        if not stat.S_ISDIR(before.st_mode) or before.st_uid != os.getuid():
-            raise ValueError("Target is not a directory owned by this user")
+        expected_kind = (stat.S_IFDIR if match["code"] == "DIRECTORY_UNREADABLE"
+                         else stat.S_IFREG)
+        if (stat.S_IFMT(before.st_mode) != expected_kind or before.st_uid != os.getuid()
+                or (expected_kind == stat.S_IFREG and before.st_nlink != 1)):
+            raise ValueError("Target is not a safely repairable user-owned object")
         if (stat.S_IMODE(before.st_mode) != int(match["mode"], 8) or
             stat.S_IMODE(before.st_mode) & stat.S_IRUSR):
             raise ValueError("Target permissions changed after diagnosis")
