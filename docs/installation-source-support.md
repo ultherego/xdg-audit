@@ -73,6 +73,23 @@ nie mogą być obowiązkowe. Etykieta w UI: „pacman (foreign / AUR lub lokalny
   Nie przeszukiwać rekurencyjnie całego systemu ani nie wykonywać binarek.
   Bez potwierdzonego właściciela obiekt pozostaje co najmniej `REVIEW`.
 
+### Etap 3b — npm global i pipx (ochronne odczyty statyczne)
+
+Narzędzie sprawdza bez uruchamiania kodu zainstalowanych aplikacji
+wybrane katalogi pakietów npm global (w tym `~/.npm-global`, `~/.local/lib`,
+lokalne wersje nvm) i środowisk pipx (`~/.local/share/pipx/venvs`,
+`~/.local/pipx/venvs`). Symlinki i nieczytelne źródła nie są
+podążane; błąd istniejącego źródła blokuje MOVE.
+
+Odnalezione nazwy są wyłącznie **przesłankami ochronnymi**. Nie wolno
+traktować braku wyniku jako dowodu odinstalowania: niestandardowe prefixy
+npm, Volta/mise, Node Corepack i alternatywne lokalizacje pipx nie mają
+jeszcze pełnego pokrycia. Obsługa skanowania nie wykonuje `npm` ani `pipx`.
+
+Flatpak dostarcza zarówno nazwy wyświetlane, jak i kanoniczne
+`application ID`. Katalog `~/.var/app/<ID>` wolno oznaczyć ACTIVE
+wyłącznie na podstawie tego kanonicznego ID, nie nazwy wyświetlanej.
+
 ### Etap 4 — Debian/Ubuntu i rodzina RPM (wykrywanie ACTIVE wykonane; MOVE w planie)
 
 - Debian/Ubuntu: status rzeczywiście zainstalowanych pakietów
