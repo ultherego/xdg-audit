@@ -250,6 +250,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
             ttk.Button(qbuttons,text=tr('Przywróć operację…'),command=self.restore).pack(side='right')
             ttk.Button(qbuttons,text=tr('Usuń trwale…'),command=self.purge_quarantine).pack(side='right',padx=6)
             ttk.Button(qbuttons,text=tr('Usuń wygasłe…'),command=self.purge_expired).pack(side='right',padx=6)
+            ttk.Button(qbuttons,text=tr('Ustaw retencję…'),command=self.configure_retention).pack(side='right',padx=6)
             idx=next((i for i,(_,scope) in enumerate(SCOPE_LABELS) if scope==args.scope),0)
             self.tabs.select(idx)
             self.tabs.bind('<<NotebookTabChanged>>',self._on_tab_changed)
@@ -683,6 +684,21 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                 messagebox.showinfo(tr('Przywracanie'),tf('Przywrócono: {count}',count=result['restored'])+'\n'+tf('Pominięto: {count}',count=result['skipped']),parent=root)
             except (ValueError,OSError,KeyError) as exc:messagebox.showerror(tr('Błąd'),str(exc),parent=root)
             self.start_scan()
+
+        def configure_retention(self):
+            from xdg_retention import load, save
+            try:
+                current=load(home,engine.xdg_roots(home))
+                days=simpledialog.askinteger(tr('Retencja'),tr('Dni przechowywania:'),
+                                             initialvalue=current['days'],minvalue=1,
+                                             maxvalue=3650,parent=root)
+                if days is not None:
+                    current['days']=days
+                    save(home,engine.xdg_roots(home),current)
+                    self.status.set(tf('Ustawiono retencję: {days} dni',days=days))
+            except (ValueError,OSError) as exc:
+                messagebox.showerror(tr('Retencja'),
+                    tf('Nie można zapisać retencji: {error}',error=exc),parent=root)
 
         def purge_expired(self):
             try:
