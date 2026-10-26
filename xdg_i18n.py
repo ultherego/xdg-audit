@@ -7,6 +7,7 @@ from __future__ import annotations
 
 LANGUAGES = {'pl': 'Polski', 'en': 'English'}
 EN = {
+    "Pliki przeniesiono, ale nie można było sprawdzić całej zawartości. Przed PURGE użyj „Sprawdź dostęp…”, następnie osobno „Zatwierdź stan…” (ADOPT).": "Files were moved, but their full contents could not be inspected. Before PURGE use Check access, then separately approve the current state (ADOPT).",
     "Zatwierdź stan…": "Approve current state…",
     "Zatwierdź aktualny stan": "Approve current state",
     "Zatwierdzisz stan plików widoczny TERAZ. Nie oznacza to, że zawartość jest identyczna jak w dniu przeniesienia. PURGE nadal wymaga osobnej zgody.": "You will bind the files as they exist NOW. This does not prove they match the contents at quarantine time. PURGE still needs separate authorization.",
