@@ -326,8 +326,11 @@ def read_active_names(home: Path, roots: dict[str, Path]):
     rpm = rpm_packages()
     flatpak = flatpak_apps()
     snap = snap_apps()
-    appimage = user_appimages(home, roots.get('data', home / '.local/share'))
-    manual = manual_binaries(home)
+    from xdg_prefs import load as load_preferences, source_directories
+    preferences, preferences_error = load_preferences(home, roots)
+    appimage = user_appimages(home, roots.get('data', home / '.local/share'),
+                            source_directories(preferences, 'appimage_dirs', home))
+    manual = manual_binaries(home, source_directories(preferences, 'binary_dirs', home))
     npm = npm_global_packages(home)
     pipx = pipx_environments(home)
     probes = {"pacman": installed, "dpkg": dpkg, "rpm": rpm,
@@ -494,6 +497,9 @@ class Item:
                 ('npm global directory found', 'npm_global', 'weak'),
                 ('pipx environment found', 'pipx', 'weak'),
                 ('installed-app inventory failed:', 'source_health', 'weak'),
+                ('aur name listed:', 'aur_metadata', 'weak'),
+                ('foreign name not listed in aur:', 'aur_metadata', 'weak'),
+                ('foreign origin unverified:', 'aur_metadata', 'weak'),
                 ('executable on path:', 'executable', 'medium'),
                 ('running executable:', 'process', 'medium'),
                 ('user systemd unit:', 'systemd_user', 'medium'),
@@ -561,6 +567,8 @@ def scan(home: Path, scopes: list[str], keeps: set[str], extra_aliases: dict[str
     stage('Pakiety i aplikacje')
     roots = xdg_roots(home)
     inventory = read_active_names(home, roots)
+    from xdg_aur import enrich_inventory, provenance_summary
+    enrich_inventory(inventory)
     packages, flatpaks, snaps, appimages, units, processes, desktops, active = inventory
     health = getattr(inventory, "status", None)
     from xdg_sources import verified_native_source, dpkg_removals, package_name_count
@@ -707,6 +715,16 @@ def scan(home: Path, scopes: list[str], keeps: set[str], extra_aliases: dict[str
                         reasons += [f"installed pacman package: {pkg} (match: {pat})" +
                                     (" [foreign: AUR or local]" if pkg in foreign else "")
                                     for pkg, pat in installed[:5]]
+                        metadata = getattr(inventory, 'aur', None)
+                        for package, _pattern in installed[:5]:
+                            if package not in foreign:
+                                continue
+                            if metadata is not None and package in metadata.listed:
+                                reasons.append('AUR name listed: ' + package + ' (build origin unverified)')
+                            elif metadata is not None and package in metadata.unlisted:
+                                reasons.append('foreign name not listed in AUR: ' + package + ' (local, renamed or removed)')
+                            else:
+                                reasons.append('foreign origin unverified: ' + package)
                     for provider, matches in sorted(installed_distro.items()):
                         reasons += [f"installed {provider} package: {pkg} (match: {pat})"
                                     for pkg, pat in matches[:5]]
@@ -802,6 +820,7 @@ def scan(home: Path, scopes: list[str], keeps: set[str], extra_aliases: dict[str
                           "installed_sources": dict(health if health is not None else {"pacman": "legacy"}),
                           'native_package_source': native_source,
                           'native_packages': native_count,
+                          'foreign_provenance': provenance_summary(inventory),
                           "pacman_foreign_count": len(getattr(inventory, "foreign", ()))} 
 
 
@@ -1581,9 +1600,11 @@ def main(argv=None):
     roots = xdg_roots(home)
     if args.installed_sources:
         from xdg_sources import package_name_count
+        from xdg_aur import enrich_inventory, provenance_summary
         if any(bool(x) for x in operations) or args.theme_info:
             parser.error("--installed-sources cannot be combined with lifecycle operations")
         inventory = read_active_names(home, roots)
+        enrich_inventory(inventory)
         packages, flatpaks, snaps, appimages, _units, _processes, _desktops, _active = inventory
         native = getattr(inventory, 'native_source', None)
         native_names = (packages if native == 'pacman' else
@@ -1591,6 +1612,7 @@ def main(argv=None):
         print(json.dumps({
             'native_package_source': native,
             'native_packages': package_name_count(native, native_names),
+            'foreign_provenance': provenance_summary(inventory),
             "health": dict(getattr(inventory, "status", {})),
             "counts": {"pacman": len(packages),
                        "foreign_pacman_AUR_or_local": len(getattr(inventory, "foreign", ())),

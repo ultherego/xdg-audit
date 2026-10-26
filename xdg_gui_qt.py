@@ -868,6 +868,17 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
             alias = QtWidgets.QPlainTextEdit(format_aliases(current['aliases']))
             alias.setMaximumHeight(125)
             layout.addWidget(alias)
+            source_views = {}
+            for key, title in (('appimage_dirs', 'Dodatkowe katalogi AppImage — jedna ścieżka w linii'),
+                               ('binary_dirs', 'Dodatkowe katalogi binarek — jedna ścieżka w linii')):
+                layout.addWidget(QtWidgets.QLabel(tr(title)))
+                editor = QtWidgets.QPlainTextEdit('\n'.join(current.get(key, [])))
+                editor.setMaximumHeight(80)
+                layout.addWidget(editor)
+                source_views[key] = editor
+            hint = QtWidgets.QLabel(tr('Ścieżki bezwzględne lub ~/; odczyt bez uruchamiania plików.'))
+            hint.setWordWrap(True)
+            layout.addWidget(hint)
             info = QtWidgets.QLabel(warning or tr('Zapis jest wykonywany dopiero po kliknięciu Zapisz.'))
             info.setWordWrap(True)
             layout.addWidget(info)
@@ -877,7 +888,8 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
             layout.addWidget(buttons)
             def commit():
                 try:
-                    new = validate({'startup_scope':scope.currentText(),
+                    new = validate({**{key:[line.strip() for line in view.toPlainText().splitlines() if line.strip()]
+                                       for key,view in source_views.items()}, 'startup_scope':scope.currentText(),
                                     'quick_scan':quick.isChecked(), 'show_active':shown.isChecked(),
                                     'language':language.currentData(),
                                     'keep':[x.strip() for x in keep.toPlainText().splitlines() if x.strip()],

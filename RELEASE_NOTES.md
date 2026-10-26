@@ -5,6 +5,12 @@
 
 ## New since v1.7.0-rc1
 
+- AUR name availability for foreign pacman packages, with separate listed,
+  unlisted and unknown counts; no installed names sent and no disk cache.
+- Additional AppImage apps/opt/XDG data locations, Cargo/Go binary hints and
+  user-configurable source folders in GTK, Qt and Tk Settings.
+- Required real snapd CI with local metadata-only fixtures, disabled parallel
+  instances and unprivileged namespace protection and quarantine lifecycle checks.
 - Hide unavailable Flatpak/Snap tabs only when no leftover data exists, with
   stable scope selection and automatic fallback after a completed scan.
 - Content-sized GTK/Qt/Tk dialogs with 20 px internal padding, bounded long
@@ -68,8 +74,9 @@
 - MOVE requires a healthy, current native `pacman`, `dpkg-query` or `rpm`
   inventory selected by OS family. Unknown systems, failed providers and
   incomplete dpkg configuration block the operation.
-- AUR packages installed through pacman appear in `pacman -Qq`. AUR origin
-  is not distinguished from other foreign packages.
+- AUR availability distinguishes current name matches from unlisted foreign
+  packages. Local builds can share AUR names, and removed/renamed AUR packages
+  can be unlisted; historical build origin remains unverified.
 - Flatpak and Snap provide installation evidence. AppImage and manual-binary
   discovery do not cover every possible location.
 - The system `pkexec` self-test does not authorize deleting root-owned data.

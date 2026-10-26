@@ -544,6 +544,17 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
             alias_text.get_buffer().set_text(format_aliases(self.prefs['aliases']))
             asc=Gtk.ScrolledWindow();asc.set_min_content_height(100)
             set_child(asc,alias_text);append(box,asc)
+            source_views={}
+            for key, title in (('appimage_dirs', 'Dodatkowe katalogi AppImage — jedna ścieżka w linii'),
+                               ('binary_dirs', 'Dodatkowe katalogi binarek — jedna ścieżka w linii')):
+                section(tr(title))
+                view=Gtk.TextView();view.set_monospace(True)
+                view.get_buffer().set_text('\n'.join(self.prefs.get(key, [])))
+                scroll=Gtk.ScrolledWindow();scroll.set_min_content_height(65)
+                set_child(scroll,view);append(box,scroll)
+                source_views[key]=view
+            hint=label(tr('Ścieżki bezwzględne lub ~/; odczyt bez uruchamiania plików.'))
+            wrap_label(hint);append(box,hint)
             error=label(tr('Zapisane ustawienia dotyczą tylko Twojego konta.'))
             wrap_label(error);append(box,error)
             buttons=Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL,spacing=8)
@@ -563,7 +574,8 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                 try:
                     from xdg_prefs import validate
                     keep=[x.strip() for x in get_buffer_text(keep_text).splitlines() if x.strip()]
-                    new=validate({'keep':keep,
+                    new=validate({**{key:[line.strip() for line in get_buffer_text(view).splitlines() if line.strip()]
+                                      for key,view in source_views.items()}, 'keep':keep,
                         'aliases':parse_alias_lines(get_buffer_text(alias_text)),
                         'quick_scan':quick.get_active(),
                         'show_active':show.get_active(),

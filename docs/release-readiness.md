@@ -32,15 +32,14 @@ Results from 2026-10-26: [verification record](verification-2026-10-26.md).
 The active `Protect main` ruleset requires a PR, blocks force-push and deletion
 of `main`, and requires Python, Xvfb GUI, benchmark and source-archive checks.
 
-The `Source ZIP and tar.gz` workflow job has
-`needs: [test, gui-smoke, wayland-smoke, benchmark, quarantine-cycle, native-sources]`.
-Archive success therefore also requires Wayland, isolated quarantine E2E and
-native Arch/Ubuntu/Fedora tests, even when those contexts are not listed directly
-in the ruleset.
+The source archive job depends on Python, GUI, Wayland, benchmark, quarantine,
+native-source and live-snapd jobs. Archive success therefore also requires
+Wayland, isolated quarantine E2E, native Arch/Ubuntu/Fedora and actual snapd
+tests, even when those contexts are not listed directly in the ruleset.
 
 - [x] Python 3.10–3.14 and native GUI checks (Xvfb/Weston).
 - [x] Isolated MOVE → RESTORE lifecycle and safety-failure tests.
-- [x] Archive and release gates depend on Wayland, E2E and native-source checks.
+- [x] Archive and release gates depend on Wayland, E2E, native-source and live-snapd checks.
 - [ ] **Optional:** list Wayland and E2E directly in the ruleset so administrators
   can see them individually as required checks. This requires GitHub
   administrative permission; do not bypass access controls.
@@ -60,6 +59,10 @@ The following matrix concerns additional, separately identified environments.
   Arch/Ubuntu/Fedora native protection and lifecycle tests are mandatory before
   CI can build archives. Arch validates the package-manager family used by
   CachyOS, with real regular-user inventories rather than synthetic package lists.
+- [x] Real snapd inventory and lifecycle with local metadata-only fixtures,
+  a disabled parallel instance, stale-row MOVE refusal and exact-namespace
+  MOVE/RESTORE/PURGE with unchanged bytes and sentinel —
+  [snapd 2.77.1 results](https://github.com/ultherego/xdg-audit/actions/runs/40414152100/job/121892105511).
 - [x] Full-disk and permission-error handling: engine ENOSPC/EACCES tests,
   no data overwrites, and a native GTK ENOSPC message smoke test —
   [results](verification-2026-10-26.md). Physical storage exhaustion and
@@ -85,5 +88,8 @@ The following matrix concerns additional, separately identified environments.
 Application inventory covers Arch/AUR/foreign, Flatpak, Snap, AppImage,
 manual binaries, APT/dpkg and RPM. MOVE requires explicit consent and a
 healthy native package database.
+AUR name availability is informational; build origin remains unverified.
+AppImage/manual-binary discovery includes additional conventional directories
+and validated user-configured source paths in all GUI backends.
 Adapter behavior and safety conditions:
 [installation-source-support.md](installation-source-support.md).

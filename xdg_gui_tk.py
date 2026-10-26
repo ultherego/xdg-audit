@@ -431,12 +431,22 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
             ttk.Label(frame,text=tr('Alias — katalog=wzorzec')).pack(anchor='w',pady=(10,0))
             alias=tk.Text(frame,height=5)
             alias.pack(fill='x');alias.insert('1.0',format_aliases(current['aliases']))
+            source_views={}
+            for key, title in (('appimage_dirs', 'Dodatkowe katalogi AppImage — jedna ścieżka w linii'),
+                               ('binary_dirs', 'Dodatkowe katalogi binarek — jedna ścieżka w linii')):
+                ttk.Label(frame,text=tr(title)).pack(anchor='w',pady=(10,0))
+                view=tk.Text(frame,height=3)
+                view.pack(fill='x');view.insert('1.0','\n'.join(current.get(key, [])))
+                source_views[key]=view
+            ttk.Label(frame,text=tr('Ścieżki bezwzględne lub ~/; odczyt bez uruchamiania plików.'),
+                      wraplength=530).pack(fill='x',pady=(8,0))
             feedback=tk.StringVar(value=warning or tr('Zapis dopiero po kliknięciu Zapisz.'))
             ttk.Label(frame,textvariable=feedback,wraplength=530).pack(fill='x',pady=(10,6))
             ttk.Button(actions,text=tr('Anuluj'),command=dialog.destroy).pack(side='right')
             def commit():
                 try:
-                    new=validate({'startup_scope':scope.get(),
+                    new=validate({**{key:[line.strip() for line in view.get('1.0','end').splitlines() if line.strip()]
+                                     for key,view in source_views.items()}, 'startup_scope':scope.get(),
                          'quick_scan':quick.get(), 'show_active':show.get(), 'language':'en' if language.get()=='English' else 'pl',
                          'keep':[x.strip() for x in keep.get('1.0','end').splitlines() if x.strip()],
                          'aliases':parse_alias_lines(alias.get('1.0','end'))})

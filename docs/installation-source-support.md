@@ -91,8 +91,18 @@ ID; a native package name does not establish ownership of Flatpak data.
 
 Detection is static and bounded. It inspects immediate `*.AppImage` files in
 `~/Applications`, `~/AppImages`, `~/Downloads`, `~/.local/bin`, `~/bin` and
-`~/.local/share/applications`, plus desktop launchers in
-`$XDG_DATA_HOME/applications`.
+`~/.local/share/applications`, plus `~/apps`, `~/Apps`, `~/opt`, `~/.local/opt`,
+`/opt` and `$XDG_DATA_HOME/{AppImages,appimages,applications}`. Application
+folders under these app roots are inspected one level deep, with at most 64
+child directories per root. Launchers in `$XDG_DATA_HOME/applications` can
+reference an existing image elsewhere.
+
+Settings in GTK, Qt and Tk accept additional AppImage and binary directories,
+one absolute or `~/` path per line. The JSON preference keys are `appimage_dirs`
+and `binary_dirs`, each limited to 32 paths. Additional folders are inspected
+directly, without recursion. `~/` uses the selected audit HOME; environment
+variables and shell expressions are never expanded. Changes trigger a fresh scan
+and are reloaded before MOVE. Cancelling Settings writes nothing.
 
 Launchers can identify images elsewhere, including paths containing spaces.
 A safe, existing file must be referenced by direct `Exec` (including a simple
@@ -113,17 +123,45 @@ entry counts are bounded; inspection failures do not masquerade as complete
 inventories. Absence is not proof of AppImage uninstallation. An image found
 during the fresh pre-MOVE inventory blocks moving matching XDG data.
 Image-file counts are kept separate from protective filename/display aliases.
+Each AppImage/manual-binary probe also has a shared 12,000-entry scan budget;
+exceeding a budget reports failed health and blocks MOVE.
+
+## Foreign pacman packages and AUR availability
+
+**foreign ≠ AUR**: foreign pacman records include locally built packages and
+packages removed from repositories. AUR origin cannot be proven from the
+installed package name. Neither yay nor paru is required.
+
+For a healthy native pacman inventory, scans and `--installed-sources` compare
+foreign names against the public `https://aur.archlinux.org/packages.gz` index:
+
+- **AUR name listed:** the same name currently exists in AUR; the installed
+  binary's build origin remains unverified.
+- **Not listed in AUR:** possibly local, renamed or removed; this is not proof
+  of a local build or an uninstalled application.
+- **Origin unverified:** metadata failed, timed out or was not queried.
+
+The application downloads the complete public index and sends no installed
+package names. Downloads, decompression and elapsed network time are bounded.
+Successful metadata is cached in memory for one hour, failures for one minute;
+there is no disk cache and scanning does not write preferences.
+JSON `foreign_provenance` reports these counts separately from provider health.
+AUR metadata is weak explanatory evidence: installed pacman packages remain
+ACTIVE regardless of index membership or network errors. MOVE never performs
+the AUR request and never uses its result to authorize quarantine.
 
 ## Other sources and limits
 
-- **foreign ≠ AUR**: pacman foreign records also include local packages and
-  packages no longer available from repositories. Neither yay nor paru is required.
-  A quiet `pacman -Qmq` exit 1 with no output or diagnostics means no filter
+- A quiet `pacman -Qmq` exit 1 with no output or diagnostics means no filter
   matches and is reported as a healthy empty foreign list. Errors, partial output,
   timeouts and missing tools remain separate states. This informational exception
   never authorizes MOVE or applies to the native `pacman -Qq` query.
-- Manual binaries, `/opt` directories, npm global and pipx provide protective
-  hints. Missing hints do not prove absence; custom prefixes may not be covered.
+- Manual binaries in `~/.local/bin`, `~/bin`, `~/Applications`, `~/.cargo/bin`,
+  `~/go/bin`, `~/apps/bin`, `~/Apps/bin`, `~/Applications/bin`, `~/opt/bin`,
+  `~/.local/opt/bin`, `/usr/local/bin` and configured extra
+  folders provide protective filename hints. Files must be regular and executable;
+  they are never run. `/opt` directory names, npm global and pipx add weak hints.
+  Missing hints do not prove absence.
 - Protection for secrets, profiles, backups, games and session data remains active.
 - Installed-application evidence does not verify XDG-directory ownership.
   `orphan_ownership_verified` remains `false`.
@@ -142,14 +180,21 @@ MOVE, then checks explicit MOVE/RESTORE/PURGE on unrelated disposable data,
 including exact hashes, idempotence and an untouched sentinel.
 Arch coverage exercises the native package-manager family used by CachyOS;
 it does not claim a separate CachyOS desktop-session test.
-Snap parser and lifecycle coverage uses fixtures; it does not claim a live
-snapd installation inside the test container. AppImage tests use static fixture
-files, matching the non-execution contract.
+A separate Ubuntu VM runs actual snapd and `scripts/smoke_snapd.py` as an
+unprivileged user. CI builds a local metadata-only snap (`base: none`, no apps
+or hooks), installs the base and a disabled parallel instance, and verifies
+ACTIVE protection and stale-row MOVE refusal. After removing only the base
+fixture, it verifies REVIEW, explicit MOVE/RESTORE/PURGE, exact bytes, idempotence
+and preservation of the installed parallel namespace and an unrelated sentinel.
+CI removes only its two exact fixture names; it downloads no application from
+the Snap Store. The application never installs or removes snaps.
+AppImage tests use static fixture files, matching the non-execution contract.
 
 ## Sources
 
 - [os-release and ID_LIKE](https://www.freedesktop.org/software/systemd/man/latest/os-release.html)
 - [pacman query filters](https://man.archlinux.org/man/pacman.8)
+- [AUR bulk metadata and public package index](https://wiki.archlinux.org/title/Aurweb_RPC_interface)
 - [dpkg-query and package states](https://manpages.debian.org/bookworm/dpkg/dpkg-query.1.en.html)
 - [Flatpak application ID validation](https://github.com/flatpak/flatpak/blob/main/common/flatpak-ref-utils.c)
 - [RPM query formats](https://rpm.org/docs/latest/man/rpm-queryformat.7)

@@ -40,7 +40,7 @@ class ActiveInventory(tuple):
 
     def __new__(cls, values, *, status=None, foreign=(), manual=(),
                 distro=None, provenance=None, npm_global=(), pipx=(), flatpak_ids=None,
-                native_source=_UNSET, snap_ids=None, appimage_paths=None):
+                native_source=_UNSET, snap_ids=None, appimage_paths=None, aur=None):
         obj = super().__new__(cls, values)
         if len(obj) != 8:
             raise ValueError("Invalid installed-application inventory shape")
@@ -54,6 +54,8 @@ class ActiveInventory(tuple):
         obj.appimage_paths = (frozenset(appimage_paths) if appimage_paths is not None else None)
         obj.distro = {name: frozenset(values) for name, values in (distro or {}).items()}
         obj.provenance = dict(provenance or {})
+        obj.aur = aur
+        obj.native_source_explicit = native_source is not _UNSET
         # Compatibility for older Python callers; production always supplies
         # the OS-selected source, including explicit None for unknown systems.
         obj.native_source = (('pacman' if obj[0] and obj.status.get('pacman') == 'ok' else None)
@@ -301,7 +303,8 @@ def snap_apps() -> Probe:
 
 
 def _safe_direct_children(base: Path, *, extensions=(), require_exec=False,
-                          anchor: Path | None = None, paths: set[str] | None = None):
+                          anchor: Path | None = None, paths: set[str] | None = None,
+                          budget: list[int] | None = None):
     if anchor is not None:
         status = _source_directory_status(anchor, base)
         if status != "ok":
@@ -314,6 +317,10 @@ def _safe_direct_children(base: Path, *, extensions=(), require_exec=False,
         for idx, item in enumerate(base.iterdir()):
             if idx >= 2000:
                 return set(), "failed"
+            if budget is not None:
+                budget[0] -= 1
+                if budget[0] < 0:
+                    return set(), 'failed'
             info = item.lstat()
             if (extensions and item.name.casefold().endswith(extensions)
                     and (stat.S_ISLNK(info.st_mode) or info.st_uid not in (0, os.getuid()))):
@@ -387,7 +394,7 @@ def _read_launcher(path: Path) -> str:
 def _appimage_launchers(home: Path, data: Path) -> tuple[set[str], set[str], bool]:
     """Inspect bounded user launchers; never invoke Exec, wrappers or images."""
     folder = data / 'applications'
-    status = _source_directory_status(home, folder)
+    status = _source_directory_status(home if folder.is_relative_to(home) else Path('/'), folder)
     if status == 'absent':
         return set(), set(), False
     if status != 'ok':
@@ -443,21 +450,60 @@ def _appimage_launchers(home: Path, data: Path) -> tuple[set[str], set[str], boo
     return names, paths, failed
 
 
-def user_appimages(home: Path, data: Path | None = None) -> Probe:
+def _shallow_source_folders(home: Path, bases) -> tuple[list[Path], bool]:
+    """Inspect at most one application directory level, without following links."""
+    folders, failed = [], False
+    for base in bases:
+        status = _source_directory_status(home if base.is_relative_to(home) else Path('/'), base)
+        if status == 'absent':
+            continue
+        if status != 'ok':
+            failed = True
+            continue
+        try:
+            entries = list(islice(base.iterdir(), 2001))
+            if len(entries) > 2000:
+                failed = True
+                continue
+            children = []
+            for entry in entries:
+                info = entry.lstat()
+                if stat.S_ISLNK(info.st_mode):
+                    continue
+                if stat.S_ISDIR(info.st_mode) and info.st_uid in (0, os.getuid()):
+                    children.append(entry)
+            if len(children) > 64:
+                failed = True
+            else:
+                folders.extend(children)
+        except OSError:
+            failed = True
+    return folders, failed
+
+
+def user_appimages(home: Path, data: Path | None = None, extra_dirs=()) -> Probe:
     """Bounded file/launcher evidence, with version aliases; never execute code."""
     names = set()
     image_paths = set()
     problems = []
-    for folder in (home / "Applications", home / 'AppImages', home / 'Downloads',
-                   home / ".local/bin", home / "bin",
-                   home / ".local/share/applications"):
-        found, state = _safe_direct_children(folder, extensions=(".appimage",), anchor=home, paths=image_paths)
+    data = data or home / '.local/share'
+    app_roots = (home / 'Applications', home / 'AppImages', home / 'apps', home / 'Apps',
+                 home / 'opt', home / '.local/opt', data / 'AppImages', data / 'appimages', Path('/opt'))
+    nested, failed = _shallow_source_folders(home, app_roots)
+    if failed:
+        problems.append('application subdirectories')
+    folders = (*app_roots, home / 'Downloads', home / '.local/bin', home / 'bin',
+               home / '.local/share/applications', data / 'applications', *nested, *extra_dirs)
+    budget = [12000]
+    for folder in dict.fromkeys(folders):
+        found, state = _safe_direct_children(folder, extensions=(".appimage",),
+            anchor=home if folder.is_relative_to(home) else Path('/'), paths=image_paths, budget=budget)
         names.update(found)
         for stem in found:
             names.update(_appimage_aliases(Path(stem + '.AppImage')))
         if state in ("failed", "unsafe"):
             problems.append(str(folder))
-    launcher_names, launcher_paths, failed = _appimage_launchers(home, data or home / '.local/share')
+    launcher_names, launcher_paths, failed = _appimage_launchers(home, data)
     names.update(launcher_names)
     image_paths.update(launcher_paths)
     if failed:
@@ -491,14 +537,18 @@ def _app_directories(base: Path, *, anchor: Path | None = None) -> tuple[set[str
     return names, "ok"
 
 
-def manual_binaries(home: Path) -> Probe:
+def manual_binaries(home: Path, extra_dirs=()) -> Probe:
     """Protective filename hints from bounded trusted bins, never run binaries."""
     names = set()
     problems = []
-    for folder in (home / ".local/bin", home / "bin", home / "Applications",
-                   Path("/usr/local/bin")):
+    budget = [12000]
+    folders = (home / '.local/bin', home / 'bin', home / 'Applications',
+               home / '.cargo/bin', home / 'go/bin', home / 'apps/bin', home / 'Apps/bin',
+               home / 'Applications/bin', home / 'opt/bin', home / '.local/opt/bin',
+               Path('/usr/local/bin'), *extra_dirs)
+    for folder in dict.fromkeys(folders):
         found, state = _safe_direct_children(folder, require_exec=True,
-                                             anchor=home if folder.is_relative_to(home) else Path("/"))
+            anchor=home if folder.is_relative_to(home) else Path('/'), budget=budget)
         names.update(found)
         if state in ("failed", "unsafe"):
             problems.append(str(folder))

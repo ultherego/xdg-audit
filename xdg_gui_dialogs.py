@@ -91,12 +91,16 @@ def configure_gtk_dialog(dialog, content, Gtk, Gdk, Pango):
     measured_width = max(1, min(inner_width, natural_width))
     natural_height = (body.measure(Gtk.Orientation.VERTICAL, measured_width)[1] if gtk4
                       else body.get_preferred_height_for_width(measured_width)[1])
-    if natural_height > max_body_height:
+    # Unparented GTK3 form measurements can undercount themed field heights.
+    # Always bound forms containing editors, while keeping simple prompts compact.
+    has_editors = any(isinstance(widget, Gtk.ScrolledWindow) for widget in children)
+    if natural_height > max_body_height or has_editors:
         scrolling = Gtk.ScrolledWindow()
         scrolling.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         scrolling.set_propagate_natural_width(True)
         scrolling.set_propagate_natural_height(True)
         scrolling.set_max_content_width(inner_width)
+        scrolling.set_min_content_height(0)
         scrolling.set_max_content_height(max_body_height)
         scrolling.set_child(body) if gtk4 else scrolling.add(body)
         append(content, scrolling)
