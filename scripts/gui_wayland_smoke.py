@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 CHILD = ROOT / 'scripts' / 'gui_app_smoke.py'
 
 
-def run(backend: str, duration: float = 3.0, *, lifecycle=False, output_dir=None) -> None:
+def run(backend: str, duration: float = 3.0, *, lifecycle=False, output_dir=None, debugger=False) -> None:
     with tempfile.TemporaryDirectory(prefix='xdg-audit-wayland-') as temp:
         base = Path(temp)
         runtime = base / 'runtime'
@@ -64,6 +64,9 @@ def run(backend: str, duration: float = 3.0, *, lifecycle=False, output_dir=None
                            [sys.executable, str(CHILD), '--child', '--backend', backend, '--home', str(home)])
                 if lifecycle and output_dir:
                     command += ['--output', str(output_dir / (backend + '-wayland.json'))]
+                if debugger:
+                    command = ['gdb', '--batch', '--return-child-result', '-ex', 'run',
+                               '-ex', 'thread apply all bt', '--args', *command]
                 child = subprocess.Popen(
                     command,
                     cwd=str(ROOT), env=env, stdin=subprocess.DEVNULL,
@@ -80,7 +83,7 @@ def run(backend: str, duration: float = 3.0, *, lifecycle=False, output_dir=None
                 if failed or 'create_surface(' not in trace:
                     raise AssertionError(
                         f'{backend}: Wayland GUI did not create a surface and stay alive. '
-                        f'exit={child.poll()}\n' + trace[-4500:]
+                        f'exit={child.poll()}\n' + trace[-14000 if debugger else -4500:]
                     )
                 if lifecycle:
                     print('\n'.join(line for line in trace.splitlines() if 'PASS ' in line))
@@ -107,5 +110,7 @@ if __name__ == '__main__':
     parser.add_argument('--duration', type=float, default=3.0)
     parser.add_argument('--lifecycle', action='store_true', help='Run the real GUI lifecycle with synthetic inventory')
     parser.add_argument('--output-dir', type=Path)
+    parser.add_argument('--debugger', action='store_true', help='Collect native failure backtraces with gdb')
     arguments = parser.parse_args()
-    run(arguments.backend, arguments.duration, lifecycle=arguments.lifecycle, output_dir=arguments.output_dir)
+    run(arguments.backend, arguments.duration, lifecycle=arguments.lifecycle, output_dir=arguments.output_dir,
+        debugger=arguments.debugger)
