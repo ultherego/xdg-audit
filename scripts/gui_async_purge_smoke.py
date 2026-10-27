@@ -9,6 +9,7 @@ from __future__ import annotations
 import os
 import errno
 from pathlib import Path
+import subprocess
 import sys
 import tempfile
 import threading
@@ -19,7 +20,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 
-def main(disk_full: bool = False) -> None:
+def main(disk_full: bool = False, identity_mismatch: bool = False, output: Path | None = None) -> None:
     import gi
     gi.require_version("Gtk", "4.0")
     from gi.repository import Gtk, GLib, Gio
@@ -67,6 +68,10 @@ def main(disk_full: bool = False) -> None:
             preview_done.set()
             if disk_full:
                 raise OSError(errno.ENOSPC, 'No space left on device')
+            if identity_mismatch:
+                from xdg_quarantine_lifecycle import QuarantineIdentityMismatch
+                raise QuarantineIdentityMismatch(run_id, home / 'quarantine/cache/fixture',
+                                                 (17, 12345, 16384), (19, 67890, 16384))
             return {"run_id": run_id, "objects": 2, "bytes": 123,
                     "dry_run": kwargs.get("dry_run", True)}
 
@@ -147,13 +152,23 @@ def main(disk_full: bool = False) -> None:
                     raise AssertionError("Slow file inspection ran on UI thread")
                 prompt = next((w for w in open_windows()
                                if w.get_title() == "Trwałe usunięcie"), None)
-                if disk_full:
+                if disk_full or identity_mismatch:
                     window = Gio.Application.get_default().get_active_window()
-                    labels = [w.get_text() for w in find_widgets(window) if isinstance(w, Gtk.Label)]
+                    labels = [w.get_text() for top in open_windows()
+                              for w in find_widgets(top) if isinstance(w, Gtk.Label)]
                     if prompt is not None:
-                        raise AssertionError('Disk-full failure opened a PURGE confirmation')
-                    if not any('No space left on device' in text for text in labels):
+                        raise AssertionError('Blocked preview opened a PURGE confirmation')
+                    if disk_full and not any('No space left on device' in text for text in labels):
                         raise AssertionError('Disk-full reason was not visible in the interface')
+                    if identity_mismatch:
+                        details = '\n'.join(labels)
+                        for expected in ('device=17, inode=12345', 'device=19, inode=67890',
+                                         'quarantine/cache/fixture', 'ADOPT'):
+                            if expected not in details:
+                                raise AssertionError('Identity evidence missing from visible dialog: ' + expected)
+                    if output is not None:
+                        output.parent.mkdir(parents=True,exist_ok=True)
+                        subprocess.run(['scrot','-o',str(output)],check=True,timeout=10)
                     return False
                 if prompt is None:
                     raise AssertionError("PURGE confirmation dialog never appeared")
@@ -183,7 +198,8 @@ def main(disk_full: bool = False) -> None:
         launch_gui(engine, home, args, {}, runtime, "gtk4")
         if errors:
             raise AssertionError("; ".join(errors))
-        print("PASS: disk-full preview leaves GTK responsive and displays the blocking error"
+        print('PASS: identity mismatch opens a detailed refusal without a PURGE prompt' if identity_mismatch else
+              "PASS: disk-full preview leaves GTK responsive and displays the blocking error"
               if disk_full else "PASS: slow PURGE preview leaves GTK responsive and displays confirmation")
 
 
@@ -191,4 +207,7 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--disk-full', action='store_true')
-    main(parser.parse_args().disk_full)
+    parser.add_argument('--identity-mismatch', action='store_true')
+    parser.add_argument('--output', type=Path)
+    args = parser.parse_args()
+    main(args.disk_full, args.identity_mismatch, args.output)

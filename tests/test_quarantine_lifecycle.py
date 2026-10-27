@@ -72,6 +72,21 @@ class LifecycleTests(unittest.TestCase):
             self.purge(dry_run=False)
         self.assertTrue(self.dest.exists())
 
+    def test_identity_refusal_reports_exact_evidence_without_changing_bytes(self):
+        self.row['identity'][1] += 100
+        self.write()
+        manifest = (self.run / 'manifest.json').read_bytes()
+        with self.assertRaises(lifecycle.QuarantineIdentityMismatch) as caught:
+            self.purge(dry_run=False)
+        error = caught.exception
+        self.assertEqual(error.run_id, self.run_id)
+        self.assertEqual(error.path, self.dest)
+        self.assertEqual(error.expected, tuple(self.row['identity']))
+        self.assertEqual(error.actual[:2], (self.dest.stat().st_dev, self.dest.stat().st_ino))
+        self.assertEqual((self.dest / 'settings').read_text(), 'preserve-me')
+        self.assertEqual((self.run / 'manifest.json').read_bytes(), manifest)
+        self.assertFalse(audit.quarantine_access_recoverable_error(error))
+
     def test_untracked_entry_rejected(self):
         (self.run / "config" / "unexpected").write_text("keep")
         with self.assertRaises(ValueError):

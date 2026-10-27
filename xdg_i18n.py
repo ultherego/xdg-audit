@@ -7,6 +7,13 @@ from __future__ import annotations
 
 LANGUAGES = {'pl': 'Polski', 'en': 'English'}
 EN = {
+    'Tożsamość obiektu w kwarantannie nie zgadza się z dziennikiem.': 'The quarantined object identity does not match the journal.',
+    'Zapisano:': 'Recorded:',
+    'Odczytano teraz:': 'Read now:',
+    'Sama nazwa ścieżki nie potwierdza tożsamości plików. Skopiowanie lub odtworzenie katalogu może zmienić te numery; sam komunikat nie rozstrzyga przyczyny.': 'A path name does not establish file identity. Copying or restoring a directory can change these numbers; this message alone does not establish the cause.',
+    'To nie jest błąd uprawnień. ACCESS ani ADOPT nie zatwierdzają podmienionego obiektu. PURGE pozostaje zablokowany.': 'This is not a permission error. ACCESS and ADOPT do not approve a substituted object. PURGE remains blocked.',
+    'Skopiuj szczegóły z tego okna do dalszej diagnozy. Nie zmieniaj identyfikatorów w manifest.json.': 'Copy these details for further diagnosis. Do not edit identities in manifest.json.',
+    'Operacja została zatrzymana. Sprawdź szczegóły błędu i dziennik przed ponowną próbą.': 'The operation was stopped. Review the error details and journal before retrying.',
     'Dodatkowe katalogi AppImage — jedna ścieżka w linii': 'Additional AppImage directories — one path per line',
     'Dodatkowe katalogi binarek — jedna ścieżka w linii': 'Additional binary directories — one path per line',
     'Ścieżki bezwzględne lub ~/; odczyt bez uruchamiania plików.': 'Absolute paths or ~/; files are inspected without execution.',

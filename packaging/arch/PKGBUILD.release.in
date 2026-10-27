@@ -1,0 +1,21 @@
+# Maintainer: Ulther Ego <ultherego at users dot noreply dot github dot com>
+pkgname=xdg-audit
+pkgver=@VERSION@
+pkgrel=@RELEASE@
+pkgdesc='Audit and safely quarantine leftover user configuration and data'
+arch=('any')
+url='https://github.com/ultherego/xdg-audit'
+license=('MIT')
+depends=('python>=3.10' 'coreutils' 'procps-ng' 'tk')
+optdepends=('python-gobject: GTK interface'
+            'gtk4: preferred GTK4 interface and native Wayland support'
+            'python-pyqt6: Qt6 interface and native Wayland support')
+conflicts=('xdg-audit-git')
+_source_version=@SOURCE_VERSION@
+source=("https://github.com/ultherego/xdg-audit/releases/download/v${_source_version}/xdg-audit-${_source_version}.tar.gz")
+sha256sums=('@SHA256@')
+
+package() {
+  cd "$srcdir/xdg-audit-$_source_version"
+  python packaging/install_payload.py --destdir "$pkgdir"
+}

@@ -1,0 +1,56 @@
+name: Create release tag
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Exact source version without v (for example 1.7.0-rc2)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: create-release-tag
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate source, signing configuration and main CI
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+          SIGNING_FINGERPRINT: ${{ vars.PACKAGES_SIGNING_FINGERPRINT }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import os, sys
+          from pathlib import Path
+          sys.path.insert(0, 'packaging')
+          from check_version import check
+          check(Path('.'), 'v' + os.environ['RELEASE_VERSION'])
+          if not os.environ['SIGNING_FINGERPRINT']:
+              raise SystemExit('Configure package signing before creating a release tag')
+          PY
+          result=$(gh run list --workflow tests.yml --branch main --commit "$GITHUB_SHA" --event push --limit 1 --json conclusion --jq '.[0].conclusion')
+          test "$result" = success
+      - name: Create an immutable annotated tag and start its release pipeline
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="v$RELEASE_VERSION"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git tag -a "$tag" -m "xdg-audit $tag" "$GITHUB_SHA"
+          git push origin "refs/tags/$tag"
+          # GITHUB_TOKEN pushes do not trigger push workflows. Dispatch the
+          # complete test/release workflow explicitly for the newly created tag.
+          gh workflow run tests.yml --ref "$tag"

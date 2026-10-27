@@ -2,6 +2,12 @@
 
 ## 1.7.0-rc2 (unreleased)
 
+- Build/test DEB, RPM and Arch packages in Actions; create version tags and
+  prepare signed APT/RPM publication, release assets and opt-in AUR submission.
+- Keep empty settings editors visible with theme-aware borders and focus.
+- Show actionable PURGE refusal dialogs with exact recorded/current identity
+  evidence; permission repair and ADOPT cannot bypass identity mismatches.
+
 - Exercise the real GUI MOVE/RESTORE/PURGE workflow through native controls and
   dialogs on GTK4/GTK3/Qt6/Tk under X11 and GTK4/Qt6 on native Wayland. Verify
   cancelled tokens, exact hashes, separate journals and untouched sentinels.

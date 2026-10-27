@@ -15,6 +15,7 @@ from xdg_theme import detect_appearance
 from xdg_gui_jobs import run_gui_job
 from xdg_gui_layout import visible_optional_scopes
 from xdg_gui_dialogs import configure_gtk_dialog
+from xdg_quarantine_messages import quarantine_error_details, identity_issue_details
 
 def align_header_edges(header: Any, left: Any, right: Any, gtk: Any) -> None:
     """Anchor desktop/session information at the far right in GTK3 and GTK4.
@@ -85,6 +86,14 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
         border-bottom: 1px solid alpha(currentColor, 0.26);
     }
     .xdg-table-rows row.xdg-heading-row:hover { background-color: alpha(currentColor, 0.07); }
+    .xdg-settings-editor {
+        border: 1px solid alpha(currentColor, 0.5);
+        border-radius: 7px;
+    }
+    .xdg-settings-editor.xdg-editor-focused {
+        border-color: @theme_selected_bg_color;
+        box-shadow: inset 0 0 0 1px @theme_selected_bg_color;
+    }
     """
 
     def install_styles():
@@ -456,6 +465,8 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
             append(footer,self.move_button)
             self.summary=label('')
             self.status=label(tr('Audyt nie zmienia danych. Kwarantanna wymaga MOVE; można ją przywrócić.'))
+            self.status.set_ellipsize(Pango.EllipsizeMode.END)
+            self.status.set_hexpand(True)
             append(outer,self.status)
             self.start_scan()
             self.win.present() if GTK4 else self.win.show_all()
@@ -534,15 +545,31 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
             show.set_active(self.prefs['show_active'])
             append(box,show)
             section(tr('Zachowaj — nazwy katalogów, jedna w linii'))
+            def frame_editor(scroll, view):
+                # Empty editors still need a visible boundary in flat themes.
+                style=scroll.get_style_context()
+                style.add_class('xdg-settings-editor')
+                view.set_left_margin(10);view.set_right_margin(10)
+                view.set_top_margin(8);view.set_bottom_margin(8)
+                if GTK4:
+                    focus=Gtk.EventControllerFocus()
+                    focus.connect('enter',lambda *_:style.add_class('xdg-editor-focused'))
+                    focus.connect('leave',lambda *_:style.remove_class('xdg-editor-focused'))
+                    view.add_controller(focus)
+                else:
+                    view.connect('focus-in-event',lambda *_:(style.add_class('xdg-editor-focused'),False)[1])
+                    view.connect('focus-out-event',lambda *_:(style.remove_class('xdg-editor-focused'),False)[1])
             keep_text=Gtk.TextView()
             keep_text.set_monospace(True)
             keep_text.get_buffer().set_text('\n'.join(self.prefs['keep']))
             keepsc=Gtk.ScrolledWindow();keepsc.set_min_content_height(95)
+            frame_editor(keepsc,keep_text)
             set_child(keepsc,keep_text);append(box,keepsc)
             section(tr('Alias pakietu — katalog=wzorzec, jedna para w linii'))
             alias_text=Gtk.TextView();alias_text.set_monospace(True)
             alias_text.get_buffer().set_text(format_aliases(self.prefs['aliases']))
             asc=Gtk.ScrolledWindow();asc.set_min_content_height(100)
+            frame_editor(asc,alias_text)
             set_child(asc,alias_text);append(box,asc)
             source_views={}
             for key, title in (('appimage_dirs', 'Dodatkowe katalogi AppImage — jedna ścieżka w linii'),
@@ -551,6 +578,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                 view=Gtk.TextView();view.set_monospace(True)
                 view.get_buffer().set_text('\n'.join(self.prefs.get(key, [])))
                 scroll=Gtk.ScrolledWindow();scroll.set_min_content_height(65)
+                frame_editor(scroll,view)
                 set_child(scroll,view);append(box,scroll)
                 source_views[key]=view
             hint=label(tr('Ścieżki bezwzględne lub ~/; odczyt bez uruchamiania plików.'))
@@ -1320,13 +1348,14 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
 
             run_gui_job(operation, finish, GLib.idle_add)
 
-        def _quarantine_notice(self, message):
+        def _quarantine_notice(self, message, title=None):
             """Show a visible GTK notice instead of a hard-to-see footer update."""
-            dialog=Gtk.Window(title=tr('Historia'),transient_for=self.win,modal=True)
+            dialog=Gtk.Window(title=title or tr('Historia'),transient_for=self.win,modal=True)
             pane=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=14)
             for side in ('top','bottom','start','end'):
                 getattr(pane,'set_margin_'+side)(16)
             note=label(message)
+            note.set_selectable(True)
             wrap_label(note)
             append(pane,note)
             close=Gtk.Button(label=tr('Zamknij'))
@@ -1335,6 +1364,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
             configure_gtk_dialog(dialog,pane,Gtk,Gdk,Pango)
             dialog.present() if GTK4 else dialog.show_all()
             close.grab_focus()
+            note.select_region(0,0)
 
         def adopt_inventory(self, run_id, resume_purge=False):
             explanation=(tf('Operacja: {run_id}',run_id=run_id)+'\n'+
@@ -1342,7 +1372,8 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
             def commit():
                 def done(ok, result):
                     if not ok:
-                        self._quarantine_notice(tf('Naprawa zablokowana: {error}',error=result))
+                        self._quarantine_notice(quarantine_error_details(result,_language),
+                                                title=tr('Zatwierdź aktualny stan'))
                     else:
                         self.refresh_quarantine()
                         if resume_purge:
@@ -1381,6 +1412,10 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                     self._quarantine_notice(note)
                     return
                 issue=issues[0]
+                if issue['code']=='ENTRY_IDENTITY_CHANGED':
+                    self._quarantine_notice(identity_issue_details(issue,run_id,_language),
+                                            title=tr('Zablokowano PURGE'))
+                    return
                 summary=(tf('Operacja: {run_id}',run_id=run_id)+'\n'+
                          tf('Użytkownik: {user}',user=who)+'\n'+
                          polkit_text+'\n'+
@@ -1482,9 +1517,13 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                     home,engine.xdg_roots(home),run_id) for run_id in run_ids]
             def preview_ready(ok, outcome):
                 if not ok:
-                    self.status.set_text(tf('Zablokowano PURGE: {error}',error=outcome))
+                    self.status.set_text(tr('Zablokowano PURGE'))
+                    self.status.set_tooltip_text(quarantine_error_details(outcome,_language))
                     if len(run_ids)==1 and engine.quarantine_access_recoverable_error(outcome):
                         self.access_diagnostics(run_ids[0], resume_purge=True)
+                    else:
+                        self._quarantine_notice(quarantine_error_details(outcome,_language),
+                                                title=tr('Zablokowano PURGE'))
                     return
                 details='\\n'.join(
                     f"{p['run_id']}: {p['objects']} entries, {p['bytes']} B"
@@ -1502,7 +1541,10 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                         if success:
                             self.status.set_text(tr('Trwale usunięto obiektów: ')+str(result))
                         else:
-                            self.status.set_text(tf('Zablokowano PURGE: {error}',error=result))
+                            self.status.set_text(tr('Zablokowano PURGE'))
+                            self.status.set_tooltip_text(quarantine_error_details(result,_language))
+                            self._quarantine_notice(quarantine_error_details(result,_language),
+                                                    title=tr('Zablokowano PURGE'))
                     self._quarantine_job(operation,done,'Trwałe usuwanie z kwarantanny…')
                 self.prompt(tr('Trwałe usunięcie'),details+'\\n\\n'+
                             tr('Nie można cofnąć tej operacji.'),'PURGE',execute)

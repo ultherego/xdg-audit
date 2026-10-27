@@ -20,6 +20,18 @@ MAX_MANIFEST = 64 * 1024 * 1024
 ALLOWED_STATUSES = {"planned", "moving", "moved", "restoring", "restored", "purging", "purged"}
 
 
+class QuarantineIdentityMismatch(ValueError):
+    """Preserve exact read-only identity evidence when preflight refuses a run."""
+    def __init__(self, run_id, path, expected, actual):
+        self.run_id = run_id
+        self.path = Path(path)
+        self.expected = tuple(expected)
+        self.actual = tuple(actual)
+        super().__init__(f"Quarantine inode substitution: {self.path}; "
+                         f"recorded device/inode/type={self.expected}; "
+                         f"current device/inode/type={self.actual}")
+
+
 def _open_path(path: Path) -> int:
     """Open every ancestor without following symlinks; caller closes fd."""
     if not path.is_absolute() or ".." in path.parts:
@@ -381,7 +393,8 @@ def inspect_run(home: Path, roots: dict[str, Path], run_id: str, mounts_checker,
                     else:
                         _check_owner(info, run_stat.st_dev)
                         if _identity(info) != entry["identity"]:
-                            raise ValueError("Quarantine inode substitution")
+                            raise QuarantineIdentityMismatch(run_id, entry["destination"],
+                                                             entry["identity"], _identity(info))
                         if entry["status"] in ("purged", "restored"):
                             raise ValueError("Journal claims object absent, but it exists")
                         if stat.S_ISDIR(info.st_mode) and mounts_checker(entry["destination"]) is not False:

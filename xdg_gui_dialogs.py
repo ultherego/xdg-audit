@@ -201,6 +201,8 @@ def qt_dialog_helpers(QtWidgets, QtCore, tr):
         _, (max_width, max_height) = _qt_bounds(dialog, QtWidgets)
         label = QtWidgets.QLabel(str(text))
         label.setTextFormat(QtCore.Qt.TextFormat.PlainText)
+        label.setTextInteractionFlags(QtCore.Qt.TextInteractionFlag.TextSelectableByMouse |
+                                      QtCore.Qt.TextInteractionFlag.TextSelectableByKeyboard)
         label.setWordWrap(True)
         metrics = label.fontMetrics()
         natural = max((metrics.horizontalAdvance(line) for line in str(text).split('\n')), default=0)

@@ -5,6 +5,12 @@
 
 ## New since v1.7.0-rc1
 
+- Build/test DEB, RPM and Arch packages in Actions; create version tags and
+  prepare signed APT/RPM publication, release assets and opt-in AUR submission.
+- Keep empty settings editors visible with theme-aware borders and focus.
+- Show actionable PURGE refusal dialogs with exact recorded/current identity
+  evidence; permission repair and ADOPT cannot bypass identity mismatches.
+
 - Automated real-widget GUI lifecycle checks on all four X11 backends and GTK4/Qt6
   native Wayland, using internally created disposable data and synthetic package
   inventory, with cancellation, SHA-256 and history assertions.
