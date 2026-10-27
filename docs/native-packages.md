@@ -133,7 +133,7 @@ package checks. It then signs/publishes APT and RPM, uploads signed release
 assets, and creates a GitHub Release. RC/dev tags become GitHub prereleases.
 AUR submission is opt-in and runs only for final versions; the tested RC recipe
 is still available as a release asset for explicit local builds. The separate
-development recipe is [packaging/arch/PKGBUILD](../packaging/arch/PKGBUILD) with
+development recipe is [packaging/arch/PKGBUILD](https://github.com/ultherego/xdg-audit/blob/main/packaging/arch/PKGBUILD) with
 checked-in `.SRCINFO`; it follows `main` as `xdg-audit-git`.
 
 Release assets include DEB, signed RPM, an Arch package, the AUR recipe ZIP,

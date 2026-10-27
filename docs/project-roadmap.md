@@ -50,7 +50,7 @@ ruleset is optional: the required archive gate already depends on them.
   See the [validated scope and results](testing-and-release-status.md).
 
 Merged PR branches are maintained by the
-[branch-cleanup workflow](../.github/workflows/branch-cleanup.yml). It runs only
+[branch-cleanup workflow](https://github.com/ultherego/xdg-audit/actions/workflows/branch-cleanup.yml). It runs only
 on `main`, preserves open-PR dependencies and changed branch heads, and uses
 an atomic Git push with per-ref leases. Closed but unmerged PRs are retained
 apart from the explicitly reviewed, commit-pinned PR #24 → #25 supersession.
