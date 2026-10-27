@@ -32,7 +32,8 @@ def run(args, **kwargs):
 def rejected(args):
     result = subprocess.run([str(arg) for arg in args], capture_output=True, text=True)
     if result.returncode == 0:
-        raise AssertionError('Tampered repository/package unexpectedly accepted')
+        raise AssertionError('Tampered repository/package unexpectedly accepted:\n' +
+                             result.stdout + '\n' + result.stderr)
     print('PASS tampered input refused:', result.stdout[-500:], result.stderr[-500:], flush=True)
 
 
@@ -110,7 +111,7 @@ def rpm_cycle(work, output, key):
     configuration.mkdir()
     (configuration / 'xdg-audit.repo').write_text(
         '[xdg-audit]\nname=Disposable xdg-audit test repository\n'
-        f'baseurl=file://{public}/rpm/candidate\nenabled=1\ngpgcheck=1\nrepo_gpgcheck=1\n'
+        f'baseurl=file://{public}/rpm/candidate\nenabled=1\ngpgcheck=1\nrepo_gpgcheck=1\nskip_if_unavailable=0\n'
         f'gpgkey=file://{public}/xdg-audit-key.asc\nmetadata_expire=0\n')
     options = ['--setopt=reposdir=' + str(configuration), '--setopt=install_weak_deps=False',
                '--setopt=cachedir=' + str(work / 'dnf-cache')]

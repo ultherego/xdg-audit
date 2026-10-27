@@ -16,7 +16,7 @@ Comment=Audit and safely quarantine leftover user configuration and data
 Exec=/usr/bin/xdg-audit --gui
 Icon=io.github.xdgaudit
 Terminal=false
-Categories=System;Utility;
+Categories=System;
 StartupNotify=true
 '''
 

@@ -167,7 +167,7 @@ def build(root, key, url, *, suite='candidate', debs=(), rpms=()):
         'Architectures: amd64 arm64\nSigned-By: /etc/apt/keyrings/xdg-audit.gpg\n')
     (root / ('xdg-audit-' + suite + '.repo')).write_text(
         '[xdg-audit-' + suite + ']\nname=xdg-audit (' + suite + ')\nbaseurl=' + url + '/rpm/' + suite +
-        '\nenabled=1\ngpgcheck=1\nrepo_gpgcheck=1\ngpgkey=' + url + '/xdg-audit-key.asc\n')
+        '\nenabled=1\ngpgcheck=1\nrepo_gpgcheck=1\nskip_if_unavailable=0\ngpgkey=' + url + '/xdg-audit-key.asc\n')
     # Publish receipts and checksums, never signing material or arbitrary output.
     names = sorted(path for path in root.rglob('*') if path.is_file() and
                    path.name not in ('SHA256SUMS', 'SHA256SUMS.asc') and '.git' not in path.parts)
