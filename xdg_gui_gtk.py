@@ -465,6 +465,8 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
             append(footer,self.move_button)
             self.summary=label('')
             self.status=label(tr('Audyt nie zmienia danych. Kwarantanna wymaga MOVE; można ją przywrócić.'))
+            self.status.set_ellipsize(Pango.EllipsizeMode.END)
+            self.status.set_hexpand(True)
             append(outer,self.status)
             self.start_scan()
             self.win.present() if GTK4 else self.win.show_all()
@@ -1362,6 +1364,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
             configure_gtk_dialog(dialog,pane,Gtk,Gdk,Pango)
             dialog.present() if GTK4 else dialog.show_all()
             close.grab_focus()
+            note.select_region(0,0)
 
         def adopt_inventory(self, run_id, resume_purge=False):
             explanation=(tf('Operacja: {run_id}',run_id=run_id)+'\n'+
@@ -1514,7 +1517,8 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                     home,engine.xdg_roots(home),run_id) for run_id in run_ids]
             def preview_ready(ok, outcome):
                 if not ok:
-                    self.status.set_text(tf('Zablokowano PURGE: {error}',error=outcome))
+                    self.status.set_text(tr('Zablokowano PURGE'))
+                    self.status.set_tooltip_text(quarantine_error_details(outcome,_language))
                     if len(run_ids)==1 and engine.quarantine_access_recoverable_error(outcome):
                         self.access_diagnostics(run_ids[0], resume_purge=True)
                     else:
@@ -1537,7 +1541,8 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                         if success:
                             self.status.set_text(tr('Trwale usunięto obiektów: ')+str(result))
                         else:
-                            self.status.set_text(tf('Zablokowano PURGE: {error}',error=result))
+                            self.status.set_text(tr('Zablokowano PURGE'))
+                            self.status.set_tooltip_text(quarantine_error_details(result,_language))
                             self._quarantine_notice(quarantine_error_details(result,_language),
                                                     title=tr('Zablokowano PURGE'))
                     self._quarantine_job(operation,done,'Trwałe usuwanie z kwarantanny…')
