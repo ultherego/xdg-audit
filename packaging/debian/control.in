@@ -1,0 +1,14 @@
+Package: xdg-audit
+Version: @VERSION@-@RELEASE@
+Section: utils
+Priority: optional
+Architecture: all
+Maintainer: Ulther Ego <ultherego@users.noreply.github.com>
+Depends: python3 (>= 3.10), coreutils, procps, python3-tk
+Recommends: python3-gi, gir1.2-gtk-4.0
+Suggests: python3-pyqt6
+Homepage: https://github.com/ultherego/xdg-audit
+Description: Audit and safely quarantine leftover user configuration and data
+ Inspects installed applications and user XDG directories. Scanning is
+ read-only. MOVE, RESTORE and PURGE require separate explicit confirmations.
+ GTK, Qt and Tk interfaces are supported. No service or autostart is installed.

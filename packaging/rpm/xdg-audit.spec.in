@@ -1,0 +1,41 @@
+Name:           xdg-audit
+Version:        @VERSION@
+Release:        @RELEASE@%{?dist}
+Summary:        Audit and safely quarantine leftover user configuration and data
+License:        MIT
+URL:            https://github.com/ultherego/xdg-audit
+Source0:        xdg-audit-source.tar.gz
+BuildArch:      noarch
+BuildRequires:  python3 >= 3.10
+Requires:       python3 >= 3.10
+Requires:       coreutils
+Requires:       procps-ng
+Requires:       python3-tkinter
+Recommends:     python3-gobject
+Recommends:     gtk4
+Suggests:       python3-qt6
+
+%global debug_package %{nil}
+%global __brp_python_bytecompile %{nil}
+
+%description
+Inspects installed applications and user XDG directories. Scanning is read-only.
+MOVE, RESTORE and PURGE require separate explicit confirmations. Supports GTK,
+Qt and Tk interfaces. Installs no service, autostart or user configuration.
+
+%prep
+%setup -q -n xdg-audit-source
+
+%build
+
+%install
+python3 packaging/install_payload.py --destdir %{buildroot}
+
+%files
+%{_bindir}/xdg-audit
+/usr/lib/xdg-audit/
+%{_datadir}/applications/io.github.xdgaudit.desktop
+%{_datadir}/icons/hicolor/512x512/apps/io.github.xdgaudit.png
+%{_datadir}/icons/hicolor/128x128/apps/io.github.xdgaudit.png
+%doc %{_datadir}/doc/xdg-audit/
+%license %{_datadir}/licenses/xdg-audit/LICENSE

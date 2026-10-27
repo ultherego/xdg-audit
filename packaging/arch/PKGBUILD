@@ -1,0 +1,29 @@
+# Maintainer: Ulther Ego <ultherego at users dot noreply dot github dot com>
+pkgname=xdg-audit-git
+pkgver=1.7.0rc2.r1.gd3d23be
+pkgrel=1
+pkgdesc='Audit and safely quarantine leftover user configuration and data'
+arch=('any')
+url='https://github.com/ultherego/xdg-audit'
+license=('MIT')
+depends=('python>=3.10' 'coreutils' 'procps-ng' 'tk')
+makedepends=('git')
+optdepends=('python-gobject: GTK interface'
+            'gtk4: preferred GTK4 interface'
+            'python-pyqt6: Qt6 interface')
+provides=('xdg-audit')
+conflicts=('xdg-audit')
+source=('xdg-audit::git+https://github.com/ultherego/xdg-audit.git#branch=main')
+sha256sums=('SKIP')
+
+pkgver() {
+  cd "$srcdir/xdg-audit"
+  local version
+  version=$(python packaging/install_payload.py --version arch)
+  printf '%s.r%s.g%s' "$version" "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+}
+
+package() {
+  cd "$srcdir/xdg-audit"
+  python packaging/install_payload.py --destdir "$pkgdir"
+}
