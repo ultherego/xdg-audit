@@ -309,6 +309,11 @@ for the current contract and its limitations.
 
 ## 🧪 Testing & release status
 
+The [GUI lifecycle harness](docs/gui-lifecycle-testing.md) exercises real
+MOVE/RESTORE/PURGE controls and dialogs on disposable data, including cancelled
+confirmations, exact file hashes and retained history. Installed inventory is
+synthetic in this harness; native provider CI remains separate.
+
 The unreleased development version on `main` is **`1.7.0-rc2`**. The most recent tagged prerelease is **[v1.7.0-rc1](https://github.com/ultherego/xdg-audit/releases/tag/v1.7.0-rc1)**.
 
 GitHub Actions runs Python 3.10–3.14 tests, GTK4/GTK3/Qt6/Tk adaptive-dialog and tab checks under Xvfb, native GTK4/Qt6 Wayland startup with headless Weston, a synthetic benchmark, the isolated end-to-end quarantine/restore/purge test, real SIGKILL recovery checkpoints, native Arch/pacman, Ubuntu/dpkg and Fedora/RPM protection and lifecycle checks, live snapd with disabled parallel instances and disposable user data, a Gio desktop-launch test, GTK disk-full error handling, and source ZIP/tar.gz integrity checks. The owner confirmed the tested GUI functionality on 2026-10-26. Additional GNOME/KDE/Xfce session coverage remains separately recorded in the readiness checklist.
