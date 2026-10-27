@@ -42,6 +42,11 @@ def run(backend: str, duration: float = 3.0, *, lifecycle=False, output_dir=None
                    GDK_BACKEND='wayland', QT_QPA_PLATFORM='wayland',
                    WAYLAND_DEBUG='client', LIBGL_ALWAYS_SOFTWARE='1',
                    GALLIUM_DRIVER='llvmpipe')
+        if backend == 'qt6':
+            # Headless Weston has no input seat. Qt 6.4's compositor input
+            # context dereferences it when drawing a QLineEdit cursor. Use Qt's
+            # compose context for this harness, keeping native Wayland rendering.
+            env['QT_IM_MODULE'] = 'compose'
         env.pop('DISPLAY', None)  # Fail rather than silently falling back to X11.
         with compositor_log.open('w+') as wc, client_log.open('w+') as cc:
             weston = subprocess.Popen(

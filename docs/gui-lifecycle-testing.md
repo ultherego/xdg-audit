@@ -53,6 +53,13 @@ The wrapper creates a private runtime directory and starts headless Weston
 without XWayland. It removes DISPLAY, forces native toolkit backends and
 requires both a Wayland surface trace and successful lifecycle completion.
 The child also verifies the toolkit's actual display backend.
+Qt uses its compose input context inside this harness because headless Weston
+has no keyboard seat; Qt 6.4's compositor input context can otherwise crash
+while drawing a text cursor. Native Wayland rendering and real confirmation
+widgets remain required. The installed application's input settings are untouched.
+
+The lifecycle check also verifies that the Tk quarantine actions are mapped and
+clickable. They wrap into three columns so Restore remains visible in its pane.
 
 ## CI evidence and scope
 
