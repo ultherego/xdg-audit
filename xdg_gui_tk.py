@@ -17,6 +17,7 @@ from xdg_inspector import details_text, open_item_location
 from xdg_gui_jobs import run_gui_job
 from xdg_gui_layout import visible_optional_scopes
 from xdg_gui_dialogs import tk_dialog_helpers, new_tk_dialog, fit_tk_dialog
+from xdg_quarantine_messages import quarantine_error_details, identity_issue_details
 
 SCOPE_LABELS = [('Wszystko', 'all'), ('Konfiguracja', 'config'),
                 ('Dane aplikacji', 'data'), ('Stan', 'state'),
@@ -428,19 +429,25 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
             show=tk.BooleanVar(value=current['show_active'])
             ttk.Checkbutton(frame,text=tr('Pokazuj aktywne i chronione'),variable=show).pack(anchor='w',pady=(0,12))
             ttk.Label(frame,text=tr('Zachowaj — jedna nazwa katalogu w linii')).pack(anchor='w')
-            keep=tk.Text(frame,height=5)
+            def settings_editor(height):
+                return tk.Text(frame,height=height,relief='flat',borderwidth=0,
+                    background=self.colors['base'],foreground=self.colors['text'],
+                    insertbackground=self.colors['text'],highlightthickness=1,
+                    highlightbackground=self.colors['muted'],highlightcolor=self.colors['accent'],
+                    padx=10,pady=8)
+            keep=settings_editor(5)
             keep.pack(fill='x'); keep.insert('1.0','\n'.join(current['keep']))
             ttk.Label(frame,text=tr('Język / Language')).pack(anchor='w',pady=(10,0))
             language=tk.StringVar(value='English' if current.get('language')=='en' else 'Polski')
             ttk.Combobox(frame,textvariable=language,values=('Polski', 'English'),state='readonly').pack(fill='x',pady=(3,8))
             ttk.Label(frame,text=tr('Alias — katalog=wzorzec')).pack(anchor='w',pady=(10,0))
-            alias=tk.Text(frame,height=5)
+            alias=settings_editor(5)
             alias.pack(fill='x');alias.insert('1.0',format_aliases(current['aliases']))
             source_views={}
             for key, title in (('appimage_dirs', 'Dodatkowe katalogi AppImage — jedna ścieżka w linii'),
                                ('binary_dirs', 'Dodatkowe katalogi binarek — jedna ścieżka w linii')):
                 ttk.Label(frame,text=tr(title)).pack(anchor='w',pady=(10,0))
-                view=tk.Text(frame,height=3)
+                view=settings_editor(3)
                 view.pack(fill='x');view.insert('1.0','\n'.join(current.get(key, [])))
                 source_views[key]=view
             ttk.Label(frame,text=tr('Ścieżki bezwzględne lub ~/; odczyt bez uruchamiania plików.'),
@@ -884,6 +891,9 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                     messagebox.showinfo(tr('Diagnostyka dostępu'),note,parent=root)
                     return
                 issue=issues[0]
+                if issue['code']=='ENTRY_IDENTITY_CHANGED':
+                    messagebox.showerror(tr('Zablokowano PURGE'),identity_issue_details(issue,run_id,_language),parent=root)
+                    return
                 msg=(tf('Użytkownik: {user}',user=report['identity']['user'])+
                      '\n'+tf('pkexec zainstalowany: {state}',
                                state=tr('tak') if report['identity']['pkexec_installed'] else tr('nie'))+
@@ -949,7 +959,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
             run_ids=tuple(run_ids)
             def preview_ready(ok, result):
                 if not ok:
-                    messagebox.showerror(tr('Zablokowano PURGE'),str(result),parent=root)
+                    messagebox.showerror(tr('Zablokowano PURGE'),quarantine_error_details(result,_language),parent=root)
                     if len(run_ids)==1 and engine.quarantine_access_recoverable_error(result):
                         self.access_diagnostics(run_ids[0], resume_purge=True)
                     return
@@ -975,7 +985,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                         messagebox.showinfo(tr('Kwarantanna'),
                             tr('Usunięto obiektów: ')+str(outcome),parent=root)
                     else:
-                        messagebox.showerror(tr('Zablokowano PURGE'),str(outcome),parent=root)
+                        messagebox.showerror(tr('Zablokowano PURGE'),quarantine_error_details(outcome,_language),parent=root)
                 self._quarantine_job(execute,done,'Trwałe usuwanie z kwarantanny…')
             self._quarantine_job(
                 lambda:[engine.purge_quarantine_run(

@@ -86,6 +86,10 @@ The following matrix concerns additional, separately identified environments.
 - [x] Document and test user installation, update and desktop-registration
   removal (`install_desktop.py` currently points to the existing checkout) —
   [instructions and tests](desktop-installation.md).
+- Native package and tag pipelines are implemented: [builds, trust tests and owner setup](native-packages.md).
+  Production publication requires the dedicated signing key/fingerprint; AUR
+  additionally needs its account key and verified SSH host key.
+- [ ] Configure production package signing and optionally AUR publication.
 - [ ] Publish a **new RC** after acceptance, then consider a stable release.
 
 ## 5. Application installation sources

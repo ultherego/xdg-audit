@@ -12,6 +12,7 @@ from xdg_inspector import details_text, open_item_location
 from xdg_gui_jobs import run_gui_job
 from xdg_gui_layout import visible_optional_scopes
 from xdg_gui_dialogs import qt_dialog_helpers, fit_qt_dialog
+from xdg_quarantine_messages import quarantine_error_details, identity_issue_details
 
 
 def import_qt():
@@ -613,7 +614,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
             if not ok or token!='ADOPT':return
             def done(success,outcome):
                 if not success:
-                    messages.warning(self,tr('Zatwierdź aktualny stan'),str(outcome))
+                    messages.warning(self,tr('Zatwierdź aktualny stan'),quarantine_error_details(outcome,_language))
                 else:
                     self.refresh_quarantine()
                     if resume_purge:
@@ -651,6 +652,9 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
                     messages.information(self,tr('Diagnostyka dostępu'),note)
                     return
                 issue=issues[0]
+                if issue['code']=='ENTRY_IDENTITY_CHANGED':
+                    messages.critical(self,tr('Zablokowano PURGE'),identity_issue_details(issue,run_id,_language))
+                    return
                 message=(tf('Użytkownik: {user}',user=report['identity']['user'])+
                          '\n'+tf('pkexec zainstalowany: {state}',
                                    state=tr('tak') if report['identity']['pkexec_installed'] else tr('nie'))+
@@ -724,7 +728,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
             run_ids=tuple(run_ids)
             def completed(ok, outcome):
                 if not ok:
-                    messages.critical(self,tr('Zablokowano PURGE'),str(outcome))
+                    messages.critical(self,tr('Zablokowano PURGE'),quarantine_error_details(outcome,_language))
                     if len(run_ids)==1 and engine.quarantine_access_recoverable_error(outcome):
                         self.access_diagnostics_dialog(run_ids[0], resume_purge=True)
                     return
@@ -752,7 +756,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
                         messages.information(self,tr('Kwarantanna'),
                             tr('Usunięto obiektów: ')+str(result))
                     else:
-                        messages.critical(self,tr('Zablokowano PURGE'),str(result))
+                        messages.critical(self,tr('Zablokowano PURGE'),quarantine_error_details(result,_language))
                 self._quarantine_job(delete,after_delete,'Trwałe usuwanie z kwarantanny…')
             self._quarantine_job(
                 lambda:[engine.purge_quarantine_run(
@@ -860,12 +864,18 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
             shown = QtWidgets.QCheckBox(tr('Pokazuj aktywne i chronione'))
             shown.setChecked(current['show_active'])
             layout.addWidget(shown)
+            def frame_editor(editor):
+                editor.setStyleSheet('QPlainTextEdit { border: 1px solid palette(mid); '
+                    'border-radius: 7px; padding: 8px; background: palette(base); color: palette(text); } '
+                    'QPlainTextEdit:focus { border: 1px solid palette(highlight); }')
             layout.addWidget(QtWidgets.QLabel(tr('Zachowaj — jedna nazwa katalogu w linii')))
             keep = QtWidgets.QPlainTextEdit('\n'.join(current['keep']))
+            frame_editor(keep)
             keep.setMaximumHeight(110)
             layout.addWidget(keep)
             layout.addWidget(QtWidgets.QLabel(tr('Alias — katalog=wzorzec')))
             alias = QtWidgets.QPlainTextEdit(format_aliases(current['aliases']))
+            frame_editor(alias)
             alias.setMaximumHeight(125)
             layout.addWidget(alias)
             source_views = {}
@@ -873,6 +883,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
                                ('binary_dirs', 'Dodatkowe katalogi binarek — jedna ścieżka w linii')):
                 layout.addWidget(QtWidgets.QLabel(tr(title)))
                 editor = QtWidgets.QPlainTextEdit('\n'.join(current.get(key, [])))
+                frame_editor(editor)
                 editor.setMaximumHeight(80)
                 layout.addWidget(editor)
                 source_views[key] = editor

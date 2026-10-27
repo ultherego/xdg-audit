@@ -1,8 +1,5 @@
 """Native package payload boundaries and source/version compatibility."""
-import importlib.util
-import json
 from pathlib import Path
-import subprocess
 import sys
 import tempfile
 import unittest
@@ -11,6 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'packaging'))
 import install_payload as payload
 import repository
+from check_version import check
 
 
 class PackagingTests(unittest.TestCase):
@@ -56,6 +54,18 @@ class PackagingTests(unittest.TestCase):
         self.assertEqual(payload.package_version('1.7.0-rc2', 'deb'), '1.7.0~rc2')
         self.assertEqual(payload.package_version('1.7.0-rc2', 'rpm'), '1.7.0~rc2')
         self.assertEqual(payload.package_version('1.7.0-rc2', 'arch'), '1.7.0rc2')
+
+    def test_release_tag_must_match_source_version(self):
+        check(ROOT, 'v' + payload.version(ROOT))
+        with self.assertRaises(ValueError):
+            check(ROOT, 'v99.0.0')
+
+    def test_repository_output_refuses_incidental_private_files(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            (base / 'private-key.asc').write_text('private test fixture')
+            with self.assertRaisesRegex(ValueError, 'Unexpected file'):
+                repository.safe_output(base)
 
     def test_repository_rejects_untrusted_url_and_output_paths(self):
         for url in ('http://example.org', 'https://name:secret@example.org',

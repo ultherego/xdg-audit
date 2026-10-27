@@ -111,10 +111,11 @@ def diagnose_access(home: Path, roots: dict[str, Path], run_id: str) -> dict:
     seen_nodes = 0
     unsealed = False
 
-    def problem(code, path, info=None, repairable=False, add_bits=stat.S_IRUSR):
+    def problem(code, path, info=None, repairable=False, add_bits=stat.S_IRUSR,
+                expected_identity=None):
         if len(findings) >= MAX_ISSUES:
             return
-        findings.append({
+        finding = {
             "code": code, "path": str(path),
             "relative": str(path.relative_to(base / run_id)),
             "mode": format(stat.S_IMODE(info.st_mode), "03o") if info else None,
@@ -122,7 +123,11 @@ def diagnose_access(home: Path, roots: dict[str, Path], run_id: str) -> dict:
             "repairable": bool(repairable),
             "suggested_mode": (format(stat.S_IMODE(info.st_mode) | add_bits, "03o")
                                if repairable else None),
-        })
+        }
+        if expected_identity is not None:
+            finding['expected_identity'] = list(expected_identity)
+            finding['actual_identity'] = list(_identity(info)) if info else None
+        findings.append(finding)
 
     def walk(parentfd, name, path, depth):
         nonlocal seen_nodes
@@ -197,7 +202,8 @@ def diagnose_access(home: Path, roots: dict[str, Path], run_id: str) -> dict:
         try:
             actual = os.stat(name, dir_fd=scopefd, follow_symlinks=False)
             if _identity(actual) != identity:
-                problem("ENTRY_IDENTITY_CHANGED", scope_path / name, actual)
+                problem("ENTRY_IDENTITY_CHANGED", scope_path / name, actual,
+                        expected_identity=identity)
                 continue
             walk(scopefd, name, scope_path / name, 0)
         except FileNotFoundError:

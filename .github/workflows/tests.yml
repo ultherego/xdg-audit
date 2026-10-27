@@ -59,7 +59,7 @@ jobs:
 
   release:
     name: GitHub release on version tag
-    if: startsWith(github.ref, 'refs/tags/v') && github.event_name == 'push'
+    if: startsWith(github.ref, 'refs/tags/v') && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     needs: [test, gui-smoke, wayland-smoke, benchmark, quarantine-cycle, native-sources, snapd-live, native-packages, archives, publish-package-repository]
     runs-on: ubuntu-latest
     permissions:
@@ -102,8 +102,8 @@ jobs:
 
   publish-package-repository:
     name: Publish signed APT and RPM repositories
-    if: startsWith(github.ref, 'refs/tags/v') && github.event_name == 'push'
-    needs: [native-packages, archives]
+    if: startsWith(github.ref, 'refs/tags/v') && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    needs: [native-packages, archives, package-publication-check]
     permissions:
       contents: write
     uses: ./.github/workflows/package-repository.yml
@@ -113,7 +113,7 @@ jobs:
 
   publish-aur:
     name: Publish release recipe to AUR
-    if: startsWith(github.ref, 'refs/tags/v') && github.event_name == 'push' && vars.AUR_PUBLISH_ENABLED == 'true'
+    if: startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-') && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && vars.AUR_PUBLISH_ENABLED == 'true'
     needs: [release]
     runs-on: ubuntu-latest
     environment: aur
@@ -159,6 +159,8 @@ jobs:
         run: xvfb-run -a /usr/bin/python3 scripts/gui_async_purge_smoke.py
       - name: GTK4 shows disk-full error and refuses PURGE confirmation
         run: xvfb-run -a /usr/bin/python3 scripts/gui_async_purge_smoke.py --disk-full
+      - name: GTK4 shows exact identity mismatch details and refuses PURGE confirmation
+        run: xvfb-run -a /usr/bin/python3 scripts/gui_async_purge_smoke.py --identity-mismatch
       - name: Qt6 full application startup with Snap scope
         run: xvfb-run -a /usr/bin/python3 scripts/gui_app_smoke.py --backend qt6 --scope snap
       - name: Tk full application startup with Snap scope
@@ -171,6 +173,9 @@ jobs:
       - name: Adaptive GTK3 fallback tabs and dialogs
         if: ${{ !cancelled() && steps.gui-deps.outcome == 'success' }}
         run: xvfb-run -a -s '-screen 0 1600x1000x24' /usr/bin/python3 scripts/gui_layout_smoke.py --backend gtk3 --output-dir gui-layout
+      - name: GTK4 settings input frames on a dark theme
+        if: ${{ !cancelled() && steps.gui-deps.outcome == 'success' }}
+        run: xvfb-run -a -s '-screen 0 1600x1000x24' env GTK_THEME=Adwaita:dark /usr/bin/python3 scripts/gui_layout_smoke.py --backend gtk4 --output-dir gui-layout/dark
       - name: Adaptive Qt6 tabs and content-sized dialogs
         if: ${{ !cancelled() && steps.gui-deps.outcome == 'success' }}
         run: xvfb-run -a -s '-screen 0 1600x1000x24' /usr/bin/python3 scripts/gui_layout_smoke.py --backend qt6 --output-dir gui-layout
@@ -311,7 +316,7 @@ jobs:
             apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=25 update -qq
             DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=25 install -y --no-install-recommends python3 python3-tk git passwd util-linux ca-certificates apt-utils gnupg xvfb xauth x11-utils desktop-file-utils
           elif command -v dnf >/dev/null; then
-            dnf -y --setopt=timeout=30 --setopt=retries=2 install python3 python3-tkinter git shadow-utils util-linux rpm-build rpm-sign createrepo_c gnupg2 xorg-x11-server-Xvfb xorg-x11-xauth xwininfo desktop-file-utils
+            dnf -y --setopt=timeout=30 --setopt=retries=2 install python3 python3-tkinter git shadow-utils util-linux coreutils procps-ng rpm-build rpm-sign createrepo_c gnupg2 xorg-x11-server-Xvfb xorg-x11-xauth xwininfo desktop-file-utils
           else
             pacman -Syu --noconfirm --needed python git shadow util-linux base-devel tk xorg-server-xvfb xorg-xauth xorg-xwininfo desktop-file-utils
           fi
@@ -327,6 +332,35 @@ jobs:
           path: dist/native/${{ matrix.family }}/*
           if-no-files-found: error
           retention-days: 30
+
+  package-publication-check:
+    name: Signed publication rehearsal (local remote)
+    needs: [native-packages, archives]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use the main Ubuntu archive over HTTPS
+        run: |
+          for sources in /etc/apt/sources.list /etc/apt/sources.list.d/*.sources /etc/apt/sources.list.d/*.list; do
+            if [ -f "$sources" ]; then
+              sudo sed -i -e 's|mirror+file:/etc/apt/apt-mirrors.txt|https://archive.ubuntu.com/ubuntu/|g' -e 's|https\?://azure\.archive\.ubuntu\.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' "$sources"
+            fi
+          done
+      - name: Install the actual production signing tools
+        run: |
+          sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=25 -o Acquire::https::Timeout=25 update -qq
+          sudo env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=25 -o Acquire::https::Timeout=25 install -y --no-install-recommends apt-utils rpm createrepo-c gnupg
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: xdg-audit-package-*-${{ github.sha }}
+          path: native-artifacts
+      - uses: actions/download-artifact@v4
+        with:
+          name: xdg-audit-source-${{ github.sha }}
+          path: native-artifacts/source
+      - name: Test first publication, rerun, renewal and tamper refusal without production credentials
+        run: python3 -B packaging/rehearse_publication.py --artifact-dir native-artifacts
 
   snapd-live:
     name: Real snapd inventory and lifecycle

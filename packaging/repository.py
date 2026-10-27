@@ -37,6 +37,13 @@ def safe_output(root):
         if current.is_symlink():
             raise ValueError('Symlink in repository output path')
     root.mkdir(parents=True, exist_ok=True)
+    files = {'xdg-audit-keyring.gpg', 'xdg-audit-key.asc', 'signing-key-fingerprint.txt',
+             'SHA256SUMS', 'SHA256SUMS.asc', '.git'}
+    files.update('xdg-audit-' + suite + extension for suite in ('candidate', 'stable')
+                 for extension in ('.sources', '.repo'))
+    for path in root.iterdir():
+        if path.name not in files and path.name not in ('deb', 'rpm', 'releases'):
+            raise ValueError('Unexpected file in public repository staging directory: ' + path.name)
     if any(path.is_symlink() for path in root.rglob('*')):
         raise ValueError('Symlink in existing repository output')
 

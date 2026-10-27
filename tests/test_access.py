@@ -46,6 +46,17 @@ class AccessTests(unittest.TestCase):
     def write_manifest(self):
         self.manifest.write_text(json.dumps(self.payload), encoding="utf-8")
 
+    def test_identity_mismatch_diagnosis_preserves_recorded_and_actual_numbers(self):
+        self.row['identity'][1] += 100
+        self.write_manifest()
+        manifest = self.manifest.read_bytes()
+        issue = diagnose_access(self.home, self.roots, self.run_id)['issues'][0]
+        self.assertEqual(issue['code'], 'ENTRY_IDENTITY_CHANGED')
+        self.assertEqual(issue['expected_identity'], self.row['identity'])
+        self.assertEqual(issue['actual_identity'][:2], [self.tree.stat().st_dev, self.tree.stat().st_ino])
+        self.assertFalse(issue['repairable'])
+        self.assertEqual(self.manifest.read_bytes(), manifest)
+
     def test_access_denied_pkg_has_exact_path_and_user_identity(self):
         report = diagnose_access(self.home, self.roots, self.run_id)
         self.assertEqual(len(report["issues"]), 1)

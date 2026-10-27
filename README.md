@@ -326,7 +326,7 @@ python3 scripts/build_archives.py --output-dir dist
 
 The quarantine test creates a disposable `HOME`, performs real moves, restores and purge, verifies file hashes and handles simulated conflicts without writing into your real XDG directories. Details: [Safe integration testing](docs/testing-quarantine.md).
 
-Optional per-user desktop-menu registration, updating and safe unregistration are described in [Desktop installation](docs/desktop-installation.md). Distribution packaging is intentionally deferred. See the [changelog](CHANGELOG.md) for version history.
+Optional per-user desktop-menu registration, updating and safe unregistration are described in [Desktop installation](docs/desktop-installation.md). Native DEB/RPM/Arch builds, tag-driven releases and signed APT/RPM repository setup are described in [Native packages](docs/native-packages.md). Production publication requires the documented owner credentials. See the [changelog](CHANGELOG.md) for version history.
 
 Source archives use the explicit allowlist in `scripts/archive-files.json`.
 Add intended source files there when extending the project; incidental checkout

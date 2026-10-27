@@ -155,10 +155,13 @@ def arch_cycle(work, output):
     with zipfile.ZipFile(output / 'xdg-audit-aur.zip', 'w', zipfile.ZIP_DEFLATED) as bundle:
         for name in ('PKGBUILD', '.SRCINFO', 'LICENSE'):
             bundle.write(aur / name, name)
-    vcs = ROOT / 'packaging/arch'
+    vcs = work / 'vcs-recipe'
+    vcs.mkdir()
+    shutil.copyfile(ROOT / 'packaging/arch/PKGBUILD', vcs / 'PKGBUILD')
+    run(['chown', '-R', 'package-test:package-test', vcs])
     actual = subprocess.check_output(['runuser', '-u', 'package-test', '--',
                                       'makepkg', '--printsrcinfo'], cwd=vcs)
-    assert actual == (vcs / '.SRCINFO').read_bytes(), 'Regenerate the VCS .SRCINFO'
+    assert actual == (ROOT / 'packaging/arch/.SRCINFO').read_bytes(), 'Regenerate the VCS .SRCINFO'
     run(['pacman', '-U', '--noconfirm', package])
     check_payload()
     prepare(ROOT, archive, aur, '2')

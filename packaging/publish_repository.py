@@ -114,6 +114,12 @@ def publish(work, artifacts, release_dir, key, publish_new):
     run(['git', '-C', work, 'config', 'user.name', 'github-actions[bot]'])
     run(['git', '-C', work, 'config', 'user.email', '41898282+github-actions[bot]@users.noreply.github.com'])
     run(['git', '-C', work, 'add', '--all'])
+    changed = subprocess.run(['git', '-C', str(work), 'diff', '--cached', '--quiet'])
+    if changed.returncode == 0:
+        print('Published repository already matches this snapshot')
+        return
+    if changed.returncode != 1:
+        raise RuntimeError('Cannot inspect staged repository snapshot')
     run(['git', '-C', work, 'commit', '-m', 'Publish signed xdg-audit package snapshot'])
     run(['git', '-C', work, 'push', 'origin', 'HEAD:refs/heads/packages'])
 
