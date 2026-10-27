@@ -9,6 +9,7 @@ from __future__ import annotations
 import os
 import errno
 from pathlib import Path
+import subprocess
 import sys
 import tempfile
 import threading
@@ -19,7 +20,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 
-def main(disk_full: bool = False, identity_mismatch: bool = False) -> None:
+def main(disk_full: bool = False, identity_mismatch: bool = False, output: Path | None = None) -> None:
     import gi
     gi.require_version("Gtk", "4.0")
     from gi.repository import Gtk, GLib, Gio
@@ -165,6 +166,9 @@ def main(disk_full: bool = False, identity_mismatch: bool = False) -> None:
                                          'quarantine/cache/fixture', 'ADOPT'):
                             if expected not in details:
                                 raise AssertionError('Identity evidence missing from visible dialog: ' + expected)
+                    if output is not None:
+                        output.parent.mkdir(parents=True,exist_ok=True)
+                        subprocess.run(['scrot','-o',str(output)],check=True,timeout=10)
                     return False
                 if prompt is None:
                     raise AssertionError("PURGE confirmation dialog never appeared")
@@ -204,5 +208,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--disk-full', action='store_true')
     parser.add_argument('--identity-mismatch', action='store_true')
+    parser.add_argument('--output', type=Path)
     args = parser.parse_args()
-    main(args.disk_full, args.identity_mismatch)
+    main(args.disk_full, args.identity_mismatch, args.output)

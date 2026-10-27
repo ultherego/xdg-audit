@@ -160,7 +160,7 @@ jobs:
       - name: GTK4 shows disk-full error and refuses PURGE confirmation
         run: xvfb-run -a /usr/bin/python3 scripts/gui_async_purge_smoke.py --disk-full
       - name: GTK4 shows exact identity mismatch details and refuses PURGE confirmation
-        run: xvfb-run -a /usr/bin/python3 scripts/gui_async_purge_smoke.py --identity-mismatch
+        run: xvfb-run -a /usr/bin/python3 scripts/gui_async_purge_smoke.py --identity-mismatch --output gui-layout/gtk4-identity-refusal.png
       - name: Qt6 full application startup with Snap scope
         run: xvfb-run -a /usr/bin/python3 scripts/gui_app_smoke.py --backend qt6 --scope snap
       - name: Tk full application startup with Snap scope
@@ -205,7 +205,7 @@ jobs:
         if: always()
         with:
           name: gui-layout-${{ github.sha }}
-          path: gui-layout/*.png
+          path: gui-layout/**/*.png
           if-no-files-found: ignore
           retention-days: 14
 
