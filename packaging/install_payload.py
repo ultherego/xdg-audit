@@ -34,25 +34,44 @@ def package_version(value, family):
     return value.replace('-', '~') if family in ('deb', 'rpm') else value.replace('-', '')
 
 
+def validate_inputs(root, names):
+    if len(names) != len(set(names)):
+        raise ValueError('Duplicate package inputs')
+    for name in names:
+        if Path(name).is_absolute():
+            raise ValueError('Unsafe package input path')
+        path = root
+        for part in Path(name).parts:
+            if part in ('.', '..'):
+                raise ValueError('Unsafe package input path')
+            path = path / part
+            if path.is_symlink():
+                raise ValueError('Symlink in package input')
+        if not path.is_file():
+            raise ValueError('Missing package input: ' + name)
+    return names
+
+
 def reviewed_files(root):
     manifest = json.loads((root / 'scripts/archive-files.json').read_text())
     names = [name for name in manifest if Path(name).parent == Path('.') and
              name.startswith('xdg_') and name.endswith('.py')]
     names += ['assets/xdg-audit.png', 'assets/xdg-audit-128.png', 'assets/io.github.xdgaudit.png',
               'scripts/install_retention_timer.py']
-    if 'xdg_audit.py' not in names or len(names) != len(set(names)):
+    if 'xdg_audit.py' not in names:
         raise ValueError('Invalid runtime file manifest')
-    for name in names:
-        path = root
-        for part in Path(name).parts:
-            if part in ('.', '..'):
-                raise ValueError('Unsafe runtime path')
-            path = path / part
-            if path.is_symlink():
-                raise ValueError('Symlink in runtime input')
-        if not path.is_file():
-            raise ValueError('Missing runtime input: ' + name)
-    return names
+    return validate_inputs(root, names)
+
+
+def reviewed_documentation(root):
+    manifest = json.loads((root / 'scripts/archive-files.json').read_text())
+    required = {'README.md', 'CHANGELOG.md', 'RELEASE_NOTES.md', 'RESEARCH_ROADMAP.md', 'LICENSE'}
+    names = [name for name in manifest if name in required or
+             (name.startswith('docs/') and Path(name).suffix in {'.md', '.webp', '.png'}) or
+             (name.startswith('assets/') and Path(name).suffix == '.png')]
+    if not required.issubset(names):
+        raise ValueError('Missing reviewed documentation')
+    return validate_inputs(root, names)
 
 
 def stage(root, destination):
@@ -92,7 +111,7 @@ def stage(root, destination):
     copy(root / 'assets/xdg-audit-128.png', 'usr/share/icons/hicolor/128x128/apps/io.github.xdgaudit.png')
     copy(root / 'LICENSE', 'usr/share/licenses/xdg-audit/LICENSE')
     copy(root / 'LICENSE', 'usr/share/doc/xdg-audit/copyright')
-    for name in ('README.md', 'CHANGELOG.md', 'RELEASE_NOTES.md'):
+    for name in reviewed_documentation(root):
         copy(root / name, 'usr/share/doc/xdg-audit/' + name)
     return version(root)
 

@@ -1,5 +1,7 @@
 """Native package payload boundaries and source/version compatibility."""
 from pathlib import Path
+import json
+import re
 import sys
 import tempfile
 import unittest
@@ -12,6 +14,58 @@ from check_version import check
 
 
 class PackagingTests(unittest.TestCase):
+    def test_installed_readme_guides_images_and_documentation_links_resolve(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            target = Path(temporary) / 'payload'
+            payload.stage(ROOT, target)
+            docs = target / 'usr/share/doc/xdg-audit'
+            for name in ('cli.md', 'project-roadmap.md', 'testing-and-release-status.md'):
+                self.assertEqual((docs / 'docs' / name).read_bytes(), (ROOT / 'docs' / name).read_bytes())
+            for path in docs.rglob('*.md'):
+                links = re.findall(r'\]\(([^)]+)\)|src="([^"]+)"', path.read_text())
+                for markdown, image in links:
+                    link = markdown or image
+                    if '://' not in link and not link.startswith('#'):
+                        with self.subTest(document=path.name, link=link):
+                            self.assertTrue((path.parent / link.split('#', 1)[0]).is_file())
+
+    def test_documentation_uses_only_explicitly_reviewed_files(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            names = ['README.md', 'CHANGELOG.md', 'RELEASE_NOTES.md', 'RESEARCH_ROADMAP.md',
+                     'LICENSE', 'docs/cli.md']
+            for name in names:
+                path = root / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text('reviewed fixture')
+            (root / 'scripts').mkdir()
+            (root / 'scripts/archive-files.json').write_text(json.dumps(names))
+            (root / 'docs/private-notes.md').write_text('unreviewed incidental fixture')
+            self.assertEqual(set(payload.reviewed_documentation(root)), set(names))
+
+    def test_documentation_refuses_symlinked_file_or_parent(self):
+        for linked_parent in (False, True):
+            with self.subTest(linked_parent=linked_parent), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary) / 'source'
+                root.mkdir()
+                names = ['README.md', 'CHANGELOG.md', 'RELEASE_NOTES.md', 'RESEARCH_ROADMAP.md',
+                         'LICENSE', 'docs/cli.md']
+                for name in names[:-1]:
+                    (root / name).write_text('reviewed fixture')
+                (root / 'scripts').mkdir()
+                (root / 'scripts/archive-files.json').write_text(json.dumps(names))
+                outside = Path(temporary) / 'outside'
+                outside.mkdir()
+                (outside / 'cli.md').write_text('external sentinel')
+                if linked_parent:
+                    (root / 'docs').symlink_to(outside, target_is_directory=True)
+                else:
+                    (root / 'docs').mkdir()
+                    (root / 'docs/cli.md').symlink_to(outside / 'cli.md')
+                with self.assertRaisesRegex(ValueError, 'Symlink'):
+                    payload.reviewed_documentation(root)
+                self.assertEqual((outside / 'cli.md').read_text(), 'external sentinel')
+
     def test_payload_is_reviewed_and_excludes_checkout_secrets(self):
         with tempfile.TemporaryDirectory() as temporary:
             target = Path(temporary) / 'payload'

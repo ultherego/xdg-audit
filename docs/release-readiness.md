@@ -10,6 +10,7 @@ A checked item requires a linked result; adding a script or test alone does
 not demonstrate that it ran.
 
 Results from 2026-10-26: [verification record](verification-2026-10-26.md).
+Current priorities: [project roadmap](project-roadmap.md).
 
 ## 1. Safety (P0)
 
@@ -26,6 +27,10 @@ Results from 2026-10-26: [verification record](verification-2026-10-26.md).
   [results and scope](verification-2026-10-26.md).
   This covers process termination, not power loss or kernel failure.
 - [ ] Independent security review of the latest changes by a second person.
+- [ ] Investigate the reported device-number change in an existing quarantine
+  run. The inode and type match, but identity verification still refuses PURGE.
+  Detailed diagnostics are implemented; the filesystem cause and a safe
+  recovery design remain unverified. See [remaining work](project-roadmap.md).
 
 ## 2. CI and main protection (P0)
 
@@ -33,9 +38,11 @@ The active `Protect main` ruleset requires a PR, blocks force-push and deletion
 of `main`, and requires Python, Xvfb GUI, benchmark and source-archive checks.
 
 The source archive job depends on Python, GUI, Wayland, benchmark, quarantine,
-native-source and live-snapd jobs. Archive success therefore also requires
-Wayland, isolated quarantine E2E, native Arch/Ubuntu/Fedora and actual snapd
-tests, even when those contexts are not listed directly in the ruleset.
+native-source, live-snapd and native-package jobs. Archive success therefore
+also requires Wayland, isolated quarantine E2E, native Arch/Ubuntu/Fedora,
+actual snapd and DEB/RPM/Arch package tests, even when those contexts are not
+listed directly in the ruleset. Release publication additionally requires
+the disposable repository-publication rehearsal.
 
 - [x] Python 3.10–3.14 and native GUI checks (Xvfb/Weston).
 - [x] Isolated MOVE → RESTORE lifecycle and safety-failure tests.
@@ -44,7 +51,9 @@ tests, even when those contexts are not listed directly in the ruleset.
   [commands, assertions and scope](gui-lifecycle-testing.md). CI results must
   pass before this supplies evidence for the exact commit; real desktop-session
   acceptance below remains separate.
-- [x] Archive and release gates depend on Wayland, E2E, native-source and live-snapd checks.
+- [x] Archive and release gates depend on Wayland, E2E, native-source,
+  live-snapd and native-package checks; release also requires publication
+  rehearsal — [PR #35 results](https://github.com/ultherego/xdg-audit/actions/runs/40515908169).
 - [ ] **Optional:** list Wayland and E2E directly in the ruleset so administrators
   can see them individually as required checks. This requires GitHub
   administrative permission; do not bypass access controls.
@@ -86,7 +95,9 @@ The following matrix concerns additional, separately identified environments.
 - [x] Document and test user installation, update and desktop-registration
   removal (`install_desktop.py` currently points to the existing checkout) —
   [instructions and tests](desktop-installation.md).
-- Native package and tag pipelines are implemented: [builds, trust tests and owner setup](native-packages.md).
+- [x] Native package and tag pipelines are implemented:
+  [builds, trust tests and owner setup](native-packages.md),
+  [validated results](https://github.com/ultherego/xdg-audit/actions/runs/40515908169).
   Production publication requires the dedicated signing key/fingerprint; AUR
   additionally needs its account key and verified SSH host key.
 - [ ] Configure production package signing and optionally AUR publication.
