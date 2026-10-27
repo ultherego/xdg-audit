@@ -7,6 +7,15 @@ from __future__ import annotations
 
 LANGUAGES = {'pl': 'Polski', 'en': 'English'}
 EN = {
+    'Ponowna weryfikacja urządzenia': 'Revalidate device identity',
+    'Wpisz REVALIDATE:': 'Type REVALIDATE:',
+    'Ponowna weryfikacja zablokowana: {error}': 'Device revalidation blocked: {error}',
+    'Jeżeli zmienił się tylko numer urządzenia, użyj „Sprawdź dostęp…”. Osobna operacja REVALIDATE wymaga zgodności pełnego spisu plików i sum SHA-256.': 'If only the device number changed, use “Check access…”. A separate REVALIDATE operation requires the complete inventory and SHA-256 hashes to match.',
+    'System plików: {kind}; UUID: {uuid}; subwolumen: {subvolume}': 'Filesystem: {kind}; UUID: {uuid}; subvolume: {subvolume}',
+    'Numer urządzenia: {before} → {after}; zweryfikowane pozycje: {count}.': 'Device number: {before} → {after}; verified entries: {count}.',
+    'Pełny spis nazw, inode, typów, rozmiarów i sum SHA-256 zgadza się po zmianie wyłącznie numeru urządzenia.': 'The complete inventory of names, inodes, types, sizes and SHA-256 hashes matches after changing only the device number.',
+    'REVALIDATE zapisze zweryfikowaną aktualną tożsamość urządzenia w dzienniku. Nie usunie plików. PURGE wymaga osobnej weryfikacji i osobnego potwierdzenia.': 'REVALIDATE records the verified current device binding in the journal. It does not delete files. PURGE requires separate verification and separate confirmation.',
+    'STARY DZIENNIK: nie zapisano historycznego UUID systemu plików. Zgodność danych i inode nie dowodzi, że to ten sam historyczny system plików. Zatwierdzasz zweryfikowane dane w AKTUALNYM systemie plików.': 'LEGACY JOURNAL: the historical filesystem UUID was not recorded. Matching data and inodes do not prove this is the same historical filesystem. You are approving the verified data on the CURRENT filesystem.',
     'Tożsamość obiektu w kwarantannie nie zgadza się z dziennikiem.': 'The quarantined object identity does not match the journal.',
     'Zapisano:': 'Recorded:',
     'Odczytano teraz:': 'Read now:',

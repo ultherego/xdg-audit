@@ -1,5 +1,8 @@
 # Quarantine lifecycle
 
+For a device-number-only refusal, see
+[filesystem diagnosis and separately confirmed revalidation](quarantine-device-identity.md).
+
 New quarantine runs keep the v3 intent journal format for compatibility,
 with an additional complete `tree_inventory` containing inode identities,
 SHA-256 file hashes and symlink destinations. All destructive operations

@@ -8,13 +8,15 @@ acceptance criteria live in the [release-readiness checklist](release-readiness.
 
 ## Remaining work, in order
 
-1. **Investigate the reported quarantine device-identity change.** An existing
+1. **Validate recovery of the reported quarantine device-identity change.** An existing
    run records a different device number from the current object, while its
    inode and file type match. Detailed errors now expose those values, but
-   PURGE remains blocked. Collect read-only filesystem/mount evidence and
-   reproduce the change before choosing a recovery design. Matching inode
-   numbers alone cannot prove that the object is unchanged; do not edit the
-   journal or bypass identity checks.
+   PURGE initially remains blocked. The read-only diagnosis and separately
+   confirmed `REVALIDATE` path require exact inventory/hash agreement, and
+   new Btrfs moves also record persistent filesystem/subvolume identity.
+   [Recovery contract and actual-remount CI](quarantine-device-identity.md).
+   The owner's actual filesystem and affected run still require targeted
+   validation; matching inode numbers alone never authorize recovery.
 2. **Obtain an independent security review** of the latest quarantine and
    publication changes by a second person. Automated regression results do
    not close this item.

@@ -24,10 +24,14 @@ MAX_ISSUES = 30
 
 
 def needs_access_recovery(exc: BaseException) -> bool:
-    """Only trigger guided ACCESS/ADOPT for known recoverable preflight errors.
+    """Only trigger guided diagnosis for narrowly identified preflight errors.
 
-    Other manifest/inode/hash failures must remain blocked without adoption.
+    Device-only changes may offer separately confirmed REVALIDATE after complete
+    inventory proof. Other inode/hash failures remain blocked without adoption.
     """
+    from xdg_quarantine_lifecycle import QuarantineIdentityMismatch
+    if isinstance(exc, QuarantineIdentityMismatch):
+        return exc.expected[0] != exc.actual[0] and exc.expected[1:] == exc.actual[1:]
     return (isinstance(exc, PermissionError) or
             (isinstance(exc, ValueError) and str(exc) in {
                 "Missing recursive inventory; legacy run requires adoption",
@@ -127,6 +131,13 @@ def diagnose_access(home: Path, roots: dict[str, Path], run_id: str) -> dict:
         if expected_identity is not None:
             finding['expected_identity'] = list(expected_identity)
             finding['actual_identity'] = list(_identity(info)) if info else None
+            finding['changed_fields'] = [name for index, name in enumerate(('device', 'inode', 'type'))
+                                         if info and expected_identity[index] != _identity(info)[index]]
+            try:
+                from xdg_filesystem import filesystem_context
+                finding['filesystem'] = filesystem_context(path, _identity(info))
+            except (OSError, ValueError) as error:
+                finding['filesystem'] = {'error': str(error)}
         findings.append(finding)
 
     def walk(parentfd, name, path, depth):
@@ -210,9 +221,23 @@ def diagnose_access(home: Path, roots: dict[str, Path], run_id: str) -> dict:
             problem("ENTRY_MISSING", scope_path / name)
         finally:
             os.close(scopefd)
+    revalidation = None
+    if any(issue.get('changed_fields') == ['device'] for issue in findings):
+        try:
+            from xdg_audit import nested_mounts_status
+            from xdg_quarantine_lifecycle import device_revalidation_plan, device_revalidation_summary
+            revalidation = {"eligible": True, **device_revalidation_summary(
+                device_revalidation_plan(home, roots, run_id, nested_mounts_status))}
+        except (OSError, ValueError) as error:
+            revalidation = {"eligible": False, "error": str(error), "purge_authorized": False}
+        if not revalidation.get('eligible'):
+            for issue in findings:
+                if issue.get('changed_fields') == ['device']:
+                    issue['revalidation_error'] = revalidation['error']
     return {"run_id": run_id, "identity": authority_context(),
             "issues": findings, "truncated": len(findings) >= MAX_ISSUES,
             "unsealed": unsealed,
+            "device_revalidation": revalidation,
             "note": "Diagnosis never authorizes purge or changes data."}
 
 

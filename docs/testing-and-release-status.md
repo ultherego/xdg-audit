@@ -18,6 +18,9 @@ GitHub Actions covers:
   plus GTK4/Qt6 workflows on native Wayland with headless Weston.
 - Isolated quarantine lifecycle, real `SIGKILL` recovery checkpoints,
   permission failures, GTK disk-full handling and Gio desktop launching.
+- Actual Btrfs remount/device-number changes, persistent FS/subvolume UUID
+  checks, snapshot refusal, explicit revalidation and separate PURGE/RESTORE.
+  [Contract and test scope](quarantine-device-identity.md).
 - Native Arch/pacman, Ubuntu/dpkg and Fedora/RPM inventory protection and
   lifecycle checks, plus live snapd with a disabled parallel instance.
 - DEB/RPM/Arch package installation, upgrade and removal; authenticated
@@ -36,8 +39,9 @@ fresh CI results.
 The owner confirmed the tested GUI functionality on 2026-10-26. Additional
 GNOME/KDE/Xfce session coverage and independent security review remain open in
 the [release-readiness checklist](release-readiness.md). A reported device
-identity change still blocks an existing quarantine run; displaying its
-expected/current identity does not resolve the underlying refusal.
+identity change initially blocks its existing run; its actual owner environment
+remains unverified. Exact-inventory recovery requires separate `REVALIDATE`
+confirmation and does not authorize deletion or infer missing historical UUIDs.
 
 ```fish
 python3 -m unittest discover -s tests -v
