@@ -1,0 +1,32 @@
+name: Clean merged branches
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: branch-cleanup
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Verify branch-cleanup safeguards with disposable Git repositories
+        run: python3 -m unittest discover -s tests -p test_branch_cleanup.py -v
+      - name: Remove verified obsolete branches with atomic ref leases
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 scripts/cleanup_merged_branches.py --execute

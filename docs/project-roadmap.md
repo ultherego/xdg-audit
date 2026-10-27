@@ -49,5 +49,11 @@ ruleset is optional: the required archive gate already depends on them.
   installation, upgrade, removal, tamper refusal and publication retries.
   See the [validated scope and results](testing-and-release-status.md).
 
+Merged PR branches are maintained by the
+[branch-cleanup workflow](../.github/workflows/branch-cleanup.yml). It runs only
+on `main`, preserves open-PR dependencies and changed branch heads, and uses
+an atomic Git push with per-ref leases. Closed but unmerged PRs are retained
+apart from the explicitly reviewed, commit-pinned PR #24 → #25 supersession.
+
 The older [research roadmap](../RESEARCH_ROADMAP.md) is a historical review
 after 1.4.8, not the current release checklist.

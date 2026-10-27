@@ -1,4 +1,5 @@
 [
+  ".github/workflows/branch-cleanup.yml",
   ".github/workflows/package-repository.yml",
   ".github/workflows/tag-release.yml",
   ".github/workflows/tests.yml",
@@ -54,6 +55,7 @@
   "scripts/archive-files.json",
   "scripts/benchmark_scan.py",
   "scripts/build_archives.py",
+  "scripts/cleanup_merged_branches.py",
   "scripts/desktop_entry_smoke.py",
   "scripts/gui_app_smoke.py",
   "scripts/gui_async_purge_smoke.py",
@@ -69,6 +71,7 @@
   "tests/test_archive_privacy.py",
   "tests/test_audit.py",
   "tests/test_aur_metadata.py",
+  "tests/test_branch_cleanup.py",
   "tests/test_config_selftest.py",
   "tests/test_distro_sources.py",
   "tests/test_evidence_quality.py",
