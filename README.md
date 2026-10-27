@@ -236,102 +236,15 @@ python3 xdg_audit.py --scope snap --quick --json
 
 ## ⌨️ CLI
 
-```bash
-python3 xdg_audit.py --help
-python3 xdg_audit.py --scope config --json > audit.json
-python3 xdg_audit.py --scope config --compare audit.json
-python3 xdg_audit.py --scope config --remove  # Interactive confirmation
-python3 xdg_audit.py --list-quarantine
-python3 xdg_audit.py --restore RUN_ID         # Interactive confirmation
-python3 xdg_audit.py --quarantine-info RUN_ID
-python3 xdg_audit.py --purge RUN_ID --dry-run
-python3 xdg_audit.py --purge RUN_ID           # Explicit PURGE confirmation
-python3 xdg_audit.py --purge-expired          # Retention preview
-python3 xdg_audit.py --cleanup-history RUN_ID --dry-run
-python3 xdg_audit.py --cleanup-expired-history # 30 days after PURGE
-python3 xdg_audit.py --cleanup-all-history    # Preview all completed history
-python3 xdg_audit.py --cleanup-all-history --execute # Explicit HISTORY confirmation
-python3 xdg_audit.py --polkit-test-status      # Read-only existing Polkit check
-python3 xdg_audit.py --polkit-test-auth        # AUTH + native Polkit id -u
-python3 xdg_audit.py --polkit-test-create      # TEST: create ~/.config fixture
-python3 xdg_audit.py --polkit-test-repair      # ACCESS TEST: owner-only repair
-python3 xdg_audit.py --polkit-test-delete      # DELETE TEST: clean test-only fixture
-```
-
-Available scopes: `all`, `config`, `data`, `state`, `cache`, `flatpak`, `snap`, `dotfiles`.
-
-Completed PURGE operations remain visible in the GUI as **PURGED** until
-their manifest is cleaned up; that history may be automatically removed 30
-days after full PURGE, but only with explicit opt-in to automatic retention.
-Incomplete or corrupted journals are never auto-removed.
-
-**Normal operation:** In GTK, Qt and Tk, **Delete permanently…** checks the
-quarantine and, when needed, automatically opens **Check access…**.
-For user-owned files/directories with restricted permissions it offers
-an individually confirmed `ACCESS` change. If the original inventory was
-unsealed, it then requires separate `ADOPT` confirmation, followed by a
-fresh preflight and the usual independent `PURGE` confirmation.
-
-For advanced/manual checks, the **CLI** still offers isolated, optional
-Polkit and ~/.config test fixtures (see
-[Polkit and access self-tests](docs/polkit-selftest.md)). These test controls
-are intentionally **not present in the GUI**. Polkit does not elevate
-quarantine operations: root-owned files remain blocked until a separately
-audited and packaged privileged helper is available.
-
-See [Quarantine lifecycle](docs/quarantine-lifecycle.md) for recovery,
-history-only cleanup, manual/automatic retention, user-scoped systemd
-timer, legacy adoption, and safeguards.
-
-### JSON evidence quality
-
-A `--quick --json` scan returns `size_bytes: null` when size has **not been
-measured**. This is different from an empty file or directory with size `0`;
-`size_calculated` distinguishes these cases.
-
-`evidence_level` distinguishes `installed_evidence`, `protective_hint`,
-`historical_only`, `policy_protected` and `unknown`. Package-removal history
-is only a hint. `orphan_ownership_verified: false` means the application has
-not verified that the data can be removed safely. Every CANDIDATE based only
-on history also carries `risk_flags: ["unverified_owner", "history_only"]`
-and still requires explicit MOVE consent and fresh verification before PURGE.
+[CLI usage and JSON evidence](docs/cli.md)
 
 ## 🧭 Project roadmap
 
-The current priority is completing the safety and quality requirements for
-1.7.0. See the [release-readiness checklist](docs/release-readiness.md).
-
-Providers already cover pacman/foreign, Flatpak, Snap, AppImage, manual
-binaries, npm/pipx, dpkg and RPM. MOVE verifies the native database on Arch,
-DEB and RPM systems immediately before changes.
-See [installation-source support](docs/installation-source-support.md)
-for the current contract and its limitations.
+[Project roadmap and remaining work](docs/project-roadmap.md)
 
 ## 🧪 Testing & release status
 
-The [GUI lifecycle harness](docs/gui-lifecycle-testing.md) exercises real
-MOVE/RESTORE/PURGE controls and dialogs on disposable data, including cancelled
-confirmations, exact file hashes and retained history. Installed inventory is
-synthetic in this harness; native provider CI remains separate.
-
-The unreleased development version on `main` is **`1.7.0-rc2`**. The most recent tagged prerelease is **[v1.7.0-rc1](https://github.com/ultherego/xdg-audit/releases/tag/v1.7.0-rc1)**.
-
-GitHub Actions runs Python 3.10–3.14 tests, GTK4/GTK3/Qt6/Tk adaptive-dialog and tab checks under Xvfb, native GTK4/Qt6 Wayland startup with headless Weston, a synthetic benchmark, the isolated end-to-end quarantine/restore/purge test, real SIGKILL recovery checkpoints, native Arch/pacman, Ubuntu/dpkg and Fedora/RPM protection and lifecycle checks, live snapd with disabled parallel instances and disposable user data, a Gio desktop-launch test, GTK disk-full error handling, and source ZIP/tar.gz integrity checks. The owner confirmed the tested GUI functionality on 2026-10-26. Additional GNOME/KDE/Xfce session coverage remains separately recorded in the readiness checklist.
-
-```bash
-python3 -m unittest discover -s tests -v
-python3 scripts/smoke_quarantine_cycle.py
-python3 scripts/build_archives.py --output-dir dist
-```
-
-The quarantine test creates a disposable `HOME`, performs real moves, restores and purge, verifies file hashes and handles simulated conflicts without writing into your real XDG directories. Details: [Safe integration testing](docs/testing-quarantine.md).
-
-Optional per-user desktop-menu registration, updating and safe unregistration are described in [Desktop installation](docs/desktop-installation.md). Native DEB/RPM/Arch builds, tag-driven releases and signed APT/RPM repository setup are described in [Native packages](docs/native-packages.md). Production publication requires the documented owner credentials. See the [changelog](CHANGELOG.md) for version history.
-
-Source archives use the explicit allowlist in `scripts/archive-files.json`.
-Add intended source files there when extending the project; incidental checkout
-files and symbolic links must never enter a release archive.
-
+[Testing and release status](docs/testing-and-release-status.md)
 
 ## License
 
