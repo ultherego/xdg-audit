@@ -39,6 +39,11 @@ tests, even when those contexts are not listed directly in the ruleset.
 
 - [x] Python 3.10–3.14 and native GUI checks (Xvfb/Weston).
 - [x] Isolated MOVE → RESTORE lifecycle and safety-failure tests.
+- GUI lifecycle automation also exercises real row controls, confirmation
+  dialogs and production file operations with synthetic installed inventory:
+  [commands, assertions and scope](gui-lifecycle-testing.md). CI results must
+  pass before this supplies evidence for the exact commit; real desktop-session
+  acceptance below remains separate.
 - [x] Archive and release gates depend on Wayland, E2E, native-source and live-snapd checks.
 - [ ] **Optional:** list Wayland and E2E directly in the ruleset so administrators
   can see them individually as required checks. This requires GitHub

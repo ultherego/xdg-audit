@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 CHILD = ROOT / 'scripts' / 'gui_app_smoke.py'
 
 
-def run(backend: str, duration: float = 3.0) -> None:
+def run(backend: str, duration: float = 3.0, *, lifecycle=False, output_dir=None, debugger=False) -> None:
     with tempfile.TemporaryDirectory(prefix='xdg-audit-wayland-') as temp:
         base = Path(temp)
         runtime = base / 'runtime'
@@ -42,6 +42,11 @@ def run(backend: str, duration: float = 3.0) -> None:
                    GDK_BACKEND='wayland', QT_QPA_PLATFORM='wayland',
                    WAYLAND_DEBUG='client', LIBGL_ALWAYS_SOFTWARE='1',
                    GALLIUM_DRIVER='llvmpipe')
+        if backend == 'qt6':
+            # Headless Weston has no input seat. Qt 6.4's compositor input
+            # context dereferences it when drawing a QLineEdit cursor. Use Qt's
+            # compose context for this harness, keeping native Wayland rendering.
+            env['QT_IM_MODULE'] = 'compose'
         env.pop('DISPLAY', None)  # Fail rather than silently falling back to X11.
         with compositor_log.open('w+') as wc, client_log.open('w+') as cc:
             weston = subprocess.Popen(
@@ -59,24 +64,34 @@ def run(backend: str, duration: float = 3.0) -> None:
                         raise AssertionError('Headless Weston did not start:\n' +
                                              compositor_log.read_text(errors='replace')[-3000:])
                     time.sleep(0.15)
+                command = ([sys.executable, str(ROOT / 'scripts/gui_lifecycle_smoke.py'),
+                            '--backend', backend, '--expect-session', 'wayland'] if lifecycle else
+                           [sys.executable, str(CHILD), '--child', '--backend', backend, '--home', str(home)])
+                if lifecycle and output_dir:
+                    command += ['--output', str(output_dir / (backend + '-wayland.json'))]
+                if debugger:
+                    command = ['gdb', '--batch', '--return-child-result', '-ex', 'run',
+                               '-ex', 'thread apply all bt', '--args', *command]
                 child = subprocess.Popen(
-                    [sys.executable, str(CHILD), '--child', '--backend', backend,
-                     '--home', str(home)],
+                    command,
                     cwd=str(ROOT), env=env, stdin=subprocess.DEVNULL,
                     stdout=cc, stderr=subprocess.STDOUT,
                 )
-                until = time.monotonic() + duration
+                until = time.monotonic() + (90 if lifecycle else duration)
                 while time.monotonic() < until:
                     if child.poll() is not None:
                         break
                     time.sleep(0.15)
                 cc.flush()
                 trace = client_log.read_text(errors='replace')
-                if child.poll() is not None or 'create_surface(' not in trace:
+                failed = (child.poll() != 0 or 'PASS GUI lifecycle:' not in trace) if lifecycle else child.poll() is not None
+                if failed or 'create_surface(' not in trace:
                     raise AssertionError(
                         f'{backend}: Wayland GUI did not create a surface and stay alive. '
-                        f'exit={child.poll()}\n' + trace[-4500:]
+                        f'exit={child.poll()}\n' + trace[-14000 if debugger else -4500:]
                     )
+                if lifecycle:
+                    print('\n'.join(line for line in trace.splitlines() if 'PASS ' in line))
                 print(f'{backend}: full application created a native Wayland surface (no X11)')
             finally:
                 if child is not None:
@@ -98,5 +113,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--backend', required=True, choices=('gtk4', 'qt6'))
     parser.add_argument('--duration', type=float, default=3.0)
+    parser.add_argument('--lifecycle', action='store_true', help='Run the real GUI lifecycle with synthetic inventory')
+    parser.add_argument('--output-dir', type=Path)
+    parser.add_argument('--debugger', action='store_true', help='Collect native failure backtraces with gdb')
     arguments = parser.parse_args()
-    run(arguments.backend, arguments.duration)
+    run(arguments.backend, arguments.duration, lifecycle=arguments.lifecycle, output_dir=arguments.output_dir,
+        debugger=arguments.debugger)

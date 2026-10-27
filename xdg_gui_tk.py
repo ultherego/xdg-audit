@@ -249,25 +249,30 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                       style='Section.TLabel').pack(anchor='w',pady=(0,3))
             ttk.Label(quarantine_tab,text=tr('Przywracanie nigdy nie nadpisuje istniejących plików.'),
                       style='Muted.TLabel').pack(anchor='w',pady=(0,10))
-            self.qtree=ttk.Treeview(quarantine_tab,columns=('run','status','entries','moved'),show='headings',selectmode='browse')
+            self.qtree=ttk.Treeview(quarantine_tab,columns=('run','status','entries','moved'),show='headings',selectmode='browse',height=6)
             for name,title,width in [('run',tr('Identyfikator operacji'),270),('status',tr('Status operacji'),130),('entries',tr('W manifestie'),110),('moved',tr('Przeniesione'),135)]:
                 self.qtree.heading(name,text=title);self.qtree.column(name,width=width)
             self.qtree.pack(fill='both',expand=True)
             qbuttons=ttk.Frame(quarantine_tab)
             qbuttons.pack(fill='x',pady=(10,0))
-            ttk.Button(qbuttons,text=tr('Odśwież listę'),command=self._refresh_quarantine).pack(side='left')
-            ttk.Button(qbuttons,text=tr('Pokaż zawartość'),command=self.quarantine_details).pack(side='left',padx=8)
-            ttk.Button(qbuttons,text=tr('Przywróć operację…'),command=self.restore).pack(side='right')
-            ttk.Button(qbuttons,text=tr('Usuń trwale…'),command=self.purge_quarantine).pack(side='right',padx=6)
-            ttk.Button(qbuttons,text=tr('Sprawdź dostęp…'),
-                       command=self.access_diagnostics).pack(side='right',padx=6)
-            ttk.Button(qbuttons,text=tr('Zatwierdź stan…'),
-                       command=self.adopt_inventory).pack(side='right',padx=6)
-            ttk.Button(qbuttons,text=tr('Usuń wygasłe…'),command=self.purge_expired).pack(side='right',padx=6)
-            ttk.Button(qbuttons,text=tr('Ustaw retencję…'),command=self.configure_retention).pack(side='right',padx=6)
-            ttk.Button(qbuttons,text=tr('Usuń historię…'),command=self.cleanup_history).pack(side='right',padx=6)
-            ttk.Button(qbuttons,text=tr('Wyczyść całą zakończoną historię…'),
-                       command=self.cleanup_all_history).pack(side='right',padx=6)
+            # A single packed row can exceed the pane's requested width and
+            # leave every action unmapped when the window is constrained.
+            actions=(('Odśwież listę',self._refresh_quarantine),
+                     ('Pokaż zawartość',self.quarantine_details),
+                     ('Przywróć operację…',self.restore),
+                     ('Usuń trwale…',self.purge_quarantine),
+                     ('Sprawdź dostęp…',self.access_diagnostics),
+                     ('Zatwierdź stan…',self.adopt_inventory),
+                     ('Usuń wygasłe…',self.purge_expired),
+                     ('Ustaw retencję…',self.configure_retention),
+                     ('Usuń historię…',self.cleanup_history),
+                     ('Wyczyść całą zakończoną historię…',self.cleanup_all_history))
+            for column in range(3):
+                qbuttons.columnconfigure(column,weight=1,uniform='quarantine-actions')
+            for index,(caption,callback) in enumerate(actions):
+                ttk.Button(qbuttons,text=tr(caption),command=callback).grid(
+                    row=index//3,column=index%3,columnspan=3 if index==9 else 1,
+                    sticky='ew',padx=3,pady=3)
             idx=next((i for i,(_,scope) in enumerate(SCOPE_LABELS) if scope==args.scope),0)
             self.tabs.select(idx)
             self.tabs.bind('<<NotebookTabChanged>>',self._on_tab_changed)

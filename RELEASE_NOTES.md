@@ -5,6 +5,10 @@
 
 ## New since v1.7.0-rc1
 
+- Automated real-widget GUI lifecycle checks on all four X11 backends and GTK4/Qt6
+  native Wayland, using internally created disposable data and synthetic package
+  inventory, with cancellation, SHA-256 and history assertions.
+- Visible Tk quarantine actions with a wrapping three-column layout.
 - AUR name availability for foreign pacman packages, with separate listed,
   unlisted and unknown counts; no installed names sent and no disk cache.
 - Additional AppImage apps/opt/XDG data locations, Cargo/Go binary hints and

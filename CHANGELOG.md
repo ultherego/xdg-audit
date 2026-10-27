@@ -2,6 +2,11 @@
 
 ## 1.7.0-rc2 (unreleased)
 
+- Exercise the real GUI MOVE/RESTORE/PURGE workflow through native controls and
+  dialogs on GTK4/GTK3/Qt6/Tk under X11 and GTK4/Qt6 on native Wayland. Verify
+  cancelled tokens, exact hashes, separate journals and untouched sentinels.
+- Wrap Tk quarantine actions into three columns so Restore remains visible
+  within the pane, including during the complete GUI lifecycle check.
 - Distinguish current AUR name matches from unlisted and unverified foreign
   packages using a bounded public index; never infer verified build origin.
 - Add one-level AppImage discovery in apps/opt/XDG data roots, Cargo/Go/manual

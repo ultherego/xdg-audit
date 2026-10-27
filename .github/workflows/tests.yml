@@ -141,6 +141,25 @@ jobs:
       - name: Adaptive Tk tabs and content-sized dialogs
         if: ${{ !cancelled() && steps.gui-deps.outcome == 'success' }}
         run: xvfb-run -a -s '-screen 0 1600x1000x24' /usr/bin/python3 scripts/gui_layout_smoke.py --backend tk --output-dir gui-layout
+      - name: GTK4 real GUI lifecycle with synthetic inventory
+        if: ${{ !cancelled() && steps.gui-deps.outcome == 'success' }}
+        run: xvfb-run -a -s '-screen 0 1600x1000x24' /usr/bin/python3 scripts/gui_lifecycle_smoke.py --backend gtk4 --output gui-lifecycle/gtk4-x11.json
+      - name: GTK3 fallback real GUI lifecycle with synthetic inventory
+        if: ${{ !cancelled() && steps.gui-deps.outcome == 'success' }}
+        run: xvfb-run -a -s '-screen 0 1600x1000x24' /usr/bin/python3 scripts/gui_lifecycle_smoke.py --backend gtk3 --output gui-lifecycle/gtk3-x11.json
+      - name: Qt6 real GUI lifecycle with synthetic inventory
+        if: ${{ !cancelled() && steps.gui-deps.outcome == 'success' }}
+        run: xvfb-run -a -s '-screen 0 1600x1000x24' /usr/bin/python3 scripts/gui_lifecycle_smoke.py --backend qt6 --output gui-lifecycle/qt6-x11.json
+      - name: Tk real GUI lifecycle with synthetic inventory
+        if: ${{ !cancelled() && steps.gui-deps.outcome == 'success' }}
+        run: xvfb-run -a -s '-screen 0 1600x1000x24' /usr/bin/python3 scripts/gui_lifecycle_smoke.py --backend tk --output gui-lifecycle/tk-x11.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gui-lifecycle-x11-${{ github.sha }}
+          path: gui-lifecycle/*.json
+          if-no-files-found: ignore
+          retention-days: 14
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -163,6 +182,7 @@ jobs:
             fi
           done
       - name: Install Weston and native GTK4/Qt6 Wayland clients
+        id: wayland-deps
         timeout-minutes: 20
         run: |
           sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=25 -o Acquire::https::Timeout=25 update -qq
@@ -171,6 +191,19 @@ jobs:
         run: /usr/bin/python3 scripts/gui_wayland_smoke.py --backend gtk4
       - name: Qt6 full application on native Wayland
         run: /usr/bin/python3 scripts/gui_wayland_smoke.py --backend qt6
+      - name: GTK4 real GUI lifecycle on native Wayland
+        if: ${{ !cancelled() && steps.wayland-deps.outcome == 'success' }}
+        run: /usr/bin/python3 scripts/gui_wayland_smoke.py --backend gtk4 --lifecycle --output-dir gui-lifecycle
+      - name: Qt6 real GUI lifecycle on native Wayland
+        if: ${{ !cancelled() && steps.wayland-deps.outcome == 'success' }}
+        run: /usr/bin/python3 scripts/gui_wayland_smoke.py --backend qt6 --lifecycle --output-dir gui-lifecycle
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gui-lifecycle-wayland-${{ github.sha }}
+          path: gui-lifecycle/*.json
+          if-no-files-found: ignore
+          retention-days: 14
 
   quarantine-cycle:
     name: Quarantine and restore E2E (isolated)
