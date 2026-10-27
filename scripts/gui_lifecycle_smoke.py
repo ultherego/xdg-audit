@@ -8,6 +8,7 @@ Never accepts an existing HOME, patches a confirmation or bypasses root checks.
 from collections import deque
 from hashlib import sha256
 import argparse
+import faulthandler
 import json
 import os
 from pathlib import Path
@@ -101,6 +102,7 @@ class Cycle:
         folder = engine.quarantine_dir(self.home, self.roots) / self.run_id
         manifest = folder / 'manifest.json'
         data = json.loads(manifest.read_text())
+        require(data.get('format') == 'intent-journal-v3', 'MOVE did not produce a v3 journal')
         require(len(data['items']) == 1, 'MOVE selected unrelated data')
         item = data['items'][0]
         require(item['source'] == str(self.source), 'MOVE journal has the wrong source')
@@ -120,6 +122,7 @@ class Cycle:
             if dialog is not None:
                 require(self.pending, 'unexpected dialog in ' + self.phase + ': ' + self.ui.title(dialog))
                 response, token = self.pending.popleft()
+                print(f'{self.ui.backend}: DRIVE {self.phase} {response} {token}', flush=True)
                 self.ui.respond(dialog, response, token)
                 return True
             if self.in_action or self.pending or not self.ui.ready():
@@ -294,6 +297,9 @@ class QtUI:
                                     if hasattr(window, 'audit_model')), None)
         if self.controller is None:
             return False
+        surface = self.controller.windowHandle()
+        if surface is None or not surface.isExposed():
+            return False
         platform = self.app.platformName()
         require(platform == 'xcb' or platform.startswith('wayland'), 'Qt did not use a native display: ' + platform)
         actual = 'wayland' if platform.startswith('wayland') else 'x11'
@@ -435,7 +441,12 @@ class TkUI:
         return button.invoke if button.winfo_viewable() else None
 
     def status(self):
-        return self.controller.status.get() if self.controller else 'no controller'
+        if self.controller is None:
+            return 'no controller'
+        buttons = [(widget.cget('text'), widget.winfo_viewable()) for widget in self.walk(self.root)
+                   if isinstance(widget, self.ttk.Button) and 'Restore' in str(widget.cget('text'))]
+        return (self.controller.status.get() + '; selected tab=' + str(self.controller.tabs.select())
+                + '; runs=' + str(self.controller.qtree.get_children()) + '; restore buttons=' + str(buttons))
 
     def quit(self):
         if self.root is not None:
@@ -494,6 +505,7 @@ def run(backend, session, output=None):
 
 
 if __name__ == '__main__':
+    faulthandler.enable()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--backend', choices=('gtk4', 'gtk3', 'qt6', 'tk'), required=True)
     parser.add_argument('--expect-session', choices=('x11', 'wayland'), default='x11')
