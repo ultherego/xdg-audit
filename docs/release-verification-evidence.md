@@ -58,6 +58,9 @@ acceptance for the tested owner environment; do not request the same tests
 again. The matrix records additional environments, not a retraction of that
 acceptance.
 
+Use the [desktop acceptance protocol](desktop-acceptance.md) for disposable
+fixtures, physical keyboard checks and the required per-session record.
+
 For each session, launch with a disposable HOME and verify all confirmation
 tokens and visible error messages. Recording a successful Xvfb/Weston CI smoke
 does not satisfy a real desktop-session validation.
@@ -90,6 +93,8 @@ TOCTOU boundaries, anchored filesystem operations, SHA-256 and inode
 validation, interrupted journal recovery, confirmation UX, and retention
 policy. Record name/handle, reviewed commit, findings, disposition and link.
 Author self-review cannot satisfy this P0 gate.
+The [review map and report template](security-review-guide.md) prepare this
+handoff without claiming the independent review has occurred.
 
 ## P1 — publication checks
 
@@ -120,3 +125,4 @@ Only change a `pending` to `PASS` after a concrete, accessible evidence link
 is added next to the corresponding case. If no evidence exists, leave it open.
 
 Executed checks and findings: [2026-10-26 verification](verification-2026-10-26.md).
+Latest safety and GUI evidence: [2026-10-28 verification](verification-2026-10-28.md).

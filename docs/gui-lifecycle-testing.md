@@ -89,7 +89,9 @@ CI requires four X11 cycles and two native Wayland cycles before source
 archives can build. JSON artifacts identify the backend, actual session,
 synthetic inventory, tested commit, passed checks and disposable file hashes.
 They contain no user HOME paths. The source archive uses an explicit manifest
-and excludes generated reports.
+and excludes incidental generated reports. The explicitly reviewed PR #40
+reports and Settings PNGs are retained as documentation with original hashes:
+[2026-10-28 evidence](verification-2026-10-28.md).
 
 These automated checks cover the product workflow on Xvfb/Weston. They do not
 establish independent security review or complete GNOME, KDE Plasma or Xfce

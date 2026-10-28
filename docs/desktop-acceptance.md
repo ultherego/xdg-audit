@@ -1,0 +1,97 @@
+# Full desktop-session acceptance
+
+[Release checklist](release-readiness.md) · [Automated GUI scope](gui-lifecycle-testing.md)
+
+**Status: GNOME, KDE Plasma and Xfce acceptance remains pending.** The owner's
+previously accepted GUI environment remains accepted and need not repeat its
+completed tests. This protocol concerns additional, separately identified
+desktop sessions and their integration with the system theme and input.
+
+| Session | Backend | Required evidence |
+|---|---|---|
+| GNOME / Wayland | GTK4 | Full workflow, native display, theme, keyboard and error UI |
+| KDE Plasma / Wayland | Qt6 | The same workflow, including system-palette integration |
+| Xfce / X11 | GTK or Tk, identify which | Startup, workflow, visible controls and keyboard |
+
+## Record the environment
+
+Record UTC timestamp, full commit SHA, clean/dirty checkout, distribution and
+version, desktop/compositor version, X11/Wayland, backend/bindings, Python and
+the exact commands. Record expected and actual results and attach redacted
+logs/screenshots. Leave failed or untested cases explicit rather than marking
+them PASS.
+
+## Automated fixture precheck inside the actual session
+
+Run as a regular user in the named desktop session, with the relevant toolkit
+already installed. GTK X11 keyboard injection also needs `xdotool`; Qt tests
+need that binding's QtTest module. These commands create their own temporary
+HOME and use production lifecycle code with synthetic installed inventory.
+
+```fish
+python3 scripts/gui_lifecycle_smoke.py --backend gtk4 --expect-session wayland --output /tmp/xdg-gnome-lifecycle.json
+python3 scripts/gui_lifecycle_smoke.py --backend qt6 --expect-session wayland --output /tmp/xdg-plasma-lifecycle.json
+python3 scripts/gui_lifecycle_smoke.py --backend tk --expect-session x11 --output /tmp/xdg-xfce-lifecycle.json
+```
+
+Run only the command matching the session under test. Preserve its JSON plus
+the separately recorded environment/SHA. The script checks the actual display
+backend; XWayland does not count as native Wayland. GTK Wayland activation is
+signal-based in this harness, so manually verify physical keyboard behavior
+below. A script pass alone does not establish visual desktop acceptance.
+
+## Manual fixture for visual and keyboard acceptance
+
+Create a separate, disposable profile in fish:
+
+```fish
+set acceptance_home (mktemp -d -t xdg-audit-desktop.XXXXXX)
+mkdir -p "$acceptance_home/.config/xdg-desktop-fixture" "$acceptance_home/.config/niri"
+printf 'desktop acceptance fixture\n' > "$acceptance_home/.config/xdg-desktop-fixture/settings.txt"
+printf 'protected fixture\n' > "$acceptance_home/.config/niri/settings.txt"
+printf 'outside sentinel\n' > "$acceptance_home/outside-sentinel"
+sha256sum "$acceptance_home/.config/xdg-desktop-fixture/settings.txt" "$acceptance_home/.config/niri/settings.txt" "$acceptance_home/outside-sentinel"
+python3 xdg_audit.py --home "$acceptance_home" --gui --scope config --quick
+```
+
+Keep the desktop's environment for theme integration; the explicit `--home`
+selects only the disposable audited profile. Confirm the displayed paths belong
+to that generated directory before selecting the fixture. Preserve the initial
+hashes and the generated path in the test record. No application under test is
+uninstalled and no personal configuration is selected.
+
+1. Complete quick and size-measuring scans. Check source health, filters,
+   details and visible actions. The protected `niri` fixture must stay blocked.
+2. Inspect Settings with empty and populated multiline fields. Check all four
+   editor frames/corners, focus outlines and scrolling in light/dark themes
+   supported by the session. Enter inserts a newline; Cancel saves nothing.
+   Save a language change inside this fixture profile and verify EN/PL labels.
+3. Select only `xdg-desktop-fixture`. Exercise uncertain consent where required.
+   Cancel a typed MOVE, then confirm MOVE using the keyboard. Verify exact
+   fixture bytes and the resulting journal.
+4. Confirm RESTORE and compare original paths and hashes. MOVE the fixture
+   again to create a distinct run; retain the first restored history entry.
+5. Try empty and incorrect PURGE with Enter. Cancel a correctly typed token.
+   Verify the quarantined bytes/journal remain unchanged. Then explicitly
+   confirm PURGE and verify only the selected fixture payload disappears.
+6. Repeat empty/incorrect input and cancellation for HISTORY. Confirm HISTORY
+   for the purged run only and verify the other restored history survives.
+7. Use physical Return and keypad Enter in the token fields. Confirm each
+   operation occurs once, and each subsequent operation still requires its
+   own token. If the keyboard lacks a keypad, record that case as untested
+   with the separate automated coverage, rather than inventing a manual pass.
+8. Exercise a permission refusal using only disposable fixture data and check
+   that the message is readable and the operation stops. Preserve outside and
+   protected sentinel hashes throughout. Disk-full injection remains covered
+   by the dedicated bounded CI fixture; never exhaust the desktop host disk.
+
+Record the actual backend selected by the application. Retain the generated
+profile until evidence is accepted; afterwards remove only that disposable
+directory. Do not reuse this protocol with an existing user HOME/quarantine.
+
+## Completion record
+
+For each session attach the environment record, automated report, manual
+case results, before/after hashes and screenshots. Mark the corresponding
+release-checklist row complete only after those results are reviewed and
+linked. Keep skipped keyboard/theme/backend cases visible as limitations.

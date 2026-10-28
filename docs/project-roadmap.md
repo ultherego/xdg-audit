@@ -1,71 +1,100 @@
 # Project roadmap
 
-[Back to README](../README.md) · [Testing and release status](testing-and-release-status.md)
+[Back to README](../README.md) · [Release checklist](release-readiness.md) · [Current evidence](verification-2026-10-28.md)
 
-The current priority is stabilizing **1.7.0**, with source version
-`1.7.0-rc2`. This is the current work list as of **2026-10-28**; the detailed
-acceptance criteria live in the [release-readiness checklist](release-readiness.md).
+Status checked on **2026-10-28**. Source version is **`1.7.0-rc2`**; the latest
+published prerelease remains **`v1.7.0-rc1`**. The owner's previously tested
+GUI environment remains accepted. This roadmap tracks the remaining work;
+the checklist and linked evidence define completion.
 
-## Remaining work, in order
+## Verified foundation
 
-1. **Validate recovery of the reported quarantine device-identity change.** An existing
-   run records a different device number from the current object, while its
-   inode and file type match. Detailed errors now expose those values, but
-   PURGE initially remains blocked. The read-only diagnosis and separately
-   confirmed `REVALIDATE` path require exact inventory/hash agreement, and
-   new Btrfs moves also record persistent filesystem/subvolume identity.
-   [Recovery contract and actual-remount CI](quarantine-device-identity.md).
-   The owner's actual filesystem and affected run still require targeted
-   validation; matching inode numbers alone never authorize recovery.
-2. **Obtain an independent security review** of the latest quarantine and
-   publication changes by a second person. Automated regression results do
-   not close this item.
-3. **Verify the requested dialog polish.** Settings text editors must retain
-   complete visible borders/corners with focus and scrolling in light/dark
-   themes. Return and keypad Enter must submit typed confirmation tokens through
-   the existing validation; empty/incorrect tokens and cancellation must remain
-   harmless. Multiline Settings editors keep newline input. Implementation and
-   [real-widget verification](gui-lifecycle-testing.md) need exact-commit CI and
-   visual evidence before this item is closed.
-4. **Complete additional desktop-session acceptance** on GNOME/Wayland,
-   KDE Plasma/Wayland and Xfce/X11. The owner's already accepted environment
-   does not need to repeat its completed tests. Headless CI coverage has a
-   separate scope from full desktop-session acceptance.
-5. **Configure production publication credentials.** The build, tag and signed
-   repository pipelines are implemented and rehearsed. The owner must supply
-   the dedicated package-signing key and fingerprint; AUR publication is
-   optional and requires its own SSH credential and verified host key.
-   Follow [Native packages](native-packages.md).
-6. **Publish and accept a new release candidate**, then decide on the stable
-   release. The latest published prerelease is still `v1.7.0-rc1`; current CI
-   artifacts are not a newly published RC or production package repository.
-
-Listing Wayland and end-to-end contexts individually in the main protection
-ruleset is optional: the required archive gate already depends on them.
-
-## Implemented foundation
-
+- [PR #40 and its merged main commit](verification-2026-10-28.md) passed all
+  19 build/test jobs, with 415 regressions on each supported Python version.
+  Native provider, package, actual-Btrfs and disposable publication checks
+  remain mandatory archive/release dependencies.
+- Requested Settings editor corners are complete in the inspected GTK
+  light/dark empty, focused and scrolled screenshots. Return/keypad Enter
+  confirm tokens through existing validation; negative PURGE/HISTORY,
+  cancellation and multiline-newline checks pass across the documented
+  [GUI test scope](gui-lifecycle-testing.md).
+- Device recovery requires exact inventory and separate REVALIDATE consent.
+  Automatic retention cannot inherit that consent. FIFO substitutions in
+  journals, hashing and permission inspection are rejected without hanging.
 - Installed-application inventory covers pacman/foreign, Flatpak, Snap,
-  AppImage, manual binaries, npm/pipx, dpkg and RPM. MOVE rechecks native
-  package evidence immediately before changes. AUR availability is
-  informational and does not prove build provenance. See the
-  [source support contract](installation-source-support.md).
-- GTK, Qt and Tk provide quarantine lifecycle controls, configurable source
-  directories, visible settings editors and detailed refusal messages.
-  See [CLI usage](cli.md) and [Quarantine lifecycle](quarantine-lifecycle.md).
-- Actions builds native DEB/RPM/Arch packages and source archives after
-  application and GUI gates. Disposable repository tests cover signing,
-  installation, upgrade, removal, tamper refusal and publication retries.
-  See the [validated scope and results](testing-and-release-status.md).
+  AppImage, manual binaries, npm/pipx, dpkg and RPM. MOVE refreshes native
+  evidence before mutation. AUR name availability does not prove provenance.
+  See the [source support contract](installation-source-support.md).
+- Source/native packages and signed-repository pipelines are implemented and
+  rehearsed with disposable keys. Production publication remains pending.
+
+## Open release gates
+
+| ID | Work | Responsible party | Completion evidence |
+|---|---|---|---|
+| P0-01 | Diagnose the owner's existing quarantine device mismatch | Owner supplies read-only diagnostics; maintainer investigates | Exact affected run/filesystem, verified recovery or a justified refusal with remaining limits |
+| P0-02 | Independent security review | A person other than the author | Named report pinned to a full SHA, findings, disposition and decision |
+| P0-03 | GNOME/Wayland, Plasma/Wayland and Xfce/X11 acceptance | Testers with those actual sessions | Environment/SHA, workflow results, hashes, screenshots and reviewed evidence links |
+| P1-01 | Final release commit and artifact acceptance | Maintainer and owner | Clean pinned SHA, green CI, inspected source/native packages, checksums and privacy record |
+| P1-02 | Confirm production signing configuration | Owner with repository secret access | Dedicated key/fingerprint configured and checked through the publication workflow; rehearsal alone is insufficient |
+| P1-03 | Publish and accept a new RC | Owner release decision and gated workflows | New version tag, release assets, signed repository results and RC acceptance |
+| P1-04 | Stable release after RC acceptance | Owner release decision and gated workflows | Resolved blockers, accepted RC and successful stable publication |
+
+## Execution order
+
+1. Obtain read-only diagnostics for the affected owner run using the
+   [device-identity recovery guide](quarantine-device-identity.md). Compare
+   device, inode/type, filesystem/subvolume binding and exact inventory.
+   Matching inode numbers alone never authorize recovery. Confirm REVALIDATE
+   separately if eligible; PURGE/RESTORE still need their own authorization.
+2. Pin a candidate SHA and hand the latest code to an independent reviewer
+   using the [review map and required report](security-review-guide.md).
+   Resolve findings with focused regressions and re-review changed areas.
+3. Run the [desktop acceptance protocol](desktop-acceptance.md) in each named
+   session, using disposable data and physical keyboard checks. Retain explicit
+   failures/skips. The already accepted owner environment need not repeat its
+   completed acceptance; Xvfb/Weston results do not close additional sessions.
+4. Confirm the production secrets and fingerprint described in
+   [Native packages](native-packages.md), without exposing private keys in
+   issues, logs or source. Optional AUR setup additionally requires its account
+   SSH credential and verified host key.
+5. After fixes and acceptance, select the exact release commit. Reconcile
+   README, CHANGELOG, RELEASE_NOTES and checklist with that commit; inspect its
+   own artifacts, hashes, license, paths and package installation lifecycle.
+   Earlier successful artifacts do not establish a later release's contents.
+6. Publish a new RC through the tag workflow after mandatory evidence and the
+   owner release decision. Check source, DEB/RPM/Arch assets and production
+   signed APT/RPM repositories. AUR publication is optional and final-only.
+7. Record owner RC acceptance and address any findings. Publish stable only
+   after the RC and remaining P0/P1 gates are accepted.
+8. Keep the evidence ledger and checklist linked to the actual accepted
+   commits, jobs and artifacts. Re-run affected checks after subsequent fixes.
+
+Independent review, desktop testing and credential preparation can proceed in
+parallel once their targets are pinned. Owner filesystem diagnostics, another
+reviewer's decision, actual desktop sessions and production keys cannot be
+supplied by author automation.
+
+## After release
+
+- Monitor the weekly repository-metadata renewal workflow, the 30-day APT
+  metadata validity window and signing-key expiry. Follow the documented
+  renewal/recovery procedure rather than replacing immutable package versions.
+- Ship fixes under new versions; retain publication receipts and trust checks.
+- Evaluate broader fixture datasets, scan performance, accessibility and
+  clearer error reporting as subsequent work. These are proposals rather than
+  additional claims of completed acceptance.
+- Listing Wayland and E2E contexts individually in the main ruleset is optional:
+  the required archive gate already depends on them. A ruleset change needs
+  verified GitHub administrative access.
 
 Merged PR branches are maintained by the
-[branch-cleanup workflow](https://github.com/ultherego/xdg-audit/actions/workflows/branch-cleanup.yml). It runs only
-on `main`, preserves open-PR dependencies and changed branch heads, and uses
-an atomic Git push with per-ref leases. Closed but unmerged PRs are retained
-apart from the explicitly reviewed, commit-pinned PR #24 → #25 supersession.
-Post-deletion verification queries the live Git remote because REST branch
-listings can briefly retain a deleted branch. It never repeats deletion when
-a branch has been recreated or verification cannot reach the remote.
+[branch-cleanup workflow](https://github.com/ultherego/xdg-audit/actions/workflows/branch-cleanup.yml).
+It runs only on `main`, preserves open-PR dependencies and changed heads, and
+uses an atomic Git push with per-ref leases. Closed but unmerged PRs are
+retained apart from the explicitly reviewed, commit-pinned PR #24 → #25
+supersession. Verification queries the live Git remote; deletion is not repeated
+when a branch has been recreated or the remote cannot be reached.
 
 The older [research roadmap](../RESEARCH_ROADMAP.md) is a historical review
 after 1.4.8, not the current release checklist.
