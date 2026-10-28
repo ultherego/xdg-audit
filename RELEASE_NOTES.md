@@ -5,6 +5,9 @@
 
 ## New since v1.7.0-rc1
 
+- Complete software-rendered GNOME/Wayland, Plasma/Wayland and Xfce/X11
+  integration jobs, with verified session services and the native GUI lifecycle.
+  [Manual desktop acceptance remains separate](docs/desktop-acceptance.md).
 - Complete Settings editor frames and keyboard confirmation with Return or
   keypad Enter. Exact confirmation tokens remain required; Enter in multiline
   settings inserts a newline. GUI lifecycle checks include HISTORY cleanup,

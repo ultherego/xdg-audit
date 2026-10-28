@@ -9,6 +9,10 @@ the checklist and linked evidence define completion.
 
 ## Verified foundation
 
+- [PR #42 desktop integration](verification-data/2026-10-28/desktop-sessions.md)
+  passed all 22 build/test jobs with 418 regressions per supported interpreter.
+  Actual GNOME 46, Plasma 5.27 and Xfce 4.18 software-rendered sessions passed
+  the native GUI lifecycle; physical keyboard/manual theme acceptance stays open.
 - [PR #40 and its merged main commit](verification-2026-10-28.md) passed all
   19 build/test jobs, with 415 regressions on each supported Python version.
   Native provider, package, actual-Btrfs and disposable publication checks
@@ -53,7 +57,9 @@ the checklist and linked evidence define completion.
 3. Run the [desktop acceptance protocol](desktop-acceptance.md) in each named
    session, using disposable data and physical keyboard checks. Retain explicit
    failures/skips. The already accepted owner environment need not repeat its
-   completed acceptance; Xvfb/Weston results do not close additional sessions.
+   completed acceptance. Complete software-rendered GNOME/Plasma/Xfce session
+   jobs now extend CI integration coverage; they do not close physical keyboard
+   or manual theme/palette acceptance.
 4. Confirm the production secrets and fingerprint described in
    [Native packages](native-packages.md), without exposing private keys in
    issues, logs or source. Optional AUR setup additionally requires its account
@@ -72,7 +78,7 @@ the checklist and linked evidence define completion.
 
 Independent review, desktop testing and credential preparation can proceed in
 parallel once their targets are pinned. Owner filesystem diagnostics, another
-reviewer's decision, actual desktop sessions and production keys cannot be
+reviewer's decision, manual desktop acceptance and production keys cannot be
 supplied by author automation.
 
 ## After release

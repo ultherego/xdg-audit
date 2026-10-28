@@ -17,6 +17,10 @@ GitHub Actions covers:
 - Python 3.10–3.14 regressions and a synthetic scan benchmark.
 - GTK4/GTK3/Qt6/Tk layout and MOVE/RESTORE/PURGE workflows under Xvfb,
   plus GTK4/Qt6 workflows on native Wayland with headless Weston.
+- Complete GNOME/Wayland, Plasma/Wayland and Xfce/X11 software-rendered
+  session jobs, requiring the actual desktop components and a native GUI
+  lifecycle. All three passed; see the precise
+  [desktop integration and manual acceptance scopes](desktop-acceptance.md).
 - Isolated quarantine lifecycle, real `SIGKILL` recovery checkpoints,
   permission failures, GTK disk-full handling and Gio desktop launching.
 - Actual Btrfs remount/device-number changes, persistent FS/subvolume UUID
@@ -29,7 +33,16 @@ GitHub Actions covers:
 - Source ZIP/tar.gz integrity, checksum-pinned AUR recipes and a rehearsal of
   the production repository publisher against a disposable local Git remote.
 
-The latest GUI change passed all 19 build/test jobs, including 415 regressions
+The desktop integration change passed all 22 build/test jobs, including 418
+regressions on each supported Python version:
+[PR #42 validation](https://github.com/ultherego/xdg-audit/actions/runs/40711792031).
+GNOME 46/GTK4 and Plasma 5.27/Qt6 use native Wayland; Xfce 4.18/Tk uses X11.
+[Retained reports and limitations](verification-data/2026-10-28/desktop-sessions.md).
+This extends automated integration coverage; manual theme/palette and physical
+keyboard acceptance remain open. These results identify the tested commit,
+not future release artifacts.
+
+The earlier GUI change passed all 19 build/test jobs, including 415 regressions
 on each supported Python version:
 [PR #40 validation](https://github.com/ultherego/xdg-audit/actions/runs/40650051326)
 and [merged main validation](https://github.com/ultherego/xdg-audit/actions/runs/40650695607).

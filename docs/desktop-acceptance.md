@@ -13,6 +13,45 @@ desktop sessions and their integration with the system theme and input.
 | KDE Plasma / Wayland | Qt6 | The same workflow, including system-palette integration |
 | Xfce / X11 | GTK or Tk, identify which | Startup, workflow, visible controls and keyboard |
 
+## Complete-session integration in CI
+
+The `Full gnome/plasma/xfce session` Actions jobs start the installed session
+managers and desktop components on Ubuntu 24.04. GNOME Shell/Mutter uses its
+headless virtual monitor, KWin uses its virtual framebuffer, and Xfce runs on
+Xvfb. These are complete software-rendered sessions, not physical displays.
+
+`scripts/gui_desktop_session_smoke.py` creates a new profile, runtime directory
+and private D-Bus session. An ordinary desktop autostart entry launches the
+fixture inside that session. The check requires the session manager, desktop
+shell/window manager and settings services, verifies their actual D-Bus owner
+PIDs/executables/profile, and checks they survive the entire GUI lifecycle.
+Xfce also requires its panel, desktop and settings daemon. The existing GUI
+harness then verifies GTK4/Qt6 native Wayland or Tk native X11, explicit token
+confirmation/cancellation, hashes, sentinels, REVALIDATE and selected history
+removal. The application cannot fall back to XWayland in Wayland cases.
+
+Only temporary desktop settings are changed: GNOME's shell launcher adds the
+virtual monitor flags; Plasma uses classic startup on its private bus and a
+private PATH wrapper adds KWin's virtual-display flags. KWin also runs with
+`no-new-privs` to support same-user process/profile verification without file
+capability gains. Installed inventory and
+the optional Btrfs device metadata in the GUI harness remain synthetic; native
+provider and actual-remount CI are separate. The launcher rejects root and
+does not inherit a real profile, display, bus or publication credentials.
+
+Each job retains `session.json`, `lifecycle.json` and diagnostic logs, including
+the exact desktop package versions and commit. A failed session cannot produce
+release archives. This provides automated desktop integration coverage, while
+physical keyboard input, system-theme/palette inspection and the acceptance
+record below remain required. Do not mark the manual matrix complete from a
+CI pass alone. All three session jobs passed in
+[PR #42 validation](https://github.com/ultherego/xdg-audit/actions/runs/40711792031).
+The [retained original reports](verification-data/2026-10-28/desktop-sessions.md)
+pin exact versions, service identities, ten lifecycle assertions per session,
+keyboard-event scope and SHA-256 evidence. Calendar, audio, networking, portals
+and other optional desktop features are outside this check; diagnostic
+warnings remain in the original log artifacts.
+
 ## Record the environment
 
 Record UTC timestamp, full commit SHA, clean/dirty checkout, distribution and

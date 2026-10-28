@@ -2,6 +2,9 @@
 
 ## 1.7.0-rc2 (unreleased)
 
+- Exercise complete GNOME/Wayland, Plasma/Wayland and Xfce/X11 sessions with
+  isolated profiles, real session/service identity checks and the native GUI
+  lifecycle. Physical keyboard and manual theme acceptance remain separate.
 - Preserve rounded Settings editor corners in GTK light/dark themes and
   focus/scroll states. Confirm tokens with Return or keypad Enter through
   the same validation as the confirmation button; multiline editors retain

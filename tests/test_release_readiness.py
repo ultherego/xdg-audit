@@ -24,7 +24,7 @@ class ReleaseReadinessTests(unittest.TestCase):
         archives = workflow.split("\n  archives:", 1)[1].split("\n  release:", 1)[0]
         match = re.search(r"needs:\s*\[([^]]+)\]", archives)
         self.assertIsNotNone(match, "Release archive must depend on safety jobs")
-        required = {"test", "gui-smoke", "wayland-smoke", "benchmark", "quarantine-cycle", "native-sources", "snapd-live", "btrfs-device"}
+        required = {"test", "gui-smoke", "wayland-smoke", "desktop-sessions", "benchmark", "quarantine-cycle", "native-sources", "snapd-live", "btrfs-device"}
         actual = {name.strip() for name in match.group(1).split(",")}
         self.assertTrue(required.issubset(actual), f"Missing release safety gates: {required-actual}")
 
