@@ -56,6 +56,9 @@ Merged PR branches are maintained by the
 on `main`, preserves open-PR dependencies and changed branch heads, and uses
 an atomic Git push with per-ref leases. Closed but unmerged PRs are retained
 apart from the explicitly reviewed, commit-pinned PR #24 → #25 supersession.
+Post-deletion verification queries the live Git remote because REST branch
+listings can briefly retain a deleted branch. It never repeats deletion when
+a branch has been recreated or verification cannot reach the remote.
 
 The older [research roadmap](../RESEARCH_ROADMAP.md) is a historical review
 after 1.4.8, not the current release checklist.

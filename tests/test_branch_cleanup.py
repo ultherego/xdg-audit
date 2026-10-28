@@ -99,14 +99,26 @@ class AtomicCleanupTests(unittest.TestCase):
             git("push", "origin", "HEAD:refs/heads/first")
             with self.assertRaises(subprocess.CalledProcessError):
                 cleanup.delete_branches(work, plan, "main")
+            with self.assertRaisesRegex(RuntimeError, 'still exists'):
+                cleanup.verify_branch_deletions(work, plan)
             self.assertEqual(git("rev-parse", "refs/heads/first", cwd=bare), changed)
             self.assertEqual(git("rev-parse", "refs/heads/second", cwd=bare), initial)
             plan[0]["sha"] = changed
             cleanup.delete_branches(work, plan, "main")
+            # A stale local listing must not override the live remote result.
+            git('update-ref', 'refs/remotes/origin/first', changed)
+            cleanup.verify_branch_deletions(work, plan)
             self.assertEqual(git("for-each-ref", "--format=%(refname)", cwd=bare).splitlines(),
                              ["refs/heads/main", "refs/tags/v-test"])
             self.assertEqual(git("rev-parse", "main", cwd=bare), initial)
             self.assertEqual((work / "sentinel").read_text(), "keep user data")
+            git('push', 'origin', 'HEAD:refs/heads/first')
+            with self.assertRaisesRegex(RuntimeError, 'still exists'):
+                cleanup.verify_branch_deletions(work, plan)
+            self.assertEqual(git('rev-parse', 'refs/heads/first', cwd=bare), changed)
+            git('remote', 'set-url', 'origin', str(root / 'missing-remote.git'))
+            with self.assertRaises(subprocess.CalledProcessError):
+                cleanup.verify_branch_deletions(work, plan)
 
     def test_delete_rejects_default_reserved_invalid_and_duplicate_refs_before_push(self):
         for plan in [[{"branch": "main", "sha": HEAD}],
