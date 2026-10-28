@@ -29,7 +29,7 @@ def _timestamp(value: object) -> dt.datetime:
 
 
 def history_info(home: Path, roots: dict[str, Path], run_id: str, *, allow_empty_legacy=False) -> dict:
-    """Verify *every* manifest item is terminal and all run scopes are empty.
+    """Verify terminal v3 history, or an explicitly allowed empty v2 record.
 
     Strict anchoring means this never trusts the displayed GUI state or a
     caller-supplied path; it confirms there are no quarantined objects.

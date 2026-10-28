@@ -1481,7 +1481,10 @@ def preview_quarantine_adoption(home: Path, roots: dict[str, Path], run_id: str)
     from xdg_quarantine_lifecycle import read_manifest, inspect_run, RUN_ID
     if not isinstance(run_id, str) or not RUN_ID.fullmatch(run_id):
         raise ValueError('Invalid quarantine run ID')
-    if read_manifest(quarantine_dir(home, roots) / run_id).get('format') == 'intent-journal-v2':
+    base = quarantine_dir(home, roots)
+    if not base.is_absolute() or home not in base.parents:
+        raise ValueError('Unsafe quarantine location')
+    if read_manifest(base / run_id).get('format') == 'intent-journal-v2':
         from xdg_quarantine_legacy import inspect_legacy_run, adoption_token
         report = inspect_legacy_run(home, roots, run_id, nested_mounts_status)
         return {'run_id': run_id, 'present': report['present'], 'bytes': report['bytes'],

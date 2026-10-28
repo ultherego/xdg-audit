@@ -574,6 +574,8 @@ def adopt_legacy_run(home: Path, roots: dict[str, Path], run_id: str, mounts_che
     if not isinstance(run_id, str) or not RUN_ID.fullmatch(run_id):
         raise ValueError('Invalid quarantine run ID')
     base = roots.get('data', home / '.local/share') / 'xdg-audit-quarantine'
+    if not base.is_absolute() or home not in base.parents:
+        raise ValueError('Unsafe quarantine location')
     if read_manifest(base / run_id).get('format') == 'intent-journal-v2':
         from xdg_quarantine_legacy import adopt_v2_run
         return adopt_v2_run(home, roots, run_id, mounts_checker, approval_token)

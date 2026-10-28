@@ -238,6 +238,14 @@ class LegacyQuarantineTests(unittest.TestCase):
             legacy.inspect_legacy_run(self.home, self.roots, self.run_id, lambda _: None)
         self.assertEqual(self.manifest.read_bytes(), before)
 
+    def test_foreign_quarantine_root_is_rejected_before_reading_any_journal(self):
+        roots = {**self.roots, 'data': self.home.parent / 'foreign-fixture-data'}
+        with patch('xdg_quarantine_lifecycle.read_manifest', side_effect=AssertionError('must not read outside HOME')):
+            with self.assertRaisesRegex(ValueError, 'Unsafe quarantine location'):
+                audit.preview_quarantine_adoption(self.home, roots, self.run_id)
+            with self.assertRaisesRegex(ValueError, 'Unsafe quarantine location'):
+                adopt_legacy_run(self.home, roots, self.run_id, self.mounts)
+
     def test_gui_error_explains_adopt_purge_then_history_in_both_languages(self):
         for language in ('en', 'pl'):
             text = quarantine_error_details(LegacyQuarantineJournal(self.run_id), language)
