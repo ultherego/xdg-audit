@@ -96,6 +96,20 @@ def delete_branches(root, plan, default_branch):
     subprocess.run(command, cwd=root, check=True, timeout=120)
 
 
+def verify_branch_deletions(root, plan):
+    """Check the live Git remote; REST listings can lag a successful push."""
+    if not plan:
+        return
+    refs = sorted({"refs/heads/" + item["branch"] for item in plan})
+    remaining = subprocess.check_output(
+        ["git", "ls-remote", "--heads", "origin", *refs],
+        cwd=root, text=True, timeout=30)
+    # Nonempty or malformed output refuses success. A transport failure raises;
+    # verification never retries deletion or removes a recreated branch.
+    if remaining.strip():
+        raise RuntimeError("A selected branch still exists after cleanup")
+
+
 class GitHub:
     def __init__(self, repository, token):
         self.base = "https://api.github.com/repos/" + repository
@@ -160,9 +174,7 @@ def main():
     print(json.dumps({"execute": args.execute, "branches": plan}, indent=2))
     if args.execute:
         delete_branches(root, plan, default)
-        remaining = {b["name"] for b in api.pages("/branches")}
-        if remaining.intersection(item["branch"] for item in plan):
-            raise RuntimeError("A selected branch still exists after cleanup")
+        verify_branch_deletions(root, plan)
         print(f"Verified removal of {len(plan)} obsolete branches.")
 
 
