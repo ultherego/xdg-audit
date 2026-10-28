@@ -2,6 +2,10 @@
 
 ## 1.7.0-rc2 (unreleased)
 
+- Distinguish purging expired data from clearing empty history in all GUIs.
+  Support separately approved current-content adoption of known partial v2
+  journals, preserving the original journal and blocking automatic deletion.
+  Allow manual history cleanup of independently verified empty v2 records.
 - Exercise complete GNOME/Wayland, Plasma/Wayland and Xfce/X11 sessions with
   isolated profiles, real session/service identity checks and the native GUI
   lifecycle. Physical keyboard and manual theme acceptance remain separate.

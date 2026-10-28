@@ -28,7 +28,7 @@ def _timestamp(value: object) -> dt.datetime:
     return parsed
 
 
-def history_info(home: Path, roots: dict[str, Path], run_id: str) -> dict:
+def history_info(home: Path, roots: dict[str, Path], run_id: str, *, allow_empty_legacy=False) -> dict:
     """Verify *every* manifest item is terminal and all run scopes are empty.
 
     Strict anchoring means this never trusts the displayed GUI state or a
@@ -46,6 +46,15 @@ def history_info(home: Path, roots: dict[str, Path], run_id: str) -> dict:
             run_stat = os.fstat(runfd)
             _check_owner(run_stat, run_stat.st_dev)
             payload = _load_manifest(runfd, run_stat.st_dev)
+            if allow_empty_legacy and payload.get('format') == 'intent-journal-v2':
+                from xdg_quarantine_legacy import inspect_legacy_run
+                from xdg_audit import nested_mounts_status
+                report = inspect_legacy_run(home, roots, run_id, nested_mounts_status, empty_only=True)
+                if report['run_identity'] != _identity(run_stat) or report['payload'] != payload:
+                    raise ValueError('Legacy run changed during empty-history verification')
+                return {'run_id': run_id, 'status': 'EMPTY', 'items': len(payload['items']),
+                        'purged_at': None, 'payload': payload, 'run_identity': _identity(run_stat),
+                        'scopes': report['scopes'], 'existing_scopes': report['existing_scopes']}
             if payload.get("format") != "intent-journal-v3" or payload.get("created") != run_id:
                 raise ValueError("Unsupported or mismatched journal")
             rows = payload.get("items")
@@ -139,11 +148,12 @@ def history_candidates(home: Path, roots: dict[str, Path],
 
 
 def completed_history_candidates(home: Path, roots: dict[str, Path]) -> list[str]:
-    """Find ALL verified terminal journals, regardless of age.
+    """Find verified terminal journals and empty v2 records, regardless of age.
 
     This is *manual-cleanup only*: automated cleanup must continue to use
     history_candidates() with its 30-day post-PURGE restriction.
-    Corrupt, incomplete or non-empty runs are never returned.
+    A v2 record may have stale incomplete states, but must have no payload.
+    Corrupt, incomplete v3 or non-empty runs are never returned.
     """
     base = roots.get("data", home / ".local/share") / "xdg-audit-quarantine"
     if not base.is_dir() or base.is_symlink():
@@ -153,7 +163,7 @@ def completed_history_candidates(home: Path, roots: dict[str, Path]) -> list[str
         if not RUN_ID.fullmatch(path.name) or path.is_symlink():
             continue
         try:
-            history_info(home, roots, path.name)
+            history_info(home, roots, path.name, allow_empty_legacy=True)
         except (ValueError, OSError, UnicodeError):
             continue
         eligible.append(path.name)
@@ -164,10 +174,11 @@ def cleanup_history(home: Path, roots: dict[str, Path], run_id: str, *,
                     dry_run: bool = True) -> dict:
     """Remove only the complete journal and empty run directories.
 
-    Cannot remove an incomplete/invalid run or data within any scope.
+    Known, independently verified empty v2 records may be manually removed.
+    Cannot remove an invalid run or data within any scope.
     Aborted cleanup after empty scopes were removed is safely retryable.
     """
-    report = history_info(home, roots, run_id)
+    report = history_info(home, roots, run_id, allow_empty_legacy=True)
     result = {"run_id": run_id, "status": report["status"],
               "items": report["items"], "dry_run": dry_run}
     if dry_run:

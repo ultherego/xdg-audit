@@ -397,7 +397,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
             qhistory=QtWidgets.QPushButton(tr('Usuń historię…'))
             qhistory.clicked.connect(self.cleanup_history_dialog)
             qb.addWidget(qhistory)
-            qexpired=QtWidgets.QPushButton(tr('Usuń wygasłe…'))
+            qexpired=QtWidgets.QPushButton(tr('Usuń wygasłe pliki…'))
             qexpired.clicked.connect(self.purge_expired_dialog)
             qb.addWidget(qexpired)
             qexpired_history=QtWidgets.QPushButton(tr('Wyczyść całą zakończoną historię…'))
@@ -407,6 +407,9 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
             qretention.clicked.connect(self.configure_retention_dialog)
             qb.addWidget(qretention)
             qlayout.addLayout(qb)
+            qhelp=QtWidgets.QLabel(tr('Usuwanie wygasłych kasuje pliki według retencji. Czyszczenie historii usuwa tylko dzienniki pustych operacji.'))
+            qhelp.setWordWrap(True)
+            qlayout.addWidget(qhelp)
             self.content_stack.addWidget(qpage)
             layout.addWidget(self.content_stack,1)
 
@@ -605,6 +608,20 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
                 entry=self.qtree.currentItem()
                 if entry is None:return
                 run_id=entry.data(0,Role)
+            def ready(ok, result):
+                if not ok:
+                    messages.warning(self,tr('Zatwierdź aktualny stan'),quarantine_error_details(result,_language))
+                    return
+                self._adopt_inventory_confirm(run_id, resume_purge, result.get('approval_token'))
+            self._quarantine_job(
+                lambda:engine.preview_quarantine_adoption(home,engine.xdg_roots(home),run_id),
+                ready,'Weryfikacja kwarantanny')
+
+        def _adopt_inventory_confirm(self, run_id, resume_purge=False, approval_token=None):
+            if run_id is None:
+                entry=self.qtree.currentItem()
+                if entry is None:return
+                run_id=entry.data(0,Role)
             explanation=(tf('Operacja: {run_id}',run_id=run_id)+'\n'+
                 tr('Zatwierdzisz stan plików widoczny TERAZ. Nie oznacza to, że zawartość jest identyczna jak w dniu przeniesienia. PURGE nadal wymaga osobnej zgody.'))
             if messages.question(self,tr('Zatwierdź aktualny stan'),explanation,
@@ -625,7 +642,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
                             '\n'+tr('Nie wykonano PURGE. Ponownie sprawdź dostęp i osobno potwierdź usunięcie.'))
             self._quarantine_job(
                 lambda:engine.adopt_quarantine_inventory(
-                    home,engine.xdg_roots(home),run_id),
+                    home,engine.xdg_roots(home),run_id,approval_token=approval_token),
                 done,'Weryfikacja kwarantanny')
 
         def access_diagnostics_dialog(self, run_id=None, resume_purge=False, repaired=False):
@@ -726,7 +743,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
             entry=self.qtree.currentItem()
             if entry is None:
                 return
-            if entry.text(1) in ("PURGED","RESTORED","COMPLETED"):
+            if entry.text(1) in ("PURGED","RESTORED","COMPLETED","EMPTY"):
                 messages.information(self,tr('Historia'),
                     tr('Ta operacja jest zakończona. Użyj opcji Usuń historię.'))
                 return
@@ -823,12 +840,12 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
 
         def restore_dialog(self):
             runs = [r for r in engine.quarantine_runs(home, engine.xdg_roots(home))
-                    if r['status'] not in ('PURGED','RESTORED','COMPLETED')]
+                    if r['status'] not in ('PURGED','RESTORED','COMPLETED','EMPTY')]
             if not runs:
                 messages.information(self, tr('Kwarantanna'), tr('Nie znaleziono operacji.'))
                 return
             chosen_row = self.qtree.currentItem() if self.content_stack.currentIndex() == 1 else None
-            if chosen_row and chosen_row.text(1) in ('PURGED','RESTORED','COMPLETED'):
+            if chosen_row and chosen_row.text(1) in ('PURGED','RESTORED','COMPLETED','EMPTY'):
                 messages.information(self,tr('Historia'),
                     tr('Ta operacja jest zakończona. Użyj opcji Usuń historię.'))
                 return

@@ -1,11 +1,14 @@
 """Localized quarantine refusal details shared by all graphical backends."""
 from xdg_i18n import translate, format_message
-from xdg_quarantine_lifecycle import QuarantineIdentityMismatch
+from xdg_quarantine_lifecycle import QuarantineIdentityMismatch, LegacyQuarantineJournal
 
 
 def quarantine_error_details(error, language='pl'):
     def tr(text):
         return translate(text, language)
+    if isinstance(error, LegacyQuarantineJournal):
+        return (format_message('Operacja: {run_id}', language, run_id=error.run_id) + '\n\n' +
+                tr('To starszy dziennik v2, bez zapisanych tożsamości i sum plików. Aby usunąć jego pozostałe dane, użyj „Zatwierdź stan…” (ADOPT), a następnie osobno „Usuń trwale…” (PURGE). Historia stanie się dostępna do wyczyszczenia po usunięciu lub przywróceniu danych.'))
     if isinstance(error, QuarantineIdentityMismatch):
         def identity(label, values):
             return (tr(label) + f' device={values[0]}, inode={values[1]}, type={values[2]}')

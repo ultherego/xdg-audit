@@ -1312,6 +1312,12 @@ def quarantine_runs(home: Path, roots: dict[str, Path]) -> list[dict]:
                 state = "QUARANTINED"
             else:
                 state = "INCOMPLETE"
+            if data.get('format') == 'intent-journal-v2':
+                from xdg_quarantine_history import history_info
+                try:
+                    state = history_info(home, roots, run.name, allow_empty_legacy=True)['status']
+                except (ValueError, OSError):
+                    pass
             result.append({"run_id": run.name, "items": reconciled,
                            "status": state, "purged_at": data.get("purged_at"),
                            "moved": sum(r.get("move_status") == "moved" for r in reconciled)})
@@ -1444,7 +1450,8 @@ def purge_quarantine_run(home: Path, roots: dict[str, Path], run_id: str,
 def expired_quarantine_runs(home: Path, roots: dict[str, Path]) -> list[str]:
     from xdg_quarantine_lifecycle import expired_run_ids
     from xdg_retention import load
-    return expired_run_ids(quarantine_runs(home, roots), load(home, roots)["days"])
+    return expired_run_ids([run for run in quarantine_runs(home, roots)
+                            if run['status'] == 'QUARANTINED'], load(home, roots)["days"])
 
 
 def cleanup_quarantine_history(home: Path, roots: dict[str, Path], run_id: str,
@@ -1464,10 +1471,25 @@ def expired_quarantine_history(home: Path, roots: dict[str, Path]) -> list[str]:
                               [x["run_id"] for x in quarantine_runs(home, roots)])
 
 
-def adopt_quarantine_inventory(home: Path, roots: dict[str, Path], run_id: str) -> dict:
+def adopt_quarantine_inventory(home: Path, roots: dict[str, Path], run_id: str, *, approval_token=None) -> dict:
     """User-confirmed snapshot of current contents after access recovery."""
     from xdg_quarantine_lifecycle import adopt_legacy_run
-    return adopt_legacy_run(home, roots, run_id, nested_mounts_status)
+    return adopt_legacy_run(home, roots, run_id, nested_mounts_status, approval_token=approval_token)
+
+
+def preview_quarantine_adoption(home: Path, roots: dict[str, Path], run_id: str) -> dict:
+    from xdg_quarantine_lifecycle import read_manifest, inspect_run, RUN_ID
+    if not isinstance(run_id, str) or not RUN_ID.fullmatch(run_id):
+        raise ValueError('Invalid quarantine run ID')
+    if read_manifest(quarantine_dir(home, roots) / run_id).get('format') == 'intent-journal-v2':
+        from xdg_quarantine_legacy import inspect_legacy_run, adoption_token
+        report = inspect_legacy_run(home, roots, run_id, nested_mounts_status)
+        return {'run_id': run_id, 'present': report['present'], 'bytes': report['bytes'],
+                'format': 'intent-journal-v2', 'historical_identity_verified': False,
+                'approval_token': adoption_token(report)}
+    report = inspect_run(home, roots, run_id, nested_mounts_status, allow_unsealed=True)
+    return {'run_id': run_id, 'present': report['present'], 'bytes': report['bytes'],
+            'format': 'intent-journal-v3'}
 
 
 def quarantine_access_recoverable_error(error: BaseException) -> bool:
@@ -1781,7 +1803,7 @@ def main(argv=None):
                     print(f"BLOCKED {run_id}: {exc}", file=sys.stderr)
                     return 1
             for plan in previews:
-                print(f"HISTORY PLAN {plan['run_id']}: {plan['items']} terminal entries ({plan['status']})")
+                print(f"HISTORY PLAN {plan['run_id']}: {plan['items']} journal entries ({plan['status']})")
             if not previews:
                 print("No completed history eligible for cleanup.")
                 return 0
@@ -1804,13 +1826,17 @@ def main(argv=None):
             print(recover_manifest_temps(home, roots, args.recover_journal, dry_run=False))
             return 0
         if args.adopt_quarantine:
-            report = inspect_run(home, roots, args.adopt_quarantine, nested_mounts_status,
-                                 allow_unsealed=True)
+            report = preview_quarantine_adoption(home, roots, args.adopt_quarantine)
             print("LEGACY ADOPTION PLAN: %d entries, %s. Current contents may differ from original." %
                   (report["present"], human(report["bytes"])))
+            if report['format'] == 'intent-journal-v2':
+                print('V2 JOURNAL: historical identities were not recorded. ADOPT preserves the original journal and binds only CURRENT quarantine contents. Automatic deletion stays blocked.')
+            if args.dry_run:
+                return 0
             if not sys.stdin.isatty() or input("Type ADOPT to bind CURRENT contents: ").strip() != "ADOPT":
                 raise SystemExit("ERROR: adoption cancelled")
-            print(adopt_legacy_run(home, roots, args.adopt_quarantine, nested_mounts_status))
+            print(adopt_legacy_run(home, roots, args.adopt_quarantine, nested_mounts_status,
+                                   approval_token=report.get('approval_token')))
             return 0
         if args.quarantine_info:
             report = inspect_run(home, roots, args.quarantine_info, nested_mounts_status,
