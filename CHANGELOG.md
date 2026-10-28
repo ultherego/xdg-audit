@@ -2,6 +2,10 @@
 
 ## 1.7.0-rc2 (unreleased)
 
+- Preserve rounded Settings editor corners in GTK light/dark themes and
+  focus/scroll states. Confirm tokens with Return or keypad Enter through
+  the same validation as the confirmation button; multiline editors retain
+  newline input. Exercise keyboard PURGE/HISTORY refusal and acceptance.
 - Refuse FIFO journal and payload substitutions without blocking on open.
   Reuse bounded, descriptor-validated journal reads for history display and
   legacy restore, preserving existing explicit confirmation requirements.

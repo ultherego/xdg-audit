@@ -119,6 +119,19 @@ def run(backend, output):
                             return [model.get_item(i) for i in range(model.get_n_items())]
                         return Gtk.Window.list_toplevels()
 
+                    def walk(widget):
+                        yield widget
+                        if backend == 'gtk4':
+                            nested = []
+                            child = widget.get_first_child()
+                            while child is not None:
+                                nested.append(child)
+                                child = child.get_next_sibling()
+                        else:
+                            nested = widget.get_children() if hasattr(widget, 'get_children') else []
+                        for child in nested:
+                            yield from walk(child)
+
                     def inspect(title, close=True):
                         window = next(w for w in windows() if w.get_title() == title)
                         body = window.get_child() if backend == 'gtk4' else window.get_children()[0]
@@ -180,7 +193,43 @@ def run(backend, output):
 
                     def settings():
                         try:
-                            inspect('xdg-audit settings')
+                            window = inspect('xdg-audit settings', close=False)
+                            editor = next(w for w in walk(window) if isinstance(w, Gtk.TextView))
+                            editor.grab_focus()
+                            from gui_lifecycle_smoke import send_x11_key
+                            send_x11_key(window.get_title(), 'Return')
+                            GLib.timeout_add(150, lambda: settings_focused(window, editor))
+                        except BaseException:
+                            errors.append(traceback.format_exc())
+                            Gio.Application.get_default().quit()
+                        return False
+
+                    def settings_focused(window, editor):
+                        try:
+                            buffer = editor.get_buffer()
+                            assert '\n' in buffer.get_text(buffer.get_start_iter(), buffer.get_end_iter(), False)
+                            assert window.get_visible(), 'Enter in a multiline editor closed Settings'
+                            capture(output, backend + '-settings-focused')
+                            buffer.set_text('\n'.join('Scrollable fixture line ' + str(i) for i in range(40)))
+                            GLib.timeout_add(150, lambda: settings_scrolled(window, editor))
+                        except BaseException:
+                            errors.append(traceback.format_exc()); Gio.Application.get_default().quit()
+                        return False
+
+                    def settings_scrolled(window, editor):
+                        try:
+                            buffer = editor.get_buffer()
+                            editor.scroll_to_iter(buffer.get_end_iter(), 0.0, False, 0.0, 0.0)
+                            GLib.timeout_add(150, lambda: settings_finish(window))
+                        except BaseException:
+                            errors.append(traceback.format_exc()); Gio.Application.get_default().quit()
+                        return False
+
+                    def settings_finish(window):
+                        try:
+                            capture(output, backend + '-settings-scrolled')
+                            window.destroy()
+                            print(backend + ': PASS multiline Enter, focused and scrolled settings frames')
                         except BaseException:
                             errors.append(traceback.format_exc())
                         Gio.Application.get_default().quit()
@@ -216,6 +265,14 @@ def run(backend, output):
                             dialog = inspect(title)
                             if token:
                                 dialog.findChild(QtWidgets.QLineEdit).setText('MOVE')
+                            if title == 'xdg-audit settings':
+                                import importlib
+                                test = importlib.import_module(QtWidgets.__name__.split('.')[0] + '.QtTest').QTest
+                                editor = dialog.findChild(QtWidgets.QPlainTextEdit)
+                                editor.setPlainText('line one')
+                                editor.setFocus()
+                                test.keyClick(editor, QtCore.Qt.Key.Key_Return)
+                                assert '\n' in editor.toPlainText() and dialog.isVisible()
                             dialog.reject()
                         except BaseException:
                             errors.append(traceback.format_exc()); app.quit()
@@ -271,6 +328,17 @@ def run(backend, output):
                             if token:
                                 actions = dialog._xdg_layout[2]
                                 next(w for w in actions.winfo_children() if isinstance(w, ttk.Entry)).insert(0, 'MOVE')
+                            if title == 'xdg-audit settings':
+                                def walk(widget):
+                                    yield widget
+                                    for child in widget.winfo_children():
+                                        yield from walk(child)
+                                editor = next(w for w in walk(dialog) if isinstance(w, tk.Text))
+                                editor.delete('1.0', 'end')
+                                editor.insert('1.0', 'line one')
+                                editor.focus_force()
+                                editor.event_generate('<KeyPress-Return>')
+                                assert '\n' in editor.get('1.0', 'end-1c') and dialog.winfo_exists()
                             dialog.destroy()
                         except BaseException:
                             errors.append(traceback.format_exc()); active_root[0].destroy()

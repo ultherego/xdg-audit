@@ -93,7 +93,10 @@ def configure_gtk_dialog(dialog, content, Gtk, Gdk, Pango):
                       else body.get_preferred_height_for_width(measured_width)[1])
     # Unparented GTK3 form measurements can undercount themed field heights.
     # Always bound forms containing editors, while keeping simple prompts compact.
-    has_editors = any(isinstance(widget, Gtk.ScrolledWindow) for widget in children)
+    def contains_editor(widget):
+        return (isinstance(widget, Gtk.ScrolledWindow) or
+                any(contains_editor(child) for child in child_list(widget)))
+    has_editors = any(contains_editor(widget) for widget in children)
     if natural_height > max_body_height or has_editors:
         scrolling = Gtk.ScrolledWindow()
         scrolling.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
@@ -275,6 +278,7 @@ def qt_dialog_helpers(QtWidgets, QtCore, tr):
         buttons.accepted.connect(dialog.accept)
         buttons.rejected.connect(dialog.reject)
         buttons.button(QtWidgets.QDialogButtonBox.StandardButton.Ok).setText(tr('OK'))
+        buttons.button(QtWidgets.QDialogButtonBox.StandardButton.Ok).setDefault(True)
         buttons.button(QtWidgets.QDialogButtonBox.StandardButton.Cancel).setText(tr('Anuluj'))
         layout.addWidget(buttons)
         _qt_show_size(dialog, QtWidgets)
@@ -410,7 +414,11 @@ def tk_dialog_helpers(tk, ttk, root, tr):
         dialog.protocol('WM_DELETE_WINDOW', dialog.destroy)
         dialog.bind('<Escape>', lambda _: dialog.destroy())
         if field:
-            field.bind('<Return>', lambda _: accept())
+            def accept_key(_):
+                accept()
+                return 'break'
+            field.bind('<Return>', accept_key)
+            field.bind('<KP_Enter>', accept_key)
         fit_tk_dialog(dialog)
         dialog.wait_visibility()
         dialog.grab_set()
