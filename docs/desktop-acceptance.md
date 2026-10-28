@@ -27,7 +27,10 @@ and private D-Bus session. An ordinary desktop autostart entry launches the
 fixture inside that session. The check requires the session manager, desktop
 shell/window manager and settings services, verifies their actual D-Bus owner
 PIDs/executables/profile, and checks they survive the entire GUI lifecycle.
-Xfce also requires its panel, desktop and settings daemon. The existing GUI
+Xfce also requires its panel, desktop and settings daemon. D-Bus service PIDs
+must remain unchanged; at least one original instance of each required extra
+component must survive. An exiting duplicate startup helper does not imply a
+restart, but replacing every original instance fails. The existing GUI
 harness then verifies GTK4/Qt6 native Wayland or Tk native X11, explicit token
 confirmation/cancellation, hashes, sentinels, REVALIDATE and selected history
 removal. The application cannot fall back to XWayland in Wayland cases.
@@ -53,6 +56,11 @@ pin exact versions, service identities, ten lifecycle assertions per session,
 keyboard-event scope and SHA-256 evidence. Calendar, audio, networking, portals
 and other optional desktop features are outside this check; diagnostic
 warnings remain in the original log artifacts.
+
+After stopping the private fixture session, teardown detaches only its exact
+current-user FUSE portal mounts under the new temporary runtime directory,
+then checks the kernel mount table before removing the profile. It never
+addresses a host-session portal. Each job also retains `teardown.json`.
 
 ## Record the environment
 

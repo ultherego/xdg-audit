@@ -27,6 +27,9 @@
   After successful trusted main CI, verify an existing production signing key
   can sign and verify a probe before creating the immutable RC2 tag. Missing or
   unusable configuration produces a public report without key material.
+- Make desktop-fixture teardown handle disconnected private FUSE portals and
+  retain its result. Original required services/components must survive the
+  lifecycle; exiting duplicate startup helpers no longer cause a false failure.
 - Keep empty settings editors visible with theme-aware borders and focus.
 - Show actionable PURGE refusal dialogs with exact recorded/current identity
   evidence; permission repair and ADOPT cannot bypass identity mismatches.

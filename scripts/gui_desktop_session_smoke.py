@@ -13,6 +13,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import signal
 import subprocess
 import sys
@@ -161,6 +162,51 @@ def session_evidence(desktop):
     return {'services': services, 'processes': processes, 'native_session': spec['session']}
 
 
+def require_session_survived(desktop, before, after):
+    require(before['services'] == after['services'] and
+            before['native_session'] == after['native_session'],
+            'Desktop services restarted during lifecycle')
+    for executable in DESKTOPS[desktop]['processes']:
+        original = {item['pid'] for item in before['processes'] if item['executable'] == executable}
+        current = {item['pid'] for item in after['processes'] if item['executable'] == executable}
+        # A duplicate startup helper may exit. At least one original instance
+        # of every required component must survive; replacement PIDs never pass.
+        require(bool(original & current), 'Desktop component restarted during lifecycle: ' + executable)
+
+
+def fixture_portal_mounts(base, mountinfo):
+    allowed = {str(base / 'runtime' / name) for name in ('doc', 'gvfs')}
+    result = []
+    for line in mountinfo.splitlines():
+        left, separator, right = line.partition(' - ')
+        fields, filesystem = left.split(), right.split()
+        if not separator or len(fields) < 6 or len(filesystem) < 3:
+            continue
+        path = re.sub(r'\\([0-7]{3})', lambda match: chr(int(match[1], 8)), fields[4])
+        if path in allowed:
+            require(filesystem[0] in ('fuse.portal', 'fuse.gvfsd-fuse') and
+                    'user_id=' + str(os.getuid()) in filesystem[2].split(','),
+                    'Unexpected filesystem at a private portal mount: ' + path)
+            result.append(path)
+    return sorted(set(result))
+
+
+def cleanup_fixture_portals(base, env, log):
+    def mounted():
+        return fixture_portal_mounts(base, Path('/proc/self/mountinfo').read_text())
+    paths = mounted()
+    if paths:
+        helper = shutil.which('fusermount3', path='/usr/bin:/bin') or shutil.which('fusermount', path='/usr/bin:/bin')
+        require(helper is not None, 'Cannot detach the private fixture portal mount')
+        for path in paths:
+            # The stopped fixture can leave disconnected FUSE mounts. Detach
+            # only these exact, current-user mounts before temporary cleanup.
+            subprocess.run([helper, '-u', '-z', '--', path], env=env, stdin=subprocess.DEVNULL,
+                           stdout=log, stderr=subprocess.STDOUT, timeout=5, check=False)
+            require(path not in mounted(), 'Private fixture portal mount did not detach: ' + path)
+    return paths
+
+
 def worker(desktop, output):
     spec = DESKTOPS[desktop]
     report = {'desktop': desktop, 'commit': os.environ.get('GITHUB_SHA'), 'result': 'FAIL',
@@ -198,7 +244,7 @@ def worker(desktop, output):
                 'Lifecycle did not complete on the required display')
         # Verify the full session survived every dialog and filesystem action.
         report['session_after'] = session_evidence(desktop)
-        require(report['session_after'] == report['session'], 'Desktop services restarted during lifecycle')
+        require_session_survived(desktop, report['session'], report['session_after'])
         report['result'] = 'PASS'
     except BaseException:
         report['failure'] = traceback.format_exc()
@@ -263,6 +309,9 @@ def run(desktop, output):
                     subprocess.run(['/usr/bin/gpgconf', '--homedir', str(agent_home), '--kill', 'all'],
                                    env=env, stdin=subprocess.DEVNULL, stdout=log,
                                    stderr=subprocess.STDOUT, timeout=5, check=False)
+                detached = cleanup_fixture_portals(base, env, log)
+                (output / 'teardown.json').write_text(json.dumps(
+                    {'result': 'PASS', 'detached_private_portal_mounts': detached}, indent=2) + '\n')
 
 
 if __name__ == '__main__':
