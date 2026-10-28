@@ -113,14 +113,15 @@ class Cycle:
         click = self.ui.action(operation, self.source, self.run_id)
         if click is None:
             return
-        token = {'move': 'MOVE', 'restore': 'RESTORE', 'purge': 'PURGE', 'history': 'HISTORY', 'adopt': 'ADOPT'}[operation]
+        token = {'move': 'MOVE', 'restore': 'RESTORE', 'purge': 'PURGE', 'history': 'HISTORY',
+                 'all_history': 'HISTORY', 'adopt': 'ADOPT'}[operation]
         responses = [] if self.ui.backend.startswith('gtk') else [('yes', '')]
         if operation == 'move':
             responses.append(('token', 'UNCERTAIN'))
         responses.append((reject or ('cancel' if cancel else 'token'), token))
         if reject and self.ui.backend.startswith('gtk'):
             responses.append(('cancel', token))
-        if not cancel and not reject and operation != 'history' and not self.ui.backend.startswith('gtk'):
+        if not cancel and not reject and operation not in ('history', 'all_history') and not self.ui.backend.startswith('gtk'):
             responses.append(('ok', ''))
         if operation == 'adopt' and not cancel and self.ui.backend.startswith('gtk'):
             responses.append(('ok', ''))
@@ -208,6 +209,9 @@ class Cycle:
                     'move_status': 'planned'})
                 self.manifest.write_text(json.dumps(data))
                 self.legacy_manifest_before = self.manifest.read_bytes()
+                self.phase = 'legacy_ready'
+                self.start('adopt', 'cancelled_adoption', cancel=True)
+            elif self.phase == 'legacy_ready':
                 self.start('adopt', 'cancelled_adoption', cancel=True)
             elif self.phase == 'cancelled_adoption':
                 require(self.manifest.read_bytes() == self.legacy_manifest_before, 'cancelled ADOPT changed legacy journal')
@@ -233,9 +237,12 @@ class Cycle:
                         node['identity'][0] += 1
                     self.manifest.write_text(json.dumps(data))
                     self.manifest_before_cancel = self.manifest.read_bytes()
+                    self.phase = 'device_ready'
                     self.start_device_revalidation(cancel=True)
                 else:
                     self.start('purge', 'cancelled_purge', cancel=True)
+            elif self.phase == 'device_ready':
+                self.start_device_revalidation(cancel=True)
             elif self.phase == 'device_cancelled':
                 require(self.manifest.read_bytes() == self.manifest_before_cancel,
                         'cancelled REVALIDATE changed the original journal')
@@ -298,6 +305,21 @@ class Cycle:
                 require(not self.source.exists() and not self.destination.exists(), 'HISTORY recreated deleted payload')
                 self.guard()
                 self.record('HISTORY plus Enter removes only the selected completed journal')
+                empty_id = '20000101-010101-123456'
+                empty = engine.quarantine_dir(self.home, self.roots) / empty_id
+                (empty / 'config').mkdir(parents=True)
+                empty_payload = {'format': 'intent-journal-v2', 'created': empty_id, 'items': [
+                    {'scope': 'config', 'source': str(self.roots['config'] / 'empty-legacy-fixture'),
+                     'destination': str(empty / 'config/empty-legacy-fixture'), 'move_status': 'moved'}]}
+                (empty / 'manifest.json').write_text(json.dumps(empty_payload))
+                self.phase = 'all_history_ready'
+                self.start('all_history', 'history_all_clear')
+            elif self.phase == 'all_history_ready':
+                self.start('all_history', 'history_all_clear')
+            elif self.phase == 'history_all_clear':
+                require(not engine.quarantine_runs(self.home, self.roots), 'Bulk history retained eligible records')
+                self.guard()
+                self.record('bulk HISTORY clears completed history and verified empty v2 records without touching original data')
                 self.done = True
                 self.ui.quit()
                 return False
@@ -405,6 +427,10 @@ class GtkUI:
                 return None
             return lambda: current.move_button.emit('clicked')
         current.stack.set_visible_child_name('quarantine')
+        if operation == 'all_history':
+            button = next(widget for widget in self.walk(current.qlist) if isinstance(widget, self.Gtk.Button)
+                          and widget.get_label() == 'Clear all completed history…')
+            return (lambda: button.emit('clicked')) if button.get_mapped() else None
         rows = [widget for widget in self.walk(current.qlist) if isinstance(widget, self.Gtk.ListBoxRow)]
         for row in rows:
             widgets = list(self.walk(row))
@@ -495,6 +521,10 @@ class QtUI:
                                   self.Core.Qt.ItemDataRole.CheckStateRole), 'Qt row was not checkable')
             return current.move_button.click if current.move_button.isEnabled() else None
         current.scope_tabs.setCurrentIndex(current.scope_tabs.count() - 1)
+        if operation == 'all_history':
+            button = next(widget for widget in current.findChildren(self.Widgets.QPushButton)
+                          if widget.text() == 'Clear all completed history…')
+            return button.click if button.isVisible() and button.isEnabled() else None
         for index in range(current.qtree.topLevelItemCount()):
             item = current.qtree.topLevelItem(index)
             if item.text(0) == run_id:
@@ -590,8 +620,12 @@ class TkUI:
                 return None
             return current.move_button.invoke
         current.tabs.select(current.tabs.tabs()[-1])
-        if not current.qtree.exists(run_id):
+        if operation != 'all_history' and not current.qtree.exists(run_id):
             return None
+        if operation == 'all_history':
+            button = next(widget for widget in self.walk(self.root) if isinstance(widget, self.ttk.Button)
+                          and widget.cget('text') == 'Clear all completed history…')
+            return button.invoke if button.winfo_viewable() else None
         current.qtree.selection_set(run_id)
         current.qtree.focus(run_id)
         caption = {'restore': 'Restore operation…', 'purge': 'Purge permanently…', 'history': 'Clear history…', 'adopt': 'Approve current state…'}[operation]
@@ -658,7 +692,7 @@ def run(backend, session, output=None, device_revalidation=False):
                        'available': [backend], 'wm': 'test'}
             ui.run(cycle, home, args, runtime)
             require(cycle.done and not cycle.errors, '\n'.join(cycle.errors) or 'GUI exited before completing lifecycle')
-            require(cycle.phase == 'history_removed', 'GUI did not complete every lifecycle stage')
+            require(cycle.phase == 'history_all_clear', 'GUI did not complete every lifecycle stage')
             if not (backend.startswith('gtk') and session == 'wayland'):
                 require(all(ui.key_events.get(key, 0) > 0 for key in ('Return', 'KP_Enter')),
                         'Both Enter keys must be exercised')

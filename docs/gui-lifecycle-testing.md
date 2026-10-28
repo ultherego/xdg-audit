@@ -101,3 +101,5 @@ remains recorded in the release checklist and does not need repeating.
 ## Legacy v2 recovery
 
 Every lifecycle run also models a partial pre-identity v2 journal after its second MOVE. It cancels ADOPT and verifies exact unchanged journal/payload bytes, then confirms ADOPT through the actual controls, verifies the preserved original journal/current hashes and retains the never-moved protected original. PURGE and HISTORY still use their own confirmations. The v2 journal is synthetic; all application filesystem operations use production code.
+
+The final bulk HISTORY check also creates a known empty v2 record with stale moved state, then verifies the actual Clear all completed history control removes both that empty record and the remaining completed journal while preserving protected/original sentinels.
