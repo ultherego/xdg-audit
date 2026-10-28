@@ -10,6 +10,7 @@ A checked item requires a linked result; adding a script or test alone does
 not demonstrate that it ran.
 
 Results from 2026-10-26: [verification record](verification-2026-10-26.md).
+Latest safety/GUI results: [2026-10-28 verification](verification-2026-10-28.md).
 Current priorities: [project roadmap](project-roadmap.md).
 
 ## 1. Safety (P0)
@@ -26,7 +27,8 @@ Current priorities: [project roadmap](project-roadmap.md).
   `SIGKILL`, with synthetic data only, followed by restart recovery —
   [results and scope](verification-2026-10-26.md).
   This covers process termination, not power loss or kernel failure.
-- [ ] Independent security review of the latest changes by a second person.
+- [ ] Independent security review of the latest changes by a second person —
+  [review map and required report](security-review-guide.md).
 - [ ] Investigate the reported device-number change in an existing quarantine
   run. The inode and type match, but identity verification still refuses PURGE.
   Read-only filesystem diagnostics, persistent Btrfs bindings and explicit
@@ -68,14 +70,16 @@ is complete and does not require repeating the same tests.
 The following matrix concerns additional, separately identified environments.
 
 - [x] Functional GUI tests in the owner's environment — owner confirmation.
-- [ ] Requested dialog polish: complete Settings editor corners in light/dark
+- [x] Requested dialog polish: complete Settings editor corners in light/dark
   themes, including focus/scroll states; Return/keypad Enter token confirmation,
   rejection of empty/incorrect PURGE/HISTORY and unchanged multiline newlines.
-  [Automated verification scope](gui-lifecycle-testing.md); exact-commit CI and
-  visual screenshot review are required before completion.
+  [Exact-commit CI and visual screenshot results](verification-2026-10-28.md);
+  the [automated scope](gui-lifecycle-testing.md) retains the separate physical
+  keyboard/full-desktop limits.
 - [ ] GNOME/Wayland — complete scan, restore and PURGE workflow.
 - [ ] KDE Plasma/Wayland — the same workflow with system-theme integration.
 - [ ] Xfce/X11 — startup and workflow through Tk/GTK.
+  [Prepared session protocol and evidence requirements](desktop-acceptance.md).
 - [x] Native pacman, APT/dpkg and RPM: MOVE verifies the OS's own database.
   Arch/Ubuntu/Fedora native protection and lifecycle tests are mandatory before
   CI can build archives. Arch validates the package-manager family used by

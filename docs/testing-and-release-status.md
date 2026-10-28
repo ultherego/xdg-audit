@@ -2,7 +2,8 @@
 
 [Back to README](../README.md) · [Remaining work](project-roadmap.md)
 
-Status checked on **2026-10-27**.
+Status checked on **2026-10-28**. Latest exact-commit results and artifact
+hashes: [verification record](verification-2026-10-28.md).
 
 The [GUI lifecycle harness](gui-lifecycle-testing.md) exercises real
 MOVE/RESTORE/PURGE controls and dialogs on disposable data, including cancelled
@@ -28,7 +29,17 @@ GitHub Actions covers:
 - Source ZIP/tar.gz integrity, checksum-pinned AUR recipes and a rehearsal of
   the production repository publisher against a disposable local Git remote.
 
-The package/release change passed all 18 build/test jobs, including 370
+The latest GUI change passed all 19 build/test jobs, including 415 regressions
+on each supported Python version:
+[PR #40 validation](https://github.com/ultherego/xdg-audit/actions/runs/40650051326)
+and [merged main validation](https://github.com/ultherego/xdg-audit/actions/runs/40650695607).
+Keyboard checks include Return/keypad Enter, empty/incorrect PURGE/HISTORY,
+cancellation and selected history removal. Settings corners were inspected
+in GTK light/dark empty/focused/scrolled screenshots; multiline Enter remains
+a newline. GTK headless-Wayland activation and full desktop acceptance have
+the separate scopes documented in the verification record.
+
+The earlier package/release change passed all 18 build/test jobs, including 370
 regressions on every supported Python version:
 [PR #35 validation](https://github.com/ultherego/xdg-audit/actions/runs/40515908169).
 The resulting `main` commit also passed:
@@ -42,6 +53,9 @@ the [release-readiness checklist](release-readiness.md). A reported device
 identity change initially blocks its existing run; its actual owner environment
 remains unverified. Exact-inventory recovery requires separate `REVALIDATE`
 confirmation and does not authorize deletion or infer missing historical UUIDs.
+The [independent review handoff](security-review-guide.md) and
+[desktop acceptance protocol](desktop-acceptance.md) are prepared; neither is
+a report of completed acceptance.
 
 ```fish
 python3 -m unittest discover -s tests -v
