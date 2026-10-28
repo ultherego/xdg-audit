@@ -2,6 +2,9 @@
 
 ## 1.7.0-rc2 (unreleased)
 
+- Refuse FIFO journal and payload substitutions without blocking on open.
+  Reuse bounded, descriptor-validated journal reads for history display and
+  legacy restore, preserving existing explicit confirmation requirements.
 - Diagnose device-only quarantine changes with descriptor-bound mount/Btrfs
   evidence; offer separate exact-inventory `REVALIDATE`, preserving all hashes,
   inode/type checks and independent PURGE consent. Legacy historical UUID

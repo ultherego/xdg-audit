@@ -190,7 +190,8 @@ def diagnose_access(home: Path, roots: dict[str, Path], run_id: str) -> dict:
                 problem("HARDLINK_UNSAFE", path, info)
                 return
             try:
-                fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=parentfd)
+                fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK |
+                             getattr(os, 'O_CLOEXEC', 0), dir_fd=parentfd)
             except PermissionError:
                 problem("FILE_UNREADABLE", path, info,
                         repairable=(stat.S_IMODE(info.st_mode) & stat.S_IRUSR == 0))

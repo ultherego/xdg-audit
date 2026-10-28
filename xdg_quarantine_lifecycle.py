@@ -101,7 +101,8 @@ def capture_inventory(path: Path, *, require_deletable: bool = False) -> list[di
             elif kind == stat.S_IFREG:
                 if before.st_nlink != 1:
                     raise ValueError("Hard linked file in quarantine")
-                filefd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0), dir_fd=fd)
+                filefd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK |
+                                 getattr(os, "O_CLOEXEC", 0), dir_fd=fd)
                 try:
                     start = os.fstat(filefd)
                     if _identity(start) != _identity(before):
@@ -180,7 +181,9 @@ def _match_inventory(expected, current, *, partial=False):
 
 
 def _load_manifest(fd: int, device: int) -> dict:
-    filefd = os.open("manifest.json", os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0), dir_fd=fd)
+    # Reject a FIFO before any read; even opening it can otherwise wait forever.
+    filefd = os.open("manifest.json", os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK |
+                     getattr(os, "O_CLOEXEC", 0), dir_fd=fd)
     try:
         info = os.fstat(filefd)
         _check_owner(info, device)
@@ -196,6 +199,21 @@ def _load_manifest(fd: int, device: int) -> dict:
         return data
     finally:
         os.close(filefd)
+
+
+def read_manifest(run: Path) -> dict:
+    """Read a bounded, user-owned regular journal through anchored descriptors.
+
+    Shared by display and legacy restore paths without requiring a v3 schema.
+    Opening a substituted FIFO cannot stall before descriptor validation.
+    """
+    fd = _open_path(run)
+    try:
+        info = os.fstat(fd)
+        _check_owner(info, info.st_dev)
+        return _load_manifest(fd, info.st_dev)
+    finally:
+        os.close(fd)
 
 
 def _write_manifest(fd: int, payload: dict) -> None:
