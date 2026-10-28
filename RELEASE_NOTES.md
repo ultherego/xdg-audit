@@ -5,6 +5,10 @@
 
 ## New since v1.7.0-rc1
 
+- Recover known partial v2 quarantine runs through explicit current-content
+  ADOPT, separate PURGE and HISTORY. Preserve original intent metadata and
+  never infer historical identities. Empty v2 records can be manually cleared.
+  [Button meanings and recovery sequence](docs/quarantine-lifecycle.md).
 - Complete software-rendered GNOME/Wayland, Plasma/Wayland and Xfce/X11
   integration jobs, with verified session services and the native GUI lifecycle.
   [Manual desktop acceptance remains separate](docs/desktop-acceptance.md).

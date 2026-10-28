@@ -47,8 +47,30 @@ python3 xdg_audit.py --purge RUN_ID --dry-run
 ```
 
 Adoption requires typing `ADOPT`. It does not prove that the current content
-is the same as when the item was first quarantined. Legacy v2 journals remain
-restore-only and are not eligible for adoption or purge.
+is the same as when the item was first quarantined.
+
+Known `intent-journal-v2` runs can also be explicitly adopted, including
+partial runs containing both moved and never-moved intents. A read-only
+preview validates all original paths and the complete remaining quarantine
+namespace. Its approval token binds that journal, current inodes, recursive
+hashes and filesystem binding. Confirmation rechecks the evidence before an
+atomic v3 conversion. The original v2 journal is retained as an unchanged JSON
+object in the `legacy_adoption` receipt; only remaining quarantine objects
+become live v3 items. Original source paths are never changed by adoption.
+Unused empty scope directories may be removed with `rmdir` only.
+
+The receipt explicitly records no historical identity proof and no PURGE
+authorization. Adopted v2 runs remain blocked from automatic deletion.
+Manual PURGE needs a fresh preflight and its own token; RESTORE also remains
+available. Unknown formats, mismatched run IDs, identity-bearing downgraded
+journals, untracked content, nested mounts and unsafe objects remain blocked.
+
+```fish
+python3 xdg_audit.py --adopt-quarantine RUN_ID --dry-run
+python3 xdg_audit.py --adopt-quarantine RUN_ID  # ADOPT; does not delete payloads
+python3 xdg_audit.py --purge RUN_ID             # Separate PURGE
+python3 xdg_audit.py --cleanup-history RUN_ID   # Separate HISTORY after completion
+```
 
 ## Explaining blocked PURGE and safe access recovery
 
@@ -171,6 +193,15 @@ time; reinstall if the repository is moved.
 
 ## Completed history and privacy
 
+The controls have different purposes:
+
+| Control | What it removes | Eligibility / confirmation |
+|---|---|---|
+| Purge permanently | Remaining data in the selected quarantine run | Verified inventory and explicit `PURGE` |
+| Purge expired data | Data in runs older than the configured retention threshold (30 days by default) | The same fresh safety preflight and `PURGE`; age never bypasses validation |
+| Clear all completed history | Journals and empty scope/run directories | Completed, empty v3 runs or independently verified empty v2 records; `HISTORY` |
+| Approve current state | No payload data; records the current inventory | Explicit `ADOPT`; separate PURGE remains required |
+
 A successful full `PURGE` retains its small `manifest.json` audit tombstone
 and records a UTC `purged_at` timestamp. The GUI lists such runs explicitly
 as `PURGED`, distinct from `QUARANTINED`, `RESTORED` and `INCOMPLETE`.
@@ -206,7 +237,14 @@ If no history is eligible, the GUI explicitly explains that active and
 incomplete runs are protected. Restored operations can have their histories
 removed **manually**, but never through age-based automatic cleanup.
 
-Incomplete, corrupted, inconsistent, or nonempty runs are always protected.
+Known v2 records with no remaining quarantine objects are shown as `EMPTY`.
+Their old moved/planned counters may be stale; manual history cleanup verifies
+the actual empty namespace independently. It does not assert how missing data
+was removed, touch original source paths, or make them eligible for automatic
+history expiry. An unknown/corrupt journal remains blocked even when a folder
+appears empty.
+
+Incomplete v3, corrupted, inconsistent, or nonempty runs remain protected.
 History deletion uses only `rmdir` on empty run/scope directories and removes
 the manifest with an anchored `unlink`; it never recursively deletes files.
 

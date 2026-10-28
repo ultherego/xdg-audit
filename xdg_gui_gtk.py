@@ -1231,7 +1231,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
             tools_row=Gtk.ListBoxRow()
             tools_box=Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL,spacing=10)
             append(tools_box,label(tr('Retencja: usuń wygasłe operacje')),True)
-            expired=Gtk.Button(label=tr('Usuń wygasłe…'))
+            expired=Gtk.Button(label=tr('Usuń wygasłe pliki…'))
             expired.connect('clicked',lambda *_:self.purge_expired())
             append(tools_box,expired)
             retention=Gtk.Button(label=tr('Ustaw retencję…'))
@@ -1240,7 +1240,12 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
             history=Gtk.Button(label=tr('Wyczyść całą zakończoną historię…'))
             history.connect('clicked',lambda *_:self.cleanup_all_history())
             append(tools_box,history)
-            tools_row.set_child(tools_box) if GTK4 else tools_row.add(tools_box)
+            tools_panel=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=6)
+            append(tools_panel,tools_box)
+            help_note=label(tr('Usuwanie wygasłych kasuje pliki według retencji. Czyszczenie historii usuwa tylko dzienniki pustych operacji.'))
+            wrap_label(help_note)
+            append(tools_panel,help_note)
+            tools_row.set_child(tools_panel) if GTK4 else tools_row.add(tools_panel)
             append(self.qlist,tools_row)
             for run in engine.quarantine_runs(home,engine.xdg_roots(home)):
                 row=Gtk.ListBoxRow()
@@ -1250,7 +1255,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                 preview=Gtk.Button(label=tr('Podgląd'))
                 preview.connect('clicked',lambda _,r=run:self.quarantine_preview(r))
                 append(box,preview)
-                if run['status'] in ('PURGED','RESTORED','COMPLETED'):
+                if run['status'] in ('PURGED','RESTORED','COMPLETED','EMPTY'):
                     history_button=Gtk.Button(label=tr('Usuń historię…'))
                     history_button.connect('clicked',lambda _,rid=run['run_id']:self.cleanup_history([rid]))
                     append(box,history_button)
@@ -1373,6 +1378,16 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
             note.select_region(0,0)
 
         def adopt_inventory(self, run_id, resume_purge=False):
+            def ready(ok, result):
+                if not ok:
+                    self._quarantine_notice(quarantine_error_details(result,_language))
+                    return
+                self._adopt_inventory_confirm(run_id, resume_purge, result.get('approval_token'))
+            self._quarantine_job(
+                lambda:engine.preview_quarantine_adoption(home,engine.xdg_roots(home),run_id),
+                ready,'Weryfikacja kwarantanny')
+
+        def _adopt_inventory_confirm(self, run_id, resume_purge=False, approval_token=None):
             explanation=(tf('Operacja: {run_id}',run_id=run_id)+'\n'+
                          tr('Zatwierdzisz stan plików widoczny TERAZ. Nie oznacza to, że zawartość jest identyczna jak w dniu przeniesienia. PURGE nadal wymaga osobnej zgody.'))
             def commit():
@@ -1391,7 +1406,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                                 '\n'+tr('Nie wykonano PURGE. Ponownie sprawdź dostęp i osobno potwierdź usunięcie.'))
                 self._quarantine_job(
                     lambda:engine.adopt_quarantine_inventory(
-                        home,engine.xdg_roots(home),run_id),
+                        home,engine.xdg_roots(home),run_id,approval_token=approval_token),
                     done,'Weryfikacja kwarantanny')
             self.prompt(tr('Zatwierdź aktualny stan'),explanation,'ADOPT',commit)
 

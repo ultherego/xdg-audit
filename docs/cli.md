@@ -68,3 +68,5 @@ is only a hint. `orphan_ownership_verified: false` means the application has
 not verified that the data can be removed safely. Every CANDIDATE based only
 on history also carries `risk_flags: ["unverified_owner", "history_only"]`
 and still requires explicit MOVE consent and fresh verification before PURGE.
+
+Known v2 quarantine recovery and the distinction between expired-data purge and empty-history cleanup are documented in [Quarantine lifecycle](quarantine-lifecycle.md). `--adopt-quarantine RUN_ID --dry-run` is a read-only preview; ADOPT, PURGE and HISTORY require separate confirmations.

@@ -250,6 +250,8 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                       style='Section.TLabel').pack(anchor='w',pady=(0,3))
             ttk.Label(quarantine_tab,text=tr('Przywracanie nigdy nie nadpisuje istniejących plików.'),
                       style='Muted.TLabel').pack(anchor='w',pady=(0,10))
+            ttk.Label(quarantine_tab,text=tr('Usuwanie wygasłych kasuje pliki według retencji. Czyszczenie historii usuwa tylko dzienniki pustych operacji.'),
+                      style='Muted.TLabel',wraplength=650).pack(anchor='w',pady=(0,8))
             self.qtree=ttk.Treeview(quarantine_tab,columns=('run','status','entries','moved'),show='headings',selectmode='browse',height=6)
             for name,title,width in [('run',tr('Identyfikator operacji'),270),('status',tr('Status operacji'),130),('entries',tr('W manifestie'),110),('moved',tr('Przeniesione'),135)]:
                 self.qtree.heading(name,text=title);self.qtree.column(name,width=width)
@@ -264,7 +266,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                      ('Usuń trwale…',self.purge_quarantine),
                      ('Sprawdź dostęp…',self.access_diagnostics),
                      ('Zatwierdź stan…',self.adopt_inventory),
-                     ('Usuń wygasłe…',self.purge_expired),
+                     ('Usuń wygasłe pliki…',self.purge_expired),
                      ('Ustaw retencję…',self.configure_retention),
                      ('Usuń historię…',self.cleanup_history),
                      ('Wyczyść całą zakończoną historię…',self.cleanup_all_history))
@@ -740,7 +742,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
         def restore(self):
             row=self.qtree.selection()
             if not row:return
-            if self.qtree.set(row[0], 'status') in ('PURGED','RESTORED','COMPLETED'):
+            if self.qtree.set(row[0], 'status') in ('PURGED','RESTORED','COMPLETED','EMPTY'):
                 messagebox.showinfo(tr('Historia'),
                     tr('Ta operacja jest zakończona. Użyj opcji Usuń historię.'),parent=root)
                 return
@@ -847,6 +849,20 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                 selected=self.qtree.selection()
                 if not selected:return
                 run_id=selected[0]
+            def ready(ok, result):
+                if not ok:
+                    messagebox.showerror(tr('Zatwierdź aktualny stan'),quarantine_error_details(result,_language),parent=root)
+                    return
+                self._adopt_inventory_confirm(run_id, resume_purge, result.get('approval_token'))
+            self._quarantine_job(
+                lambda:engine.preview_quarantine_adoption(home,engine.xdg_roots(home),run_id),
+                ready,'Weryfikacja kwarantanny')
+
+        def _adopt_inventory_confirm(self, run_id, resume_purge=False, approval_token=None):
+            if run_id is None:
+                selected=self.qtree.selection()
+                if not selected:return
+                run_id=selected[0]
             message=(tf('Operacja: {run_id}',run_id=run_id)+'\n'+
                 tr('Zatwierdzisz stan plików widoczny TERAZ. Nie oznacza to, że zawartość jest identyczna jak w dniu przeniesienia. PURGE nadal wymaga osobnej zgody.'))
             if not messagebox.askyesno(tr('Zatwierdź aktualny stan'),message,parent=root):return
@@ -865,7 +881,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                             parent=root)
             self._quarantine_job(
                 lambda:engine.adopt_quarantine_inventory(
-                    home,engine.xdg_roots(home),run_id),
+                    home,engine.xdg_roots(home),run_id,approval_token=approval_token),
                 done,'Weryfikacja kwarantanny')
 
         def access_diagnostics(self,run_id=None, resume_purge=False, repaired=False):
@@ -967,7 +983,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
         def purge_quarantine(self):
             selected=self.qtree.selection()
             if selected:
-                if self.qtree.set(selected[0], 'status') in ('PURGED','RESTORED','COMPLETED'):
+                if self.qtree.set(selected[0], 'status') in ('PURGED','RESTORED','COMPLETED','EMPTY'):
                     messagebox.showinfo(tr('Historia'),
                         tr('Ta operacja jest zakończona. Użyj opcji Usuń historię.'),parent=root)
                     return

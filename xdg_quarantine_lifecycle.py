@@ -1,7 +1,8 @@
 """Fail-closed, journaled quarantine purge and inspection (Linux, stdlib only).
 
 Purge removes *only* quarantined objects. It retains the manifest as an audit
-tombstone. Legacy journals can be restored, but cannot authorize deletion.
+tombstone. Known v2 journals require explicit current-content adoption before
+separately confirmed deletion; historical evidence is never invented.
 """
 from __future__ import annotations
 
@@ -20,6 +21,13 @@ RUN_ID = re.compile(r"^[0-9]{8}-[0-9]{6}-[0-9]{6}$")
 FLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
 MAX_MANIFEST = 64 * 1024 * 1024
 ALLOWED_STATUSES = {"planned", "moving", "moved", "restoring", "restored", "purging", "purged"}
+
+
+class LegacyQuarantineJournal(ValueError):
+    """Known pre-identity journal: explicit adoption is required before purge."""
+    def __init__(self, run_id):
+        self.run_id = run_id
+        super().__init__('Legacy v2 journal requires explicit ADOPT before PURGE: ' + run_id)
 
 
 class QuarantineIdentityMismatch(ValueError):
@@ -345,6 +353,8 @@ def inspect_run(home: Path, roots: dict[str, Path], run_id: str, mounts_checker,
             run_stat = os.fstat(runfd)
             _check_owner(run_stat, run_stat.st_dev)
             payload = _load_manifest(runfd, run_stat.st_dev)
+            if payload.get('format') == 'intent-journal-v2' and payload.get('created') == run_id:
+                raise LegacyQuarantineJournal(run_id)
             if payload.get("format") != "intent-journal-v3" or payload.get("created") != run_id:
                 raise ValueError("Purge requires a valid v3 journal and matching run ID")
             rows = payload.get("items")
@@ -555,12 +565,20 @@ def revalidate_device(home, roots, run_id, mounts_checker, *, approval_token):
         os.close(with_fd)
 
 
-def adopt_legacy_run(home: Path, roots: dict[str, Path], run_id: str, mounts_checker) -> dict:
+def adopt_legacy_run(home: Path, roots: dict[str, Path], run_id: str, mounts_checker, *, approval_token=None) -> dict:
     """After explicit user confirmation, bind CURRENT legacy data for future purge.
 
     Adoption does not prove contents match the day of quarantine; it only
     guarantees a subsequent purge cannot silently include later additions.
     """
+    if not isinstance(run_id, str) or not RUN_ID.fullmatch(run_id):
+        raise ValueError('Invalid quarantine run ID')
+    base = roots.get('data', home / '.local/share') / 'xdg-audit-quarantine'
+    if not base.is_absolute() or home not in base.parents:
+        raise ValueError('Unsafe quarantine location')
+    if read_manifest(base / run_id).get('format') == 'intent-journal-v2':
+        from xdg_quarantine_legacy import adopt_v2_run
+        return adopt_v2_run(home, roots, run_id, mounts_checker, approval_token)
     report = inspect_run(home, roots, run_id, mounts_checker, allow_unsealed=True)
     entries = [entry for entry in report["entries"] if entry.get("unsealed")]
     if not entries:
@@ -597,6 +615,8 @@ def purge_run(home: Path, roots: dict[str, Path], run_id: str, mounts_checker,
     # Enforce this on both preview and execution, using the fresh journal.
     if automatic and 'device_revalidations' in report['payload']:
         raise ValueError('Revalidated runs require a separate explicit PURGE confirmation; automatic deletion is blocked')
+    if automatic and 'legacy_adoption' in report['payload']:
+        raise ValueError('Adopted v2 runs require a separate explicit PURGE confirmation; automatic deletion is blocked')
     result = {"run_id": run_id, "objects": report["present"],
               "bytes": report["bytes"], "dry_run": dry_run}
     if dry_run:

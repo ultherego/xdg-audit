@@ -76,6 +76,22 @@ class CompletedHistoryTests(unittest.TestCase):
         cleanup_history(self.home, self.roots, self.run_id, dry_run=False)
         self.assertFalse(self.run.exists())
 
+    def test_automatic_execution_rechecks_age_and_completion_after_selection(self):
+        self.payload['purged_at'] = '9999-01-01T00:00:00+00:00'
+        self.write()
+        with self.assertRaises(ValueError):
+            cleanup_history(self.home, self.roots, self.run_id, dry_run=False, automatic=True)
+        self.entry['move_status'] = 'restored'
+        self.payload.pop('purged_at')
+        self.write()
+        with self.assertRaises(ValueError):
+            cleanup_history(self.home, self.roots, self.run_id, dry_run=False, automatic=True)
+        self.entry['move_status'] = 'purged'
+        self.payload['purged_at'] = '2000-01-01T00:00:00+00:00'
+        self.write()
+        cleanup_history(self.home, self.roots, self.run_id, dry_run=False, automatic=True)
+        self.assertFalse(self.run.exists())
+
     def test_incomplete_and_purging_runs_never_cleanup(self):
         for status in ("planned", "moving", "moved", "restoring", "purging"):
             with self.subTest(status=status):
