@@ -118,6 +118,15 @@ class LegacyQuarantineTests(unittest.TestCase):
         self.assertEqual(self.manifest.read_bytes(), before)
         self.assertTrue(self.file.exists())
 
+    def test_automatic_cleanup_rejects_manually_eligible_empty_v2_records(self):
+        shutil.rmtree(self.destination)
+        self.assertEqual(completed_history_candidates(self.home, self.roots), [self.run_id])
+        for dry_run in (True, False):
+            with self.assertRaises(ValueError):
+                cleanup_history(self.home, self.roots, self.run_id, dry_run=dry_run, automatic=True)
+        self.assertTrue(self.manifest.exists())
+        self.assert_sentinels()
+
     def test_expired_data_selection_excludes_history_and_unfinished_runs(self):
         self.assertEqual(audit.expired_quarantine_runs(self.home, self.roots), [])
         self.adopt()

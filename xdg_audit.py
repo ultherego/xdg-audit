@@ -1896,7 +1896,7 @@ def main(argv=None):
                 home, roots, [x["run_id"] for x in quarantine_runs(home, roots)])
             for run_id in old_history:
                 try:
-                    cleanup_history(home, roots, run_id, dry_run=False)
+                    cleanup_history(home, roots, run_id, dry_run=False, automatic=True)
                     print("EXPIRED HISTORY REMOVED:", run_id)
                 except (OSError, ValueError) as exc:
                     failed.append((run_id, str(exc)))

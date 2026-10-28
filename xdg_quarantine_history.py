@@ -171,14 +171,16 @@ def completed_history_candidates(home: Path, roots: dict[str, Path]) -> list[str
 
 
 def cleanup_history(home: Path, roots: dict[str, Path], run_id: str, *,
-                    dry_run: bool = True) -> dict:
+                    dry_run: bool = True, automatic: bool = False) -> dict:
     """Remove only the complete journal and empty run directories.
 
     Known, independently verified empty v2 records may be manually removed.
     Cannot remove an invalid run or data within any scope.
     Aborted cleanup after empty scopes were removed is safely retryable.
     """
-    report = history_info(home, roots, run_id, allow_empty_legacy=True)
+    report = history_info(home, roots, run_id, allow_empty_legacy=not automatic)
+    if automatic and not history_expired(report):
+        raise ValueError('Automatic history cleanup requires a verified PURGED journal at least 30 days old')
     result = {"run_id": run_id, "status": report["status"],
               "items": report["items"], "dry_run": dry_run}
     if dry_run:
