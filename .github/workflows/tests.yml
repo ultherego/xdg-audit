@@ -32,7 +32,7 @@ jobs:
 
   archives:
     name: Source ZIP and tar.gz
-    needs: [test, gui-smoke, wayland-smoke, benchmark, quarantine-cycle, native-sources, snapd-live, native-packages, btrfs-device]
+    needs: [test, gui-smoke, wayland-smoke, desktop-sessions, benchmark, quarantine-cycle, native-sources, snapd-live, native-packages, btrfs-device]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -243,6 +243,47 @@ jobs:
         with:
           name: gui-lifecycle-wayland-${{ github.sha }}
           path: gui-lifecycle/*.json
+          if-no-files-found: ignore
+          retention-days: 14
+
+  desktop-sessions:
+    name: Full ${{ matrix.desktop }} session
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        desktop: [gnome, plasma, xfce]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use the main Ubuntu archive over HTTPS
+        run: |
+          for sources in /etc/apt/sources.list /etc/apt/sources.list.d/*.sources /etc/apt/sources.list.d/*.list; do
+            if [ -f "$sources" ]; then
+              sudo sed -i -e 's|mirror+file:/etc/apt/apt-mirrors.txt|https://archive.ubuntu.com/ubuntu/|g' -e 's|https\?://azure\.archive\.ubuntu\.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' "$sources"
+            fi
+          done
+      - name: Install the complete session and application toolkit
+        env:
+          DESKTOP: ${{ matrix.desktop }}
+        timeout-minutes: 25
+        run: |
+          sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=25 -o Acquire::https::Timeout=25 update -qq
+          case "$DESKTOP" in
+            gnome) packages=(gnome-session gnome-shell gnome-settings-daemon xwayland python3-gi gir1.2-gtk-4.0) ;;
+            plasma) packages=(plasma-workspace-wayland plasma-desktop kwin-wayland xwayland python3-pyqt6 qt6-wayland) ;;
+            xfce) packages=(xfce4-session xfwm4 xfce4-panel xfdesktop4 xfce4-settings xfconf xvfb xauth xdotool python3-tk) ;;
+          esac
+          sudo env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=25 -o Acquire::https::Timeout=25 install -y --no-install-recommends dbus-x11 libglib2.0-bin libgl1-mesa-dri fonts-dejavu-core "${packages[@]}"
+      - name: Run the actual session and native GUI lifecycle as a regular user
+        env:
+          DESKTOP: ${{ matrix.desktop }}
+        run: /usr/bin/python3 scripts/gui_desktop_session_smoke.py --desktop "$DESKTOP" --output-dir desktop-evidence
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: desktop-session-${{ matrix.desktop }}-${{ github.sha }}
+          path: desktop-evidence/*
           if-no-files-found: ignore
           retention-days: 14
 

@@ -53,7 +53,9 @@ the checklist and linked evidence define completion.
 3. Run the [desktop acceptance protocol](desktop-acceptance.md) in each named
    session, using disposable data and physical keyboard checks. Retain explicit
    failures/skips. The already accepted owner environment need not repeat its
-   completed acceptance; Xvfb/Weston results do not close additional sessions.
+   completed acceptance. Complete software-rendered GNOME/Plasma/Xfce session
+   jobs now extend CI integration coverage; they do not close physical keyboard
+   or manual theme/palette acceptance.
 4. Confirm the production secrets and fingerprint described in
    [Native packages](native-packages.md), without exposing private keys in
    issues, logs or source. Optional AUR setup additionally requires its account
@@ -72,7 +74,7 @@ the checklist and linked evidence define completion.
 
 Independent review, desktop testing and credential preparation can proceed in
 parallel once their targets are pinned. Owner filesystem diagnostics, another
-reviewer's decision, actual desktop sessions and production keys cannot be
+reviewer's decision, manual desktop acceptance and production keys cannot be
 supplied by author automation.
 
 ## After release

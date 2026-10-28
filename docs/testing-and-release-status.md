@@ -17,6 +17,10 @@ GitHub Actions covers:
 - Python 3.10–3.14 regressions and a synthetic scan benchmark.
 - GTK4/GTK3/Qt6/Tk layout and MOVE/RESTORE/PURGE workflows under Xvfb,
   plus GTK4/Qt6 workflows on native Wayland with headless Weston.
+- Complete GNOME/Wayland, Plasma/Wayland and Xfce/X11 software-rendered
+  session jobs, requiring the actual desktop components and a native GUI
+  lifecycle. Initial validation is pending; see the precise
+  [desktop integration and manual acceptance scopes](desktop-acceptance.md).
 - Isolated quarantine lifecycle, real `SIGKILL` recovery checkpoints,
   permission failures, GTK disk-full handling and Gio desktop launching.
 - Actual Btrfs remount/device-number changes, persistent FS/subvolume UUID
