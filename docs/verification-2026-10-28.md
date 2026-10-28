@@ -103,6 +103,13 @@ existing quarantine or infer filesystem UUIDs absent from older journals.
 
 ## Open evidence
 
+Complete software-rendered desktop integration was subsequently added in
+[PR #42](https://github.com/ultherego/xdg-audit/pull/42): GNOME 46/GTK4 and
+Plasma 5.27/Qt6 on native Wayland, plus Xfce 4.18/Tk on native X11.
+[Its exact target, verified artifacts and retained original reports](verification-data/2026-10-28/desktop-sessions.md)
+are separate from the PR #40 results above. This does not close manual
+theme/palette or physical-keyboard acceptance.
+
 The owner's read-only device diagnostics, [independent reviewer report](security-review-guide.md),
 [additional desktop sessions](desktop-acceptance.md), production signing setup
 and RC/stable release decisions remain open. The latest published prerelease

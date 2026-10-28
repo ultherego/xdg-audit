@@ -48,6 +48,7 @@
   "docs/testing-quarantine.md",
   "docs/verification-2026-10-26.md",
   "docs/verification-2026-10-28.md",
+  "docs/verification-data/2026-10-28/desktop-sessions.md",
   "docs/verification-data/2026-10-28/gui-lifecycle.md",
   "install_desktop.py",
   "packaging/arch/.SRCINFO",

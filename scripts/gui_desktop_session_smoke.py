@@ -59,8 +59,10 @@ def environment(base: Path, desktop: str):
            'XDG_SESSION_TYPE': spec['session'], 'LIBGL_ALWAYS_SOFTWARE': '1',
            'GALLIUM_DRIVER': 'llvmpipe', 'QT_QUICK_BACKEND': 'software',
            'NO_AT_BRIDGE': '1'}
-    if 'GITHUB_SHA' in os.environ:
-        env['GITHUB_SHA'] = os.environ['GITHUB_SHA']
+    # Preserve only commit provenance and the runner's orphan-cleanup marker.
+    for key in ('GITHUB_SHA', 'RUNNER_TRACKING_ID'):
+        if key in os.environ:
+            env[key] = os.environ[key]
     return env
 
 
@@ -254,6 +256,13 @@ def run(desktop, output):
                         break
                     time.sleep(0.2)
                 process.wait()
+                # Xfce may start a detached fixture-only agent. Address only
+                # its newly created home, never the user's ordinary agent.
+                agent_home = base / 'home/.gnupg'
+                if agent_home.is_dir() and Path('/usr/bin/gpgconf').is_file():
+                    subprocess.run(['/usr/bin/gpgconf', '--homedir', str(agent_home), '--kill', 'all'],
+                                   env=env, stdin=subprocess.DEVNULL, stdout=log,
+                                   stderr=subprocess.STDOUT, timeout=5, check=False)
 
 
 if __name__ == '__main__':

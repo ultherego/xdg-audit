@@ -44,7 +44,13 @@ the exact desktop package versions and commit. A failed session cannot produce
 release archives. This provides automated desktop integration coverage, while
 physical keyboard input, system-theme/palette inspection and the acceptance
 record below remain required. Do not mark the manual matrix complete from a
-CI pass alone. Initial CI validation of these new jobs is pending.
+CI pass alone. All three session jobs passed in
+[PR #42 validation](https://github.com/ultherego/xdg-audit/actions/runs/40711792031).
+The [retained original reports](verification-data/2026-10-28/desktop-sessions.md)
+pin exact versions, service identities, ten lifecycle assertions per session,
+keyboard-event scope and SHA-256 evidence. Calendar, audio, networking, portals
+and other optional desktop features are outside this check; diagnostic
+warnings remain in the original log artifacts.
 
 ## Record the environment
 

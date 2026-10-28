@@ -9,6 +9,10 @@ the checklist and linked evidence define completion.
 
 ## Verified foundation
 
+- [PR #42 desktop integration](verification-data/2026-10-28/desktop-sessions.md)
+  passed all 22 build/test jobs with 418 regressions per supported interpreter.
+  Actual GNOME 46, Plasma 5.27 and Xfce 4.18 software-rendered sessions passed
+  the native GUI lifecycle; physical keyboard/manual theme acceptance stays open.
 - [PR #40 and its merged main commit](verification-2026-10-28.md) passed all
   19 build/test jobs, with 415 regressions on each supported Python version.
   Native provider, package, actual-Btrfs and disposable publication checks

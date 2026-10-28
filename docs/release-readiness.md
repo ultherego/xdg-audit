@@ -41,7 +41,7 @@ Current priorities: [project roadmap](project-roadmap.md).
 The active `Protect main` ruleset requires a PR, blocks force-push and deletion
 of `main`, and requires Python, Xvfb GUI, benchmark and source-archive checks.
 
-The source archive job depends on Python, GUI, Wayland, benchmark, quarantine,
+The source archive job depends on Python, GUI, Wayland, full desktop sessions, benchmark, quarantine,
 native-source, live-snapd, native-package and actual-Btrfs jobs. Archive success therefore
 also requires Wayland, isolated quarantine E2E, native Arch/Ubuntu/Fedora,
 actual snapd, Btrfs remount/revalidation and DEB/RPM/Arch package tests, even when those contexts are not
@@ -49,6 +49,11 @@ listed directly in the ruleset. Release publication additionally requires
 the disposable repository-publication rehearsal.
 
 - [x] Python 3.10–3.14 and native GUI checks (Xvfb/Weston).
+- [x] Complete software-rendered GNOME 46/Wayland, Plasma 5.27/Wayland and
+  Xfce 4.18/X11 integration with actual session/shell/settings processes,
+  native GUI lifecycle and unchanged hashes/sentinels —
+  [exact target and retained reports](verification-data/2026-10-28/desktop-sessions.md).
+  This does not close the physical-keyboard/manual-theme acceptance below.
 - [x] Isolated MOVE → RESTORE lifecycle and safety-failure tests.
 - GUI lifecycle automation also exercises real row controls, confirmation
   dialogs and production file operations with synthetic installed inventory:

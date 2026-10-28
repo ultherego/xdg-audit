@@ -61,6 +61,10 @@ acceptance.
 Use the [desktop acceptance protocol](desktop-acceptance.md) for disposable
 fixtures, physical keyboard checks and the required per-session record.
 
+Automated complete software-rendered sessions now also pass the native GUI
+lifecycle: [exact target and retained reports](verification-data/2026-10-28/desktop-sessions.md).
+Their scope remains separate from the manual matrix above.
+
 For each session, launch with a disposable HOME and verify all confirmation
 tokens and visible error messages. Recording a successful Xvfb/Weston CI smoke
 does not satisfy a real desktop-session validation.
