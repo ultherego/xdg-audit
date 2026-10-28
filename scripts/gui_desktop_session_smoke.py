@@ -32,7 +32,7 @@ DESKTOPS = {
     'plasma': {'desktop': 'KDE', 'session': 'wayland', 'backend': 'qt6',
                'command': ['startplasma-wayland'],
                'services': {'org.kde.ksmserver': 'ksmserver', 'org.kde.plasmashell': 'plasmashell',
-                            'org.kde.KWin': 'kwin_wayland'},
+                            'org.kde.KWin': 'kwin_wayland', 'org.kde.kded5': 'kded5'},
                'processes': [], 'packages': ['plasma-workspace', 'kwin-wayland', 'plasma-desktop']},
     'xfce': {'desktop': 'XFCE', 'session': 'x11', 'backend': 'tk',
              'command': ['xfce4-session'],
@@ -97,8 +97,12 @@ def prepare(base, desktop, output):
         # Classic startup keeps all session components on the private bus;
         # importing the host's systemd user environment would violate isolation.
         (Path(env['XDG_CONFIG_HOME']) / 'startkderc').write_text('[General]\nsystemdBoot=false\n')
+        # KWin's file capabilities otherwise prevent same-user /proc evidence.
+        # Virtual rendering needs none: forbid privilege gain rather than read
+        # the compositor as root or weaken process/profile identity checks.
         (binary / 'kwin_wayland').write_text(
-            '#!/bin/sh\nexec /usr/bin/kwin_wayland --virtual --width 1600 --height 1000 "$@"\n')
+            '#!/bin/sh\nexec /usr/bin/setpriv --no-new-privs /usr/bin/kwin_wayland '
+            '--virtual --width 1600 --height 1000 "$@"\n')
         (binary / 'kwin_wayland').chmod(0o700)
         env['KWIN_COMPOSE'] = 'Q'
     return env

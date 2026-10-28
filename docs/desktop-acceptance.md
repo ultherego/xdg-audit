@@ -32,7 +32,9 @@ removal. The application cannot fall back to XWayland in Wayland cases.
 
 Only temporary desktop settings are changed: GNOME's shell launcher adds the
 virtual monitor flags; Plasma uses classic startup on its private bus and a
-private PATH wrapper adds KWin's virtual-display flags. Installed inventory and
+private PATH wrapper adds KWin's virtual-display flags. KWin also runs with
+`no-new-privs` to support same-user process/profile verification without file
+capability gains. Installed inventory and
 the optional Btrfs device metadata in the GUI harness remain synthetic; native
 provider and actual-remount CI are separate. The launcher rejects root and
 does not inherit a real profile, display, bus or publication credentials.
