@@ -1242,6 +1242,8 @@ def commit_quarantine(chosen: list[Item], roots: dict[str, Path], home: Path,
             except (OSError, ValueError) as exc:
                 # The move already happened. Preserve a restorable journal but
                 # never make an unverified tree eligible for purge.
+                row.pop('tree_inventory', None)
+                row.pop('filesystem_identity', None)
                 _write_manifest_atomic(manifest, payload)
                 emit(f"MOVED, but purge inventory unavailable (restore-only): {destination}: {exc}")
                 continue
@@ -1830,7 +1832,8 @@ def main(argv=None):
         failed = []
         for run_id in ids:
             try:
-                previews.append(purge_run(home, roots, run_id, nested_mounts_status, dry_run=True))
+                previews.append(purge_run(home, roots, run_id, nested_mounts_status,
+                                          dry_run=True, automatic=args.automatic_purge))
             except (ValueError, OSError) as exc:
                 failed.append((run_id, str(exc)))
                 print(f"BLOCKED {run_id}: {exc}", file=sys.stderr)
@@ -1850,7 +1853,8 @@ def main(argv=None):
                 return 0
         for preview in previews:
             try:
-                print(purge_run(home, roots, preview["run_id"], nested_mounts_status, dry_run=False))
+                print(purge_run(home, roots, preview["run_id"], nested_mounts_status,
+                                dry_run=False, automatic=args.automatic_purge))
             except (ValueError, OSError) as exc:
                 failed.append((preview["run_id"], str(exc)))
                 print(f"BLOCKED {preview['run_id']}: {exc}", file=sys.stderr)

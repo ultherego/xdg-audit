@@ -121,6 +121,18 @@ def worker(phase, home):
             require((destination / 'settings').read_bytes() == content, 'revalidation changed payload bytes')
             receipt = json.loads(manifest.read_text())['device_revalidations'][0]
             require(not receipt['purge_authorized'], 'revalidation granted PURGE')
+            from xdg_quarantine_lifecycle import purge_run
+            revalidated = manifest.read_bytes()
+            for dry_run in (True, False):
+                try:
+                    purge_run(home, roots, run['id'], audit.nested_mounts_status,
+                              dry_run=dry_run, automatic=True)
+                except ValueError as error:
+                    require('explicit PURGE' in str(error), 'automatic refusal used the wrong reason')
+                else:
+                    raise AssertionError('REVALIDATE inherited automatic-deletion consent')
+                require(manifest.read_bytes() == revalidated, 'automatic refusal changed the journal')
+                require((destination / 'settings').read_bytes() == content, 'automatic refusal changed bytes')
             if run['purpose'] == 'restore':
                 restored = audit.restore_quarantine_run(home, roots, run['id'], emit=lambda _: None)
                 require(restored['restored'] == 1, 'RESTORE after actual remount/revalidation failed')
@@ -130,7 +142,8 @@ def worker(phase, home):
                 require(not destination.exists(), 'separately confirmed PURGE retained fixture')
         require((home / 'outside-sentinel').read_bytes() == b'never delete or modify', 'outside sentinel changed')
         state.update(new_device=current, payload_sha256=sha256(content).hexdigest(),
-                     revalidation_and_separate_purge_restore='PASS', sentinel='unchanged')
+                     revalidation_and_separate_purge_restore='PASS',
+                     automatic_revalidated_purge='BLOCKED', sentinel='unchanged')
     print(json.dumps(state))
 
 

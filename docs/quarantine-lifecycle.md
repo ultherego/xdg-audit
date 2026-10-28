@@ -149,6 +149,8 @@ The timer executes once daily with `Persistent=true` and a 10-minute
 randomized delay. It executes `--automatic-purge`, which refuses to delete
 unless the persistent automatic setting is true. Changing the setting does
 not silently create or activate a timer.
+Runs with a device-revalidation receipt remain blocked from automatic
+deletion. Remove them only through a separately confirmed manual PURGE.
 
 To turn it off:
 

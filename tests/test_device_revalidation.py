@@ -239,3 +239,47 @@ class DeviceRevalidationTests(unittest.TestCase):
         self.assertIn('LEGACY JOURNAL', output.getvalue())
         self.assertTrue(self.entry.exists())
         self.assertEqual(json.loads(self.manifest.read_text())['items'][0]['move_status'], 'moved')
+
+    def test_enabled_retention_cannot_delete_a_revalidated_run(self):
+        from xdg_retention import save
+        self.execute()
+        before = self.manifest.read_bytes()
+        save(self.home, self.roots, {'days': 30, 'automatic': True})
+        # Age selection has separate tests; make this run eligible to isolate
+        # the timer's consent boundary after successful revalidation.
+        with patch.object(audit, 'check_no_root'), \
+                patch.object(lifecycle, 'expired_run_ids', return_value=[self.run_id]), \
+                patch('builtins.input', side_effect=AssertionError('Timer must not prompt')), \
+                contextlib.redirect_stdout(io.StringIO()), \
+                contextlib.redirect_stderr(io.StringIO()) as errors:
+            result = audit.main(['--home', str(self.home), '--automatic-purge'])
+        self.assertTrue((self.entry / 'settings').exists())
+        self.assertEqual(self.manifest.read_bytes(), before)
+        self.assertEqual(result, 1)
+        self.assertIn('explicit PURGE', errors.getvalue())
+
+    def test_revalidated_run_still_requires_exact_manual_purge_confirmation(self):
+        self.execute()
+        before = self.manifest.read_bytes()
+        with patch.object(audit, 'check_no_root'), patch('sys.stdin.isatty', return_value=True), \
+                patch('builtins.input', return_value='REVALIDATE'), \
+                contextlib.redirect_stdout(io.StringIO()):
+            result = audit.main(['--home', str(self.home), '--purge', self.run_id])
+        self.assertEqual(result, 0)
+        self.assertTrue(self.entry.exists())
+        self.assertEqual(self.manifest.read_bytes(), before)
+        with patch.object(audit, 'check_no_root'), patch('sys.stdin.isatty', return_value=True), \
+                patch('builtins.input', return_value='PURGE'), \
+                contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(audit.main(['--home', str(self.home), '--purge', self.run_id]), 0)
+        self.assertFalse(self.entry.exists())
+
+    def test_engine_blocks_automatic_revalidated_purge_in_preview_and_execution(self):
+        self.execute()
+        before = self.manifest.read_bytes()
+        for dry_run in (True, False):
+            with self.subTest(dry_run=dry_run), self.assertRaisesRegex(ValueError, 'explicit PURGE'):
+                lifecycle.purge_run(self.home, self.roots, self.run_id, lambda _: False,
+                                    dry_run=dry_run, automatic=True)
+            self.assertEqual(self.manifest.read_bytes(), before)
+            self.assertEqual((self.entry / 'settings').read_bytes(), b'exact original bytes\x00\xff')

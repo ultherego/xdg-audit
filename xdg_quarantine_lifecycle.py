@@ -572,9 +572,13 @@ def adopt_legacy_run(home: Path, roots: dict[str, Path], run_id: str, mounts_che
 
 
 def purge_run(home: Path, roots: dict[str, Path], run_id: str, mounts_checker,
-              *, dry_run: bool = True, emit=print) -> dict:
+              *, dry_run: bool = True, automatic: bool = False, emit=print) -> dict:
     """Full preflight before deleting anything; resume after interrupted purge."""
     report = inspect_run(home, roots, run_id, mounts_checker, require_deletable=True)
+    # Rebinding an identity never inherits a previously enabled timer's consent.
+    # Enforce this on both preview and execution, using the fresh journal.
+    if automatic and 'device_revalidations' in report['payload']:
+        raise ValueError('Revalidated runs require a separate explicit PURGE confirmation; automatic deletion is blocked')
     result = {"run_id": run_id, "objects": report["present"],
               "bytes": report["bytes"], "dry_run": dry_run}
     if dry_run:

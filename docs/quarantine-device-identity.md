@@ -85,6 +85,9 @@ GTK, Qt and Tk offer the same path after a device-only PURGE refusal or through
 **Check access…**. Cancelling `REVALIDATE` preserves the original journal.
 After approval, a fresh PURGE preflight and its independent `PURGE` confirmation
 remain mandatory. Restoring instead remains a separate `RESTORE` action.
+Revalidated runs are excluded from automatic retention even when its timer
+was already enabled. They require an interactive, separately confirmed PURGE
+or RESTORE; `REVALIDATE` does not inherit earlier automatic-deletion consent.
 
 ## Validation scope and references
 
@@ -93,7 +96,8 @@ runner, mounts them, and holds another filesystem/subvolumes open to reproduce
 a real device-number change. Application operations run as a regular user.
 It checks snapshot refusal, unchanged persistent identity after remount,
 changed-hash refusal, exact-byte revalidation, legacy limitations, separate
-PURGE/RESTORE and an untouched outside sentinel. No filesystem syscall or
+PURGE/RESTORE, refusal of automatic deletion after revalidation and an
+untouched outside sentinel. No filesystem syscall or
 ioctl is mocked. The installed-app inventory is synthetic and native provider
 coverage remains in separate mandatory jobs.
 
