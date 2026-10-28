@@ -12,7 +12,7 @@ from xdg_inspector import details_text, open_item_location
 from xdg_gui_jobs import run_gui_job
 from xdg_gui_layout import visible_optional_scopes
 from xdg_gui_dialogs import qt_dialog_helpers, fit_qt_dialog
-from xdg_quarantine_messages import quarantine_error_details, identity_issue_details
+from xdg_quarantine_messages import quarantine_error_details, identity_issue_details, device_revalidation_details
 
 
 def import_qt():
@@ -653,6 +653,27 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
                     return
                 issue=issues[0]
                 if issue['code']=='ENTRY_IDENTITY_CHANGED':
+                    plan=report.get('device_revalidation') or {}
+                    if plan.get('eligible'):
+                        title=tr('Ponowna weryfikacja urządzenia')
+                        if messages.question(self,title,device_revalidation_details(plan,_language),
+                            QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No,
+                            QtWidgets.QMessageBox.StandardButton.No) != QtWidgets.QMessageBox.StandardButton.Yes:return
+                        token,accepted=inputs.getText(self,title,tr('Wpisz REVALIDATE:'))
+                        if not accepted or token!='REVALIDATE':return
+                        def done(success,outcome):
+                            if not success:
+                                messages.critical(self,title,quarantine_error_details(outcome,_language))
+                                return
+                            self.refresh_quarantine()
+                            if resume_purge:
+                                self._purge_runs([run_id])
+                            else:
+                                messages.information(self,title,tr('Nie wykonano PURGE. Ponownie sprawdź dostęp i osobno potwierdź usunięcie.'))
+                        self._quarantine_job(
+                            lambda:engine.revalidate_quarantine_device(home,engine.xdg_roots(home),
+                                run_id,plan['approval_token']),done,'Weryfikacja kwarantanny')
+                        return
                     messages.critical(self,tr('Zablokowano PURGE'),identity_issue_details(issue,run_id,_language))
                     return
                 message=(tf('Użytkownik: {user}',user=report['identity']['user'])+

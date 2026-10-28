@@ -65,6 +65,15 @@ class LifecycleTests(unittest.TestCase):
         self.assertEqual(self.purge()["objects"], 0)
         self.purge(dry_run=False)
 
+    def test_automatic_purge_still_accepts_an_ordinary_sealed_run(self):
+        preview = purge_run(self.home, self.roots, self.run_id,
+                            self.check_mounts, automatic=True)
+        self.assertEqual(preview['objects'], 1)
+        self.assertTrue(self.dest.exists())
+        purge_run(self.home, self.roots, self.run_id, self.check_mounts,
+                  automatic=True, dry_run=False, emit=lambda _: None)
+        self.assertFalse(self.dest.exists())
+
     def test_corrupted_identity_rejected(self):
         self.row["identity"][1] += 1
         self.write()

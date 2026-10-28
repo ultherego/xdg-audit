@@ -6,6 +6,8 @@ tombstone. Legacy journals can be restored, but cannot authorize deletion.
 from __future__ import annotations
 
 import datetime as dt
+import copy
+import hashlib
 import errno
 import json
 import os
@@ -310,7 +312,8 @@ def _delete_entry(scopefd: int, name: str, expected_identity: tuple[int, int, in
 
 
 def inspect_run(home: Path, roots: dict[str, Path], run_id: str, mounts_checker, *,
-                allow_unsealed=False, require_deletable=False) -> dict:
+                allow_unsealed=False, require_deletable=False,
+                device_revalidation=False) -> dict:
     """Strictly preflight the complete run, including untracked files."""
     if not RUN_ID.fullmatch(run_id):
         raise ValueError("Invalid quarantine run ID")
@@ -357,6 +360,8 @@ def inspect_run(home: Path, roots: dict[str, Path], run_id: str, mounts_checker,
                 status = row.get("move_status")
                 if status not in ALLOWED_STATUSES:
                     raise ValueError("Unknown journal state")
+                if device_revalidation and status not in {"moved", "purged", "restored"}:
+                    raise ValueError("Device revalidation requires completed MOVE entries")
                 scopes.add(scope)
                 entries.append({"row": row, "scope": scope, "name": src.name,
                                 "source": src, "destination": dest,
@@ -392,9 +397,24 @@ def inspect_run(home: Path, roots: dict[str, Path], run_id: str, mounts_checker,
                         entry["bytes"] = 0
                     else:
                         _check_owner(info, run_stat.st_dev)
-                        if _identity(info) != entry["identity"]:
+                        actual_identity = _identity(info)
+                        device_only = (actual_identity[0] != entry["identity"][0] and
+                                       actual_identity[1:] == entry["identity"][1:])
+                        if actual_identity != entry["identity"] and not (device_revalidation and device_only):
                             raise QuarantineIdentityMismatch(run_id, entry["destination"],
-                                                             entry["identity"], _identity(info))
+                                                             entry["identity"], actual_identity)
+                        from xdg_filesystem import filesystem_identity, verify_identity
+                        binding = None
+                        if "filesystem_identity" in row:
+                            binding = verify_identity(entry["destination"], row["filesystem_identity"], actual_identity)
+                        if device_revalidation:
+                            binding = binding or filesystem_identity(entry["destination"], actual_identity)
+                            if binding is None:
+                                raise ValueError("Device revalidation currently requires readable Btrfs filesystem identity")
+                            entry["current_identity"] = actual_identity
+                            entry["filesystem_identity"] = binding
+                            entry["historical_binding_verified"] = "filesystem_identity" in row
+                            entry["device_changed"] = device_only
                         if entry["status"] in ("purged", "restored"):
                             raise ValueError("Journal claims object absent, but it exists")
                         if stat.S_ISDIR(info.st_mode) and mounts_checker(entry["destination"]) is not False:
@@ -406,7 +426,14 @@ def inspect_run(home: Path, roots: dict[str, Path], run_id: str, mounts_checker,
                                 raise ValueError("Cannot adopt an interrupted destructive operation")
                             entry["unsealed"] = True
                         else:
+                            if device_revalidation and row.get("tree_inventory") is None:
+                                raise ValueError("Device revalidation requires the original sealed recursive inventory; ADOPT cannot reconstruct historical content")
                             expected = _validated_inventory(row.get("tree_inventory"), entry["identity"])
+                            if device_revalidation:
+                                if any(node["identity"][0] != entry["identity"][0] for node in expected.values()):
+                                    raise ValueError("Recorded inventory contains inconsistent devices")
+                                expected = {name: {**node, "identity": [actual_identity[0], *node["identity"][1:]]}
+                                            for name, node in expected.items()}
                             _match_inventory(expected, current, partial=(entry["status"] == "purging"))
                             entry["unsealed"] = False
                         entry["inventory"] = current
@@ -423,6 +450,91 @@ def inspect_run(home: Path, roots: dict[str, Path], run_id: str, mounts_checker,
             os.close(runfd)
     finally:
         os.close(basefd)
+
+
+def device_revalidation_plan(home, roots, run_id, mounts_checker):
+    """Read-only proof of exact inventory equality with only st_dev remapped.
+
+    Legacy journals lack historical FSID evidence. Confirmation must explicitly
+    approve the verified CURRENT binding, never claim historical identity proof.
+    """
+    report = inspect_run(home, roots, run_id, mounts_checker, device_revalidation=True)
+    changed = [entry for entry in report["entries"] if entry.get("device_changed")]
+    if not changed:
+        raise ValueError("No device-only identity change requires revalidation")
+    old = {entry["identity"][0] for entry in changed}
+    new = {entry["current_identity"][0] for entry in changed}
+    if len(old) != 1 or len(new) != 1:
+        raise ValueError("Device revalidation requires one consistent device-number transition")
+    return report
+
+
+def device_revalidation_summary(report):
+    entries = [entry for entry in report["entries"] if entry.get("device_changed")]
+    if not entries:
+        raise ValueError("No device change in revalidation report")
+    approval = {"payload": report["payload"], "run_identity": report["run_identity"],
+                "current": [{"identity": entry.get("current_identity"),
+                             "filesystem": entry.get("filesystem_identity"),
+                             "inventory": entry.get("inventory")}
+                            for entry in report["entries"]]}
+    token = hashlib.sha256(json.dumps(approval, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+    return {"run_id": report["run_id"], "entries": len(entries), "bytes": report["bytes"],
+            "old_device": entries[0]["identity"][0], "new_device": entries[0]["current_identity"][0],
+            "historical_binding_verified": all(entry["historical_binding_verified"] for entry in entries),
+            "filesystem_identity": entries[0]["filesystem_identity"], "purge_authorized": False,
+            "approval_token": token}
+
+
+def revalidate_device(home, roots, run_id, mounts_checker, *, approval_token):
+    """After distinct REVALIDATE consent, journal the verified current binding.
+
+    Never delete data or change expected names, inode numbers, types or hashes.
+    PURGE always performs another independent preflight and confirmation.
+    """
+    report = device_revalidation_plan(home, roots, run_id, mounts_checker)
+    summary = device_revalidation_summary(report)
+    if not isinstance(approval_token, str) or approval_token != summary['approval_token']:
+        raise ValueError("Device revalidation evidence changed after confirmation; review a fresh preview")
+    base = roots.get("data", home / ".local/share") / "xdg-audit-quarantine"
+    with_fd = _open_path(base / run_id)
+    try:
+        device = os.fstat(with_fd).st_dev
+        if (_identity(os.fstat(with_fd)) != report["run_identity"] or
+                _load_manifest(with_fd, device) != report["payload"]):
+            raise ValueError("Journal or run changed during device revalidation")
+        from xdg_filesystem import verify_identity
+        for entry in report["entries"]:
+            if not entry.get("present"):
+                continue
+            if (mounts_checker(entry["destination"]) is not False and
+                    entry["current_identity"][2] == stat.S_IFDIR):
+                raise ValueError("Mount inventory changed during device revalidation")
+            verify_identity(entry["destination"], entry["filesystem_identity"], entry["current_identity"])
+            if capture_inventory(entry["destination"]) != entry["inventory"]:
+                raise ValueError("Contents changed during device revalidation")
+            verify_identity(entry["destination"], entry["filesystem_identity"], entry["current_identity"])
+        original_payload = report["payload"]
+        payload = copy.deepcopy(original_payload)
+        history = payload.get("device_revalidations", [])
+        if not isinstance(history, list) or len(history) >= 100:
+            raise ValueError("Invalid or excessive device revalidation history")
+        rows = {row["destination"]: row for row in payload["items"]}
+        for entry in report["entries"]:
+            if entry.get("device_changed"):
+                row = rows[str(entry["destination"])]
+                row["identity"] = list(entry["current_identity"])
+                row["tree_inventory"] = entry["inventory"]
+                row["filesystem_identity"] = entry["filesystem_identity"]
+        payload["device_revalidations"] = history + [{**summary,
+            "confirmed_at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
+            "reason": "explicit_current_binding_revalidation"}]
+        if _load_manifest(with_fd, device) != original_payload:
+            raise ValueError("Journal changed before device revalidation commit")
+        _write_manifest(with_fd, payload)
+        return summary
+    finally:
+        os.close(with_fd)
 
 
 def adopt_legacy_run(home: Path, roots: dict[str, Path], run_id: str, mounts_checker) -> dict:
@@ -460,9 +572,13 @@ def adopt_legacy_run(home: Path, roots: dict[str, Path], run_id: str, mounts_che
 
 
 def purge_run(home: Path, roots: dict[str, Path], run_id: str, mounts_checker,
-              *, dry_run: bool = True, emit=print) -> dict:
+              *, dry_run: bool = True, automatic: bool = False, emit=print) -> dict:
     """Full preflight before deleting anything; resume after interrupted purge."""
     report = inspect_run(home, roots, run_id, mounts_checker, require_deletable=True)
+    # Rebinding an identity never inherits a previously enabled timer's consent.
+    # Enforce this on both preview and execution, using the fresh journal.
+    if automatic and 'device_revalidations' in report['payload']:
+        raise ValueError('Revalidated runs require a separate explicit PURGE confirmation; automatic deletion is blocked')
     result = {"run_id": run_id, "objects": report["present"],
               "bytes": report["bytes"], "dry_run": dry_run}
     if dry_run:
@@ -491,6 +607,9 @@ def purge_run(home: Path, roots: dict[str, Path], run_id: str, mounts_checker,
                     if mounts_checker(entry["destination"]) is not False and entry["identity"][2] == stat.S_IFDIR:
                         raise ValueError("Mount inventory changed during purge")
                     expected = _validated_inventory(row.get("tree_inventory"), entry["identity"])
+                    if "filesystem_identity" in row:
+                        from xdg_filesystem import verify_identity
+                        verify_identity(entry["destination"], row["filesystem_identity"], entry["identity"])
                     current = capture_inventory(entry["destination"], require_deletable=True)
                     _match_inventory(expected, current, partial=(row["move_status"] == "purging"))
                     row["move_status"] = "purging"

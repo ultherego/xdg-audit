@@ -12,6 +12,9 @@ python3 xdg_audit.py --restore RUN_ID         # Interactive confirmation
 python3 xdg_audit.py --quarantine-info RUN_ID
 python3 xdg_audit.py --purge RUN_ID --dry-run
 python3 xdg_audit.py --purge RUN_ID           # Explicit PURGE confirmation
+python3 xdg_audit.py --diagnose-access RUN_ID # Read-only identity/mount diagnosis
+python3 xdg_audit.py --revalidate-device RUN_ID --dry-run # Verify a device-only Btrfs change
+python3 xdg_audit.py --revalidate-device RUN_ID # Separate REVALIDATE confirmation; no deletion
 python3 xdg_audit.py --purge-expired          # Retention preview
 python3 xdg_audit.py --cleanup-history RUN_ID --dry-run
 python3 xdg_audit.py --cleanup-expired-history # 30 days after PURGE
@@ -48,6 +51,10 @@ audited and packaged privileged helper is available.
 See [Quarantine lifecycle](quarantine-lifecycle.md) for recovery,
 history-only cleanup, manual/automatic retention, user-scoped systemd
 timer, legacy adoption, and safeguards.
+
+For a device-number change, see [device identity diagnosis and revalidation](quarantine-device-identity.md).
+This requires the original complete inventory. It does not authorize PURGE,
+adopt changed content or prove missing historical filesystem UUIDs.
 
 ## JSON evidence quality
 

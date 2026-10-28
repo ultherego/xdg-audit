@@ -2,6 +2,14 @@
 
 ## 1.7.0-rc2 (unreleased)
 
+- Diagnose device-only quarantine changes with descriptor-bound mount/Btrfs
+  evidence; offer separate exact-inventory `REVALIDATE`, preserving all hashes,
+  inode/type checks and independent PURGE consent. Legacy historical UUID
+  limitations are explicit. New Btrfs MOVEs bind filesystem/subvolume UUIDs.
+- Gate archives on actual Btrfs remount/snapshot tests and exercise cancelled
+  REVALIDATE plus separate PURGE through real GTK/Qt/Tk controls.
+- Exclude revalidated runs from automatic retention and discard purge evidence
+  if post-MOVE filesystem identity capture fails, preserving RESTORE.
 - Build/test DEB, RPM and Arch packages in Actions; create version tags and
   prepare signed APT/RPM publication, release assets and opt-in AUR submission.
 - Keep empty settings editors visible with theme-aware borders and focus.

@@ -86,6 +86,26 @@ class JournalErrorTests(unittest.TestCase):
         self.assertEqual(audit.purge_quarantine_run(self.home, self.roots, result['run_id'],
             dry_run=False, emit=lambda _: None)['objects'], 1)
 
+    def test_filesystem_probe_failure_after_move_cannot_leave_a_purge_inventory(self):
+        import xdg_filesystem
+        with patch.object(xdg_filesystem, 'filesystem_identity',
+                          side_effect=OSError(errno.EIO, 'filesystem identity unavailable')):
+            result = self.move()
+        self.assertEqual(result['moved'], [str(self.source)])
+        manifest = Path(result['manifest'])
+        before = manifest.read_bytes()
+        row = json.loads(before)['items'][0]
+        destination = Path(row['destination'])
+        self.assertNotIn('tree_inventory', row)
+        self.assertNotIn('filesystem_identity', row)
+        with self.assertRaisesRegex(ValueError, 'Missing recursive inventory'):
+            audit.purge_quarantine_run(self.home, self.roots, result['run_id'], dry_run=False)
+        self.assertEqual(manifest.read_bytes(), before)
+        self.assertEqual((destination / 'settings').read_bytes(), b'preserve exactly\x00\xff')
+        self.assertEqual(audit.restore_quarantine_run(self.home, self.roots, result['run_id'],
+            emit=lambda _: None)['restored'], 1)
+        self.assertEqual((self.source / 'settings').read_bytes(), b'preserve exactly\x00\xff')
+
     def test_directory_sync_failure_after_move_keeps_accurate_count_and_restore(self):
         sync = audit._sync_directory
         def fail_source_sync(path):

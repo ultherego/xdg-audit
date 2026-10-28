@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Drive real GUI controls through a lifecycle on an internally created HOME.
 
-Only installed-application inventory is synthetic. Scanning, confirmation
+Installed-application inventory is synthetic. The optional device-revalidation
+case also supplies explicit Btrfs metadata and a renumbered disposable journal;
+real Btrfs remounts are covered separately by smoke_btrfs_device.py. Scanning, confirmation
 dialogs, MOVE, hashes, manifests, RESTORE and PURGE use production code.
 Never accepts an existing HOME, patches a confirmation or bypasses root checks.
 """
@@ -40,7 +42,7 @@ def snapshot(root):
 
 
 class Cycle:
-    def __init__(self, ui, home):
+    def __init__(self, ui, home, device_revalidation=False):
         self.ui, self.home = ui, home
         self.roots = engine.xdg_roots(home)
         self.source = self.roots['config'] / 'xdg-gui-lifecycle-fixture'
@@ -59,6 +61,25 @@ class Cycle:
         self.in_action, self.done, self.errors = False, False, []
         self.deadline = time.monotonic() + 75
         self.run_id = self.restored_id = None
+        self.device_revalidation = device_revalidation
+
+    def start_device_revalidation(self, cancel):
+        click = self.ui.action('purge', self.source, self.run_id)
+        if click is None:
+            return
+        responses = [] if self.ui.backend.startswith('gtk') else [('ok', ''), ('yes', '')]
+        responses.append(('cancel' if cancel else 'token', 'REVALIDATE'))
+        if not cancel:
+            if not self.ui.backend.startswith('gtk'):
+                responses.append(('yes', ''))
+            responses.append(('cancel', 'PURGE'))
+        self.pending.extend(responses)
+        self.phase = 'device_cancelled' if cancel else 'device_revalidated'
+        self.in_action = True
+        try:
+            click()
+        finally:
+            self.in_action = False
 
     def guard(self):
         require(snapshot(self.protected) == self.expected_protected, 'protected data changed')
@@ -154,7 +175,35 @@ class Cycle:
                 require(not self.source.exists(), 'second MOVE did not complete')
                 self.verify_moved()
                 require(self.run_id != self.restored_id, 'second MOVE reused a completed run')
-                self.start('purge', 'cancelled_purge', cancel=True)
+                if self.device_revalidation:
+                    data = json.loads(self.manifest.read_text())
+                    row = data['items'][0]
+                    row.pop('filesystem_identity', None)  # Model an older sealed v3 journal.
+                    row['identity'][0] += 1
+                    for node in row['tree_inventory']:
+                        node['identity'][0] += 1
+                    self.manifest.write_text(json.dumps(data))
+                    self.manifest_before_cancel = self.manifest.read_bytes()
+                    self.start_device_revalidation(cancel=True)
+                else:
+                    self.start('purge', 'cancelled_purge', cancel=True)
+            elif self.phase == 'device_cancelled':
+                require(self.manifest.read_bytes() == self.manifest_before_cancel,
+                        'cancelled REVALIDATE changed the original journal')
+                require(snapshot(self.destination) == self.expected, 'cancelled REVALIDATE changed data')
+                self.record('typed REVALIDATE then Cancel preserves exact journal and payload')
+                self.start_device_revalidation(cancel=False)
+            elif self.phase == 'device_revalidated':
+                data = json.loads(self.manifest.read_text())
+                require(data['items'][0]['identity'][0] == self.destination.stat().st_dev,
+                        'REVALIDATE did not update the device binding')
+                require(data['items'][0]['move_status'] == 'moved', 'REVALIDATE authorized deletion')
+                require(not data['device_revalidations'][0]['historical_binding_verified'],
+                        'legacy revalidation falsely claimed historical filesystem proof')
+                require(snapshot(self.destination) == self.expected, 'REVALIDATE changed data')
+                self.manifest_before_cancel = self.manifest.read_bytes()
+                self.record('confirmed REVALIDATE binds verified current contents; independent PURGE cancellation preserves data')
+                self.phase = 'cancelled_purge'
             elif self.phase == 'cancelled_purge':
                 require(snapshot(self.destination) == self.expected, 'cancelled PURGE changed quarantined data')
                 require(self.manifest.read_bytes() == self.manifest_before_cancel,
@@ -469,7 +518,7 @@ class TkUI:
             launch_gui(engine, home, args, {}, runtime, self.backend)
 
 
-def run(backend, session, output=None):
+def run(backend, session, output=None, device_revalidation=False):
     engine.check_no_root()
     require(session in ('x11', 'wayland'), 'unsupported display session')
     require(bool(os.environ.get('WAYLAND_DISPLAY' if session == 'wayland' else 'DISPLAY')),
@@ -485,9 +534,14 @@ def run(backend, session, output=None):
         # Keep native provider tests separate. Every lifecycle operation below
         # still performs the production fresh-inventory check against this fixture.
         inventory = ({'python', 'coreutils'}, set(), set(), set(), set(), set(), set(), set())
-        with patch.dict(os.environ, env), patch.object(engine, 'read_active_names', return_value=inventory):
+        from contextlib import nullcontext
+        import xdg_filesystem
+        binding = {'kind': 'btrfs', 'fsid': '11111111-2222-3333-4444-555555555555',
+                   'subvolume_id': 256, 'subvolume_uuid': 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'}
+        probe = patch.object(xdg_filesystem, 'btrfs_identity', return_value=binding) if device_revalidation else nullcontext()
+        with patch.dict(os.environ, env), patch.object(engine, 'read_active_names', return_value=inventory), probe:
             ui = (GtkUI if backend.startswith('gtk') else QtUI if backend == 'qt6' else TkUI)(backend, session)
-            cycle = Cycle(ui, home)
+            cycle = Cycle(ui, home, device_revalidation)
             args = SimpleNamespace(saved_prefs={**defaults(), 'language': 'en'},
                                    keep=[], quick=True, scope='config', all=False)
             runtime = {'desktop': 'CI', 'session': session, 'selected': backend,
@@ -496,6 +550,7 @@ def run(backend, session, output=None):
             require(cycle.done and not cycle.errors, '\n'.join(cycle.errors) or 'GUI exited before completing lifecycle')
             require(cycle.phase == 'purged', 'GUI did not complete every lifecycle stage')
             report = {'backend': backend, 'native_session': session, 'inventory': 'synthetic',
+                      'filesystem_evidence': 'synthetic Btrfs metadata and device transition' if device_revalidation else 'native',
                       'version': engine.VERSION, 'commit': os.environ.get('GITHUB_SHA'),
                       'checks': cycle.events, 'result': 'PASS', 'fixture_hashes': cycle.expected}
     if output:
@@ -510,5 +565,6 @@ if __name__ == '__main__':
     parser.add_argument('--backend', choices=('gtk4', 'gtk3', 'qt6', 'tk'), required=True)
     parser.add_argument('--expect-session', choices=('x11', 'wayland'), default='x11')
     parser.add_argument('--output', type=Path)
+    parser.add_argument('--device-revalidation', action='store_true')
     values = parser.parse_args()
-    run(values.backend, values.expect_session, values.output)
+    run(values.backend, values.expect_session, values.output, values.device_revalidation)

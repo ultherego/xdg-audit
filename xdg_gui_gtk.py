@@ -15,7 +15,7 @@ from xdg_theme import detect_appearance
 from xdg_gui_jobs import run_gui_job
 from xdg_gui_layout import visible_optional_scopes
 from xdg_gui_dialogs import configure_gtk_dialog
-from xdg_quarantine_messages import quarantine_error_details, identity_issue_details
+from xdg_quarantine_messages import quarantine_error_details, identity_issue_details, device_revalidation_details
 
 def align_header_edges(header: Any, left: Any, right: Any, gtk: Any) -> None:
     """Anchor desktop/session information at the far right in GTK3 and GTK4.
@@ -1413,6 +1413,24 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                     return
                 issue=issues[0]
                 if issue['code']=='ENTRY_IDENTITY_CHANGED':
+                    plan=result.get('device_revalidation') or {}
+                    if plan.get('eligible'):
+                        def approved():
+                            def done(success,outcome):
+                                if not success:
+                                    self._quarantine_notice(quarantine_error_details(outcome,_language))
+                                    return
+                                self.refresh_quarantine()
+                                if resume_purge:
+                                    self.purge_runs([run_id])
+                                else:
+                                    self._quarantine_notice(tr('Nie wykonano PURGE. Ponownie sprawdź dostęp i osobno potwierdź usunięcie.'))
+                            self._quarantine_job(
+                                lambda:engine.revalidate_quarantine_device(home,engine.xdg_roots(home),
+                                    run_id,plan['approval_token']),done,'Weryfikacja kwarantanny')
+                        self.prompt(tr('Ponowna weryfikacja urządzenia'),
+                                    device_revalidation_details(plan,_language),'REVALIDATE',approved)
+                        return
                     self._quarantine_notice(identity_issue_details(issue,run_id,_language),
                                             title=tr('Zablokowano PURGE'))
                     return

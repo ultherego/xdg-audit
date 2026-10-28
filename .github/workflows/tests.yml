@@ -32,7 +32,7 @@ jobs:
 
   archives:
     name: Source ZIP and tar.gz
-    needs: [test, gui-smoke, wayland-smoke, benchmark, quarantine-cycle, native-sources, snapd-live, native-packages]
+    needs: [test, gui-smoke, wayland-smoke, benchmark, quarantine-cycle, native-sources, snapd-live, native-packages, btrfs-device]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -184,16 +184,16 @@ jobs:
         run: xvfb-run -a -s '-screen 0 1600x1000x24' /usr/bin/python3 scripts/gui_layout_smoke.py --backend tk --output-dir gui-layout
       - name: GTK4 real GUI lifecycle with synthetic inventory
         if: ${{ !cancelled() && steps.gui-deps.outcome == 'success' }}
-        run: xvfb-run -a -s '-screen 0 1600x1000x24' /usr/bin/python3 scripts/gui_lifecycle_smoke.py --backend gtk4 --output gui-lifecycle/gtk4-x11.json
+        run: xvfb-run -a -s '-screen 0 1600x1000x24' /usr/bin/python3 scripts/gui_lifecycle_smoke.py --backend gtk4 --device-revalidation --output gui-lifecycle/gtk4-x11.json
       - name: GTK3 fallback real GUI lifecycle with synthetic inventory
         if: ${{ !cancelled() && steps.gui-deps.outcome == 'success' }}
-        run: xvfb-run -a -s '-screen 0 1600x1000x24' /usr/bin/python3 scripts/gui_lifecycle_smoke.py --backend gtk3 --output gui-lifecycle/gtk3-x11.json
+        run: xvfb-run -a -s '-screen 0 1600x1000x24' /usr/bin/python3 scripts/gui_lifecycle_smoke.py --backend gtk3 --device-revalidation --output gui-lifecycle/gtk3-x11.json
       - name: Qt6 real GUI lifecycle with synthetic inventory
         if: ${{ !cancelled() && steps.gui-deps.outcome == 'success' }}
-        run: xvfb-run -a -s '-screen 0 1600x1000x24' /usr/bin/python3 scripts/gui_lifecycle_smoke.py --backend qt6 --output gui-lifecycle/qt6-x11.json
+        run: xvfb-run -a -s '-screen 0 1600x1000x24' /usr/bin/python3 scripts/gui_lifecycle_smoke.py --backend qt6 --device-revalidation --output gui-lifecycle/qt6-x11.json
       - name: Tk real GUI lifecycle with synthetic inventory
         if: ${{ !cancelled() && steps.gui-deps.outcome == 'success' }}
-        run: xvfb-run -a -s '-screen 0 1600x1000x24' /usr/bin/python3 scripts/gui_lifecycle_smoke.py --backend tk --output gui-lifecycle/tk-x11.json
+        run: xvfb-run -a -s '-screen 0 1600x1000x24' /usr/bin/python3 scripts/gui_lifecycle_smoke.py --backend tk --device-revalidation --output gui-lifecycle/tk-x11.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -234,10 +234,10 @@ jobs:
         run: /usr/bin/python3 scripts/gui_wayland_smoke.py --backend qt6
       - name: GTK4 real GUI lifecycle on native Wayland
         if: ${{ !cancelled() && steps.wayland-deps.outcome == 'success' }}
-        run: /usr/bin/python3 scripts/gui_wayland_smoke.py --backend gtk4 --lifecycle --output-dir gui-lifecycle
+        run: /usr/bin/python3 scripts/gui_wayland_smoke.py --backend gtk4 --lifecycle --device-revalidation --output-dir gui-lifecycle
       - name: Qt6 real GUI lifecycle on native Wayland
         if: ${{ !cancelled() && steps.wayland-deps.outcome == 'success' }}
-        run: /usr/bin/python3 scripts/gui_wayland_smoke.py --backend qt6 --lifecycle --output-dir gui-lifecycle
+        run: /usr/bin/python3 scripts/gui_wayland_smoke.py --backend qt6 --lifecycle --device-revalidation --output-dir gui-lifecycle
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -245,6 +245,37 @@ jobs:
           path: gui-lifecycle/*.json
           if-no-files-found: ignore
           retention-days: 14
+
+  btrfs-device:
+    name: Btrfs device revalidation (real remount)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use the main Ubuntu archive over HTTPS
+        run: |
+          for sources in /etc/apt/sources.list /etc/apt/sources.list.d/*.sources /etc/apt/sources.list.d/*.list; do
+            if [ -f "$sources" ]; then
+              sudo sed -i -e 's|mirror+file:/etc/apt/apt-mirrors.txt|https://archive.ubuntu.com/ubuntu/|g' -e 's|https\?://azure\.archive\.ubuntu\.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' "$sources"
+            fi
+          done
+      - name: Install Btrfs fixture tools in the disposable VM
+        run: |
+          sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=25 -o Acquire::https::Timeout=25 update -qq
+          sudo env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=25 -o Acquire::https::Timeout=25 install -y --no-install-recommends btrfs-progs
+          sudo modprobe btrfs
+      - name: Real remount, snapshot refusal, explicit REVALIDATE and separate PURGE/RESTORE
+        run: |
+          sudo env GITHUB_ACTIONS=true GITHUB_REPOSITORY="$GITHUB_REPOSITORY" RUNNER_TEMP="$RUNNER_TEMP" \
+            /usr/bin/python3 scripts/smoke_btrfs_device.py --uid "$(id -u)" --gid "$(id -g)" \
+            --work-dir "$RUNNER_TEMP/xdg-btrfs-fixture" --output "$GITHUB_WORKSPACE/btrfs-device.json"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: btrfs-device-${{ github.sha }}
+          path: btrfs-device.json
+          if-no-files-found: ignore
+          retention-days: 30
 
   quarantine-cycle:
     name: Quarantine and restore E2E (isolated)

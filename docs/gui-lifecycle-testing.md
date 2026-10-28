@@ -5,10 +5,17 @@ application using native row controls, action buttons and confirmation dialogs.
 It creates its own temporary HOME and never accepts a path to existing user
 data. Run as a regular user; the normal root guard remains active.
 
-Only installed-application inventory is synthetic. The scan, fresh pre-MOVE
+By default, only installed-application inventory is synthetic. The scan, fresh pre-MOVE
 inventory check, MOVE, journal writes, SHA-256 inventory, RESTORE and PURGE use
 the production implementation. Native pacman/dpkg/RPM and snapd inventories
 remain covered by separate real-provider CI jobs.
+
+CI additionally enables `--device-revalidation`. That mode supplies explicit
+synthetic Btrfs metadata and renumbers a disposable sealed legacy journal.
+It drives cancelled `REVALIDATE`, confirmed `REVALIDATE`, cancellation of the
+independent subsequent PURGE, and final explicit PURGE. The report identifies
+the filesystem evidence as synthetic; actual unmocked Btrfs mount/UUID behavior
+is required in a separate job. See [device identity verification](quarantine-device-identity.md).
 
 Each run verifies:
 

@@ -1037,7 +1037,8 @@ def _write_manifest_atomic(path: Path, data: dict) -> None:
         os.close(fd)
 
 def _safe_rename_noreplace(source: Path, destination: Path,
-                           expected_identity: tuple[int, int, int] | None = None) -> None:
+                           expected_identity: tuple[int, int, int] | None = None, *,
+                           expected_filesystem=None) -> None:
     """Linux-only anchored, no-overwrite rename for sensitive user files.
 
     Every ancestor is opened with O_NOFOLLOW relative to its already-checked
@@ -1080,6 +1081,18 @@ def _safe_rename_noreplace(source: Path, destination: Path,
             identity = (before.st_dev, before.st_ino, stat.S_IFMT(before.st_mode))
             if stat.S_ISLNK(before.st_mode) or (expected_identity is not None and identity != expected_identity):
                 raise ValueError("Source changed or became a symlink")
+            if expected_filesystem is not None:
+                from xdg_filesystem import btrfs_identity, validate_identity
+                validate_identity(expected_filesystem)
+                binding_fd = os.open(source.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK,
+                                     dir_fd=src_fd)
+                try:
+                    bound = os.fstat(binding_fd)
+                    if ((bound.st_dev, bound.st_ino, stat.S_IFMT(bound.st_mode)) != identity or
+                            btrfs_identity(binding_fd) != expected_filesystem):
+                        raise ValueError("Persistent filesystem/subvolume identity changed before rename")
+                finally:
+                    os.close(binding_fd)
             if func(src_fd, os.fsencode(source.name), dst_fd, os.fsencode(destination.name), 1) != 0:
                 err = ctypes.get_errno()
                 raise OSError(err, os.strerror(err), str(destination))
@@ -1222,9 +1235,15 @@ def commit_quarantine(chosen: list[Item], roots: dict[str, Path], home: Path,
             from xdg_quarantine_lifecycle import capture_inventory
             try:
                 row['tree_inventory'] = capture_inventory(destination)
+                from xdg_filesystem import filesystem_identity
+                binding = filesystem_identity(destination, it.identity)
+                if binding is not None:
+                    row['filesystem_identity'] = binding
             except (OSError, ValueError) as exc:
                 # The move already happened. Preserve a restorable journal but
                 # never make an unverified tree eligible for purge.
+                row.pop('tree_inventory', None)
+                row.pop('filesystem_identity', None)
                 _write_manifest_atomic(manifest, payload)
                 emit(f"MOVED, but purge inventory unavailable (restore-only): {destination}: {exc}")
                 continue
@@ -1366,6 +1385,9 @@ def restore_quarantine_run(home: Path, roots: dict[str, Path], run_id: str, emit
                     os.close(scopefd)
                 if _identity(original) != expected_identity or original.st_uid != os.getuid():
                     raise ValueError('Original path contains a different object')
+                if 'filesystem_identity' in row:
+                    from xdg_filesystem import verify_identity
+                    verify_identity(src, row['filesystem_identity'], expected_identity)
                 row['move_status'] = 'restored'
                 _write_manifest_atomic(manifest, payload)
                 count += 1
@@ -1385,9 +1407,14 @@ def restore_quarantine_run(home: Path, roots: dict[str, Path], run_id: str, emit
             continue
         did_restore = False
         try:
+            if 'filesystem_identity' in row:
+                from xdg_filesystem import verify_identity
+                verify_identity(dest, row['filesystem_identity'], expected_identity)
             row['move_status'] = 'restoring'
             _write_manifest_atomic(manifest, payload)
-            _safe_rename_noreplace(dest, src, expected_identity)
+            binding_args = ({'expected_filesystem': row['filesystem_identity']}
+                            if 'filesystem_identity' in row else {})
+            _safe_rename_noreplace(dest, src, expected_identity, **binding_args)
             did_restore = True
             count += 1
             _sync_directory(dest.parent)
@@ -1449,6 +1476,16 @@ def quarantine_access_recoverable_error(error: BaseException) -> bool:
 def diagnose_quarantine_access(home: Path, roots: dict[str, Path], run_id: str) -> dict:
     from xdg_access import diagnose_access
     return diagnose_access(home, roots, run_id)
+
+
+def preview_device_revalidation(home, roots, run_id):
+    from xdg_quarantine_lifecycle import device_revalidation_plan, device_revalidation_summary
+    return device_revalidation_summary(device_revalidation_plan(home, roots, run_id, nested_mounts_status))
+
+
+def revalidate_quarantine_device(home, roots, run_id, approval_token):
+    from xdg_quarantine_lifecycle import revalidate_device
+    return revalidate_device(home, roots, run_id, nested_mounts_status, approval_token=approval_token)
 
 
 def repair_quarantine_access(home: Path, roots: dict[str, Path],
@@ -1533,6 +1570,8 @@ def main(argv=None):
     parser.add_argument("--quarantine-info", metavar="RUN_ID", help="Inspect a v3 quarantine run")
     parser.add_argument("--diagnose-access", metavar="RUN_ID",
                         help="Inspect inaccessible quarantine files without changing permissions")
+    parser.add_argument("--revalidate-device", metavar="RUN_ID",
+                        help="Verify a Btrfs device-only change; --dry-run previews, execution requires REVALIDATE")
     parser.add_argument("--repair-access", metavar="RUN_ID",
                         help="Explicitly add owner-read permission to one diagnosed user-owned directory")
     parser.add_argument("--repair-target", metavar="SCOPE/RELATIVE_PATH",
@@ -1576,7 +1615,7 @@ def main(argv=None):
     if args.allow_uncertain and not args.remove:
         parser.error("--allow-uncertain requires --remove")
     operations = (args.restore, args.list_quarantine, args.quarantine_info, args.purge,
-                  args.purge_expired, args.diagnose_access, args.repair_access,
+                  args.purge_expired, args.diagnose_access, args.repair_access, args.revalidate_device,
                   args.cleanup_history, args.cleanup_expired_history,
                   args.cleanup_all_history,
                   args.polkit_test_status, args.polkit_test_create, args.polkit_test_delete,
@@ -1682,6 +1721,28 @@ def main(argv=None):
             print(json.dumps(diagnose_quarantine_access(home, roots, args.diagnose_access),
                              indent=2, ensure_ascii=False))
             return 0
+        if args.revalidate_device:
+            try:
+                preview = preview_device_revalidation(home, roots, args.revalidate_device)
+            except (OSError, ValueError) as error:
+                print(f"BLOCKED {args.revalidate_device}: {error}", file=sys.stderr)
+                return 1
+            print(json.dumps(preview, indent=2))
+            if args.dry_run:
+                return 0
+            print("Only the recorded device binding will change; verified names, inodes, types and hashes stay fixed.")
+            if not preview['historical_binding_verified']:
+                print("LEGACY JOURNAL: historical filesystem identity was not recorded. Matching bytes/inodes do not prove the historical filesystem; you are approving the verified CURRENT binding.")
+            print("No files will be deleted. PURGE requires separate fresh verification and confirmation.")
+            if not sys.stdin.isatty() or input("Type REVALIDATE to approve the verified CURRENT binding: ").strip() != 'REVALIDATE':
+                raise SystemExit("ERROR: device revalidation cancelled")
+            try:
+                print(json.dumps(revalidate_quarantine_device(home, roots, args.revalidate_device,
+                                                            preview['approval_token']), indent=2))
+            except (OSError, ValueError) as error:
+                print(f"BLOCKED {args.revalidate_device}: {error}", file=sys.stderr)
+                return 1
+            return 0
         if args.repair_access:
             from xdg_access import diagnose_access
             report = diagnose_access(home, roots, args.repair_access)
@@ -1771,7 +1832,8 @@ def main(argv=None):
         failed = []
         for run_id in ids:
             try:
-                previews.append(purge_run(home, roots, run_id, nested_mounts_status, dry_run=True))
+                previews.append(purge_run(home, roots, run_id, nested_mounts_status,
+                                          dry_run=True, automatic=args.automatic_purge))
             except (ValueError, OSError) as exc:
                 failed.append((run_id, str(exc)))
                 print(f"BLOCKED {run_id}: {exc}", file=sys.stderr)
@@ -1791,7 +1853,8 @@ def main(argv=None):
                 return 0
         for preview in previews:
             try:
-                print(purge_run(home, roots, preview["run_id"], nested_mounts_status, dry_run=False))
+                print(purge_run(home, roots, preview["run_id"], nested_mounts_status,
+                                dry_run=False, automatic=args.automatic_purge))
             except (ValueError, OSError) as exc:
                 failed.append((preview["run_id"], str(exc)))
                 print(f"BLOCKED {preview['run_id']}: {exc}", file=sys.stderr)

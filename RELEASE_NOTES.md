@@ -5,6 +5,11 @@
 
 ## New since v1.7.0-rc1
 
+- Descriptor-bound filesystem diagnosis and separately confirmed device-only
+  `REVALIDATE` after exact full-inventory/hash verification. Legacy journals
+  explicitly approve current contents without inventing historical UUID proof;
+  new Btrfs bindings also enforce filesystem/subvolume UUIDs. See
+  [recovery safeguards and limitations](docs/quarantine-device-identity.md).
 - Build/test DEB, RPM and Arch packages in Actions; create version tags and
   prepare signed APT/RPM publication, release assets and opt-in AUR submission.
 - Keep empty settings editors visible with theme-aware borders and focus.

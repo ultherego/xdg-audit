@@ -18,7 +18,8 @@ ROOT = Path(__file__).resolve().parents[1]
 CHILD = ROOT / 'scripts' / 'gui_app_smoke.py'
 
 
-def run(backend: str, duration: float = 3.0, *, lifecycle=False, output_dir=None, debugger=False) -> None:
+def run(backend: str, duration: float = 3.0, *, lifecycle=False, output_dir=None, debugger=False,
+        device_revalidation=False) -> None:
     with tempfile.TemporaryDirectory(prefix='xdg-audit-wayland-') as temp:
         base = Path(temp)
         runtime = base / 'runtime'
@@ -69,6 +70,8 @@ def run(backend: str, duration: float = 3.0, *, lifecycle=False, output_dir=None
                            [sys.executable, str(CHILD), '--child', '--backend', backend, '--home', str(home)])
                 if lifecycle and output_dir:
                     command += ['--output', str(output_dir / (backend + '-wayland.json'))]
+                if lifecycle and device_revalidation:
+                    command += ['--device-revalidation']
                 if debugger:
                     command = ['gdb', '--batch', '--return-child-result', '-ex', 'run',
                                '-ex', 'thread apply all bt', '--args', *command]
@@ -116,6 +119,9 @@ if __name__ == '__main__':
     parser.add_argument('--lifecycle', action='store_true', help='Run the real GUI lifecycle with synthetic inventory')
     parser.add_argument('--output-dir', type=Path)
     parser.add_argument('--debugger', action='store_true', help='Collect native failure backtraces with gdb')
+    parser.add_argument('--device-revalidation', action='store_true')
     arguments = parser.parse_args()
+    if arguments.device_revalidation and not arguments.lifecycle:
+        parser.error('--device-revalidation requires --lifecycle')
     run(arguments.backend, arguments.duration, lifecycle=arguments.lifecycle, output_dir=arguments.output_dir,
-        debugger=arguments.debugger)
+        debugger=arguments.debugger, device_revalidation=arguments.device_revalidation)

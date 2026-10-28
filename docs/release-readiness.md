@@ -29,8 +29,10 @@ Current priorities: [project roadmap](project-roadmap.md).
 - [ ] Independent security review of the latest changes by a second person.
 - [ ] Investigate the reported device-number change in an existing quarantine
   run. The inode and type match, but identity verification still refuses PURGE.
-  Detailed diagnostics are implemented; the filesystem cause and a safe
-  recovery design remain unverified. See [remaining work](project-roadmap.md).
+  Read-only filesystem diagnostics, persistent Btrfs bindings and explicit
+  exact-inventory `REVALIDATE` are implemented with an actual-remount CI gate.
+  The owner's specific filesystem/cause and affected run remain unverified.
+  [Recovery contract](quarantine-device-identity.md); independent review remains open.
 
 ## 2. CI and main protection (P0)
 
@@ -38,9 +40,9 @@ The active `Protect main` ruleset requires a PR, blocks force-push and deletion
 of `main`, and requires Python, Xvfb GUI, benchmark and source-archive checks.
 
 The source archive job depends on Python, GUI, Wayland, benchmark, quarantine,
-native-source, live-snapd and native-package jobs. Archive success therefore
+native-source, live-snapd, native-package and actual-Btrfs jobs. Archive success therefore
 also requires Wayland, isolated quarantine E2E, native Arch/Ubuntu/Fedora,
-actual snapd and DEB/RPM/Arch package tests, even when those contexts are not
+actual snapd, Btrfs remount/revalidation and DEB/RPM/Arch package tests, even when those contexts are not
 listed directly in the ruleset. Release publication additionally requires
 the disposable repository-publication rehearsal.
 
