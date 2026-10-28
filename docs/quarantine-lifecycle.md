@@ -3,6 +3,12 @@
 For a device-number-only refusal, see
 [filesystem diagnosis and separately confirmed revalidation](quarantine-device-identity.md).
 
+Journal reads and payload probes use nonblocking opens followed by descriptor
+validation. A FIFO manifest or a regular file replaced by a FIFO is rejected
+without waiting for a pipe writer. Listing and legacy restore share the same
+bounded, user-owned regular-file journal reader; this does not authorize any
+operation or relax inode, filesystem, ownership or content checks.
+
 New quarantine runs keep the v3 intent journal format for compatibility,
 with an additional complete `tree_inventory` containing inode identities,
 SHA-256 file hashes and symlink destinations. All destructive operations

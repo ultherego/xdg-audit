@@ -104,6 +104,7 @@
   "tests/test_quarantine_history_cli.py",
   "tests/test_quarantine_identity.py",
   "tests/test_quarantine_lifecycle.py",
+  "tests/test_quarantine_special_files.py",
   "tests/test_query_integrity.py",
   "tests/test_rc_safety.py",
   "tests/test_release_readiness.py",

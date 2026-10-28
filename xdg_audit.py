@@ -1273,7 +1273,8 @@ def quarantine_runs(home: Path, roots: dict[str, Path]) -> list[dict]:
         if not manifest.is_file() or manifest.is_symlink():
             continue
         try:
-            data = json.loads(manifest.read_text(encoding="utf-8"))
+            from xdg_quarantine_lifecycle import read_manifest
+            data = read_manifest(run)
             rows = data.get("items", [])
             if not isinstance(rows, list):
                 continue
@@ -1330,7 +1331,8 @@ def restore_quarantine_run(home: Path, roots: dict[str, Path], run_id: str, emit
     manifest = run / "manifest.json"
     if not manifest.is_file() or manifest.is_symlink():
         raise ValueError("Missing or unsafe manifest")
-    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    from xdg_quarantine_lifecycle import read_manifest
+    payload = read_manifest(run)
     rows = payload.get("items", [])
     if not isinstance(rows, list):
         raise ValueError("Invalid manifest")
@@ -1515,7 +1517,8 @@ def restore(home: Path, roots: dict[str, Path], run_id: str):
     manifest = run / "manifest.json"
     if not manifest.is_file() or manifest.is_symlink():
         raise SystemExit("ERROR: manifest not found.")
-    data = json.loads(manifest.read_text(encoding="utf-8"))
+    from xdg_quarantine_lifecycle import read_manifest
+    data = read_manifest(run)
     pending = []
     for i in data["items"]:
         src, dest, scope = Path(i["source"]), Path(i["destination"]), i["scope"]
