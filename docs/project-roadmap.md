@@ -4,15 +4,24 @@
 
 Status checked on **2026-10-28**. Source version is **`1.7.0-rc2`**; the latest
 published prerelease remains **`v1.7.0-rc1`**. The owner's previously tested
-GUI environment remains accepted. This roadmap tracks the remaining work;
-the checklist and linked evidence define completion.
+GUI environment remains accepted. The owner subsequently confirmed all three
+remaining P0 gates and authorized the remaining release work; the
+[acceptance record](owner-acceptance-2026-10-28.md) records that report and its
+limits. This roadmap tracks the remaining publication work.
 
 ## Verified foundation
 
+- [PR #43](https://github.com/ultherego/xdg-audit/pull/43) and
+  [merged main CI](https://github.com/ultherego/xdg-audit/actions/runs/40736967093)
+  passed all 22 build/test jobs with 440 regressions per supported interpreter.
+  Both 160-file source archives matched the accepted application tree; native
+  package checksums and all nine GUI lifecycle reports were verified.
+  Known partial v2 adoption and independently verified empty-history cleanup
+  retain separate ADOPT, PURGE and HISTORY consent.
 - [PR #42 desktop integration](verification-data/2026-10-28/desktop-sessions.md)
   passed all 22 build/test jobs with 418 regressions per supported interpreter.
   Actual GNOME 46, Plasma 5.27 and Xfce 4.18 software-rendered sessions passed
-  the native GUI lifecycle; physical keyboard/manual theme acceptance stays open.
+  the native GUI lifecycle. The owner separately accepted keyboard/theme checks.
 - [PR #40 and its merged main commit](verification-2026-10-28.md) passed all
   19 build/test jobs, with 415 regressions on each supported Python version.
   Native provider, package, actual-Btrfs and disposable publication checks
@@ -32,54 +41,55 @@ the checklist and linked evidence define completion.
 - Source/native packages and signed-repository pipelines are implemented and
   rehearsed with disposable keys. Production publication remains pending.
 
-## Open release gates
+## Owner-accepted P0 gates
+
+| ID | Work | Status |
+|---|---|---|
+| P0-01 | Affected old quarantines and device-identity issue | Owner confirmed working and accepted |
+| P0-02 | Independent security review by another person | Owner confirmed completed and accepted |
+| P0-03 | Keyboard/theme acceptance in GNOME/Wayland, Plasma/Wayland and Xfce/X11 | Owner confirmed all accepted |
+
+These are owner attestations, not additional checks performed by automation.
+The [record](owner-acceptance-2026-10-28.md) identifies the conversation's
+application baseline without inventing a reviewed SHA, reviewer identity,
+desktop versions or a forensic explanation of the old device change.
+
+## Remaining release gates
 
 | ID | Work | Responsible party | Completion evidence |
 |---|---|---|---|
-| P0-01 | Diagnose the owner's existing quarantine device mismatch | Owner supplies read-only diagnostics; maintainer investigates | Exact affected run/filesystem, verified recovery or a justified refusal with remaining limits |
-| P0-02 | Independent security review | A person other than the author | Named report pinned to a full SHA, findings, disposition and decision |
-| P0-03 | GNOME/Wayland, Plasma/Wayland and Xfce/X11 acceptance | Testers with those actual sessions | Environment/SHA, workflow results, hashes, screenshots and reviewed evidence links |
 | P1-01 | Final release commit and artifact acceptance | Maintainer and owner | Clean pinned SHA, green CI, inspected source/native packages, checksums and privacy record |
 | P1-02 | Confirm production signing configuration | Owner with repository secret access | Dedicated key/fingerprint configured and checked through the publication workflow; rehearsal alone is insufficient |
-| P1-03 | Publish and accept a new RC | Owner release decision and gated workflows | New version tag, release assets, signed repository results and RC acceptance |
+| P1-03 | Publish and accept RC2 | Release work authorized; gated workflows and owner RC acceptance | New version tag, release assets, signed repository results and RC acceptance |
 | P1-04 | Stable release after RC acceptance | Owner release decision and gated workflows | Resolved blockers, accepted RC and successful stable publication |
 
 ## Execution order
 
-1. Obtain read-only diagnostics for the affected owner run using the
-   [device-identity recovery guide](quarantine-device-identity.md). Compare
-   device, inode/type, filesystem/subvolume binding and exact inventory.
-   Matching inode numbers alone never authorize recovery. Confirm REVALIDATE
-   separately if eligible; PURGE/RESTORE still need their own authorization.
-2. Pin a candidate SHA and hand the latest code to an independent reviewer
-   using the [review map and required report](security-review-guide.md).
-   Resolve findings with focused regressions and re-review changed areas.
-3. Run the [desktop acceptance protocol](desktop-acceptance.md) in each named
-   session, using disposable data and physical keyboard checks. Retain explicit
-   failures/skips. The already accepted owner environment need not repeat its
-   completed acceptance. Complete software-rendered GNOME/Plasma/Xfce session
-   jobs now extend CI integration coverage; they do not close physical keyboard
-   or manual theme/palette acceptance.
-4. Confirm the production secrets and fingerprint described in
+1. Preserve the accepted application bytes while preparing release documentation
+   and automation. The committed release request pins that baseline; the tag
+   workflow rejects a changed packaged runtime rather than silently extending
+   the owner's existing acceptance.
+2. Confirm the production secrets and fingerprint described in
    [Native packages](native-packages.md), without exposing private keys in
    issues, logs or source. Optional AUR setup additionally requires its account
    SSH credential and verified host key.
-5. After fixes and acceptance, select the exact release commit. Reconcile
+3. Select the exact release commit. Reconcile
    README, CHANGELOG, RELEASE_NOTES and checklist with that commit; inspect its
    own artifacts, hashes, license, paths and package installation lifecycle.
    Earlier successful artifacts do not establish a later release's contents.
-6. Publish a new RC through the tag workflow after mandatory evidence and the
-   owner release decision. Check source, DEB/RPM/Arch assets and production
+4. After green main CI, process the committed RC2 request through the tag
+   workflow. It probes an existing signer before creating the immutable tag.
+   Check source, DEB/RPM/Arch assets and production
    signed APT/RPM repositories. AUR publication is optional and final-only.
-7. Record owner RC acceptance and address any findings. Publish stable only
+5. Record owner RC acceptance and address any findings. Publish stable only
    after the RC and remaining P0/P1 gates are accepted.
-8. Keep the evidence ledger and checklist linked to the actual accepted
+6. Keep the evidence ledger and checklist linked to the actual accepted
    commits, jobs and artifacts. Re-run affected checks after subsequent fixes.
 
-Independent review, desktop testing and credential preparation can proceed in
-parallel once their targets are pinned. Owner filesystem diagnostics, another
-reviewer's decision, manual desktop acceptance and production keys cannot be
-supplied by author automation.
+The accepted P0 checks do not need repeating for unchanged application code.
+Production keys must be configured from the owner's trusted computer and are
+never generated by release automation. Missing or unusable signing configuration
+blocks tag creation and produces a public preflight report without key data.
 
 ## After release
 

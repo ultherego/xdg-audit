@@ -23,6 +23,13 @@
   [recovery safeguards and limitations](docs/quarantine-device-identity.md).
 - Build/test DEB, RPM and Arch packages in Actions; create version tags and
   prepare signed APT/RPM publication, release assets and opt-in AUR submission.
+- Pin the owner-accepted application runtime in a committed release request.
+  After successful trusted main CI, verify an existing production signing key
+  can sign and verify a probe before creating the immutable RC2 tag. Missing or
+  unusable configuration produces a public report without key material.
+- Make desktop-fixture teardown handle disconnected private FUSE portals and
+  retain its result. Original required services/components must survive the
+  lifecycle; exiting duplicate startup helpers no longer cause a false failure.
 - Keep empty settings editors visible with theme-aware borders and focus.
 - Show actionable PURGE refusal dialogs with exact recorded/current identity
   evidence; permission repair and ADOPT cannot bypass identity mismatches.
@@ -110,10 +117,12 @@
   by the current user.
 - `PURGE` does not securely overwrite storage. Internal limits and access
   failures block the operation.
-- This remains a release candidate. The owner confirmed the tested GUI works
-  on 2026-10-26; separate GNOME/KDE/Xfce sessions were not documented.
-  Independent security review, additional desktop coverage and final release
-  artifact acceptance remain open.
+- This remains a release candidate. The owner confirmed the affected old
+  quarantines, independent second-person security review and additional
+  GNOME/KDE/Xfce keyboard/theme checks were satisfactory on 2026-10-28.
+  [Owner acceptance and scope](docs/owner-acceptance-2026-10-28.md) close the P0
+  gates. Final signed artifacts, production publication and RC acceptance
+  still need their own results.
 
 ## Verification
 

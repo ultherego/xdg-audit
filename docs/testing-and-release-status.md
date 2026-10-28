@@ -33,14 +33,24 @@ GitHub Actions covers:
 - Source ZIP/tar.gz integrity, checksum-pinned AUR recipes and a rehearsal of
   the production repository publisher against a disposable local Git remote.
 
-The desktop integration change passed all 22 build/test jobs, including 418
+The latest accepted application baseline is PR #43, merged as
+`6f86e1994515febf1722befcf96c9e61bd858357`:
+[PR validation](https://github.com/ultherego/xdg-audit/actions/runs/40734824714)
+and [merged main validation](https://github.com/ultherego/xdg-audit/actions/runs/40736967093).
+Both passed all 22 build/test jobs with 440 regressions on each supported Python.
+The 160-file source ZIP and tar.gz matched the reviewed tree byte for byte;
+native-package checksums and nine GUI reports with 13 lifecycle assertions
+were verified. This includes partial v2 ADOPT and verified empty-history cleanup.
+
+The earlier desktop integration change passed all 22 build/test jobs, including 418
 regressions on each supported Python version:
 [PR #42 validation](https://github.com/ultherego/xdg-audit/actions/runs/40711792031).
 GNOME 46/GTK4 and Plasma 5.27/Qt6 use native Wayland; Xfce 4.18/Tk uses X11.
 [Retained reports and limitations](verification-data/2026-10-28/desktop-sessions.md).
-This extends automated integration coverage; manual theme/palette and physical
-keyboard acceptance remain open. These results identify the tested commit,
-not future release artifacts.
+This extends automated integration coverage. The owner separately accepted
+manual theme/palette and physical-keyboard checks in the
+[2026-10-28 report](owner-acceptance-2026-10-28.md). These automated results
+identify the tested commit, not future release artifacts.
 
 The earlier GUI change passed all 19 build/test jobs, including 415 regressions
 on each supported Python version:
@@ -60,15 +70,17 @@ The resulting `main` commit also passed:
 These results concern the commits linked in those runs; later changes need
 fresh CI results.
 
-The owner confirmed the tested GUI functionality on 2026-10-26. Additional
-GNOME/KDE/Xfce session coverage and independent security review remain open in
-the [release-readiness checklist](release-readiness.md). A reported device
-identity change initially blocks its existing run; its actual owner environment
-remains unverified. Exact-inventory recovery requires separate `REVALIDATE`
-confirmation and does not authorize deletion or infer missing historical UUIDs.
-The [independent review handoff](security-review-guide.md) and
-[desktop acceptance protocol](desktop-acceptance.md) are prepared; neither is
-a report of completed acceptance.
+The owner confirmed the tested GUI functionality on 2026-10-26, then confirmed
+the affected old quarantines/device-identity recovery, independent security
+review by another person and additional GNOME/KDE/Xfce keyboard/theme acceptance
+on 2026-10-28. The [owner report](owner-acceptance-2026-10-28.md) closes those
+P0 gates and authorizes the remaining release work. It does not invent raw
+diagnostics or an exact original filesystem cause. Exact-inventory recovery
+still requires separate consent and never authorizes deletion implicitly.
+
+Release preparation pins the accepted runtime and runs an actual signing
+preflight before creating the RC2 tag. Final artifact/signature checks and
+production publication remain in the [release checklist](release-readiness.md).
 
 ```fish
 python3 -m unittest discover -s tests -v

@@ -110,23 +110,33 @@ disables host verification or force-pushes an AUR repository.
 
 ## Creating a release
 
-After merging the intended version and confirming green main CI, run **Actions →
-Create release tag → Run workflow**, selecting `main` and the exact source
-version without `v`. This creates an annotated tag and explicitly starts the
-full test/release workflow for that tag. A mismatched version, missing signing
-fingerprint, failed main CI or existing tag prevents tag creation.
+The owner authorized RC2 preparation/publication after accepting the P0 gates:
+[acceptance record](owner-acceptance-2026-10-28.md). Release intent is committed
+in [.github/release-request.json](https://github.com/ultherego/xdg-audit/blob/main/.github/release-request.json),
+including the exact version, accepted application SHA and owner-acceptance
+document. A stale request never authorizes a different source version.
 
-Alternatively, create and push an annotated tag from a trusted checkout:
+After **Test and build** succeeds for a trusted push to `main`, **Create release
+tag** processes that request. PR/fork runs cannot start the privileged job. The
+workflow checks the current main SHA, source/tag version, green push CI and
+packaged application bytes against the accepted baseline. It then enters the
+`package-signing` environment, imports the existing configured key into a
+temporary keyring, checks its primary fingerprint, and makes/verifies a probe
+signature without interactive input. It never generates a production key.
 
-```fish
-git switch main
-git pull --ff-only
-git tag -a v1.7.0-rc2 -m 'xdg-audit v1.7.0-rc2'
-git push origin refs/tags/v1.7.0-rc2
-```
+Only a successful preflight creates an annotated immutable tag and explicitly
+starts the full tag test/release pipeline. The public `release-preflight-SHA`
+artifact contains readiness, missing setting names or a fixed failure code and
+the public fingerprint; it contains no private key, key UID or raw GnuPG errors.
+Missing/unusable signing configuration fails before any tag is pushed.
 
-Use `git tag -s` when a maintainer signing key is configured. Never move an
-already published tag. An ordinary branch push builds test artifacts only.
+Once the owner setup is complete, rerun the failed **Create release tag** job.
+Alternatively, use **Actions → Create release tag → Run workflow**, selecting
+`main` and exactly the version in the committed request, without `v`.
+An existing tag is a no-op for automatic requests and an error for manual
+requests: retry that tag's failed release jobs instead. Never move a published
+tag. Ordinary branch pushes build test artifacts; only the explicitly committed
+matching release request authorizes automatic tag creation after green main CI.
 
 The tag pipeline waits for the complete application, GUI, quarantine and native
 package checks. It then signs/publishes APT and RPM, uploads signed release
@@ -141,6 +151,14 @@ source ZIP/tar.gz, the public key/fingerprint, build receipt and signed SHA-256
 checksums. The same signed RPM bytes are served by the RPM repository.
 If a later release stage fails, rerun failed jobs for the same tag/artifacts;
 the publisher validates its existing receipt before reusing signed packages.
+If the tag was pushed but dispatch failed before a test/release run appeared,
+run **Test and build** against that existing tag. Never recreate or move it.
+
+The accepted application SHA covers the packaged runtime and icons, including
+the optional retention helper. A changed/new runtime file requires fresh
+acceptance before tagging; documentation and release preparation may advance
+the final release commit. The current owner confirmation does not manufacture
+an independent review of subsequent release-automation changes.
 
 The separate **Signed package repository** workflow refreshes both existing
 channels weekly. APT metadata expires after 30 days; monitor workflow failures

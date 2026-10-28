@@ -4,6 +4,13 @@
 
 ## What the refusal establishes
 
+The owner confirmed the affected old quarantines and device-identity recovery
+were working and accepted on 2026-10-28:
+[owner report](owner-acceptance-2026-10-28.md). That closes the reported issue's
+release gate. No raw machine diagnostics were supplied, so the explanation
+below describes the verified failure class rather than asserting an exact
+forensic cause on the owner's machine.
+
 The v3 journal records the device number, inode and file type of every moved
 root and every inventoried descendant. A different device number blocks
 ordinary PURGE and RESTORE even if the inode and type still match.

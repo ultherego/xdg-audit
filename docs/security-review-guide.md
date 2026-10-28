@@ -2,10 +2,12 @@
 
 [Release checklist](release-readiness.md) · [Evidence protocol](release-verification-evidence.md)
 
-**Status: pending independent review.** This guide prepares the review; it is
-not a reviewer report or approval. The reviewer must be a person other than
-the author. Author fixes, automated tests and GUI screenshots do not close
-this gate.
+**Current status: accepted on the owner's report (2026-10-28).** The owner
+confirmed that a second person completed the independent review and that it
+was satisfactory. The [acceptance record](owner-acceptance-2026-10-28.md)
+identifies the application baseline and the details not separately supplied.
+This guide is a reusable handoff for future changes; it does not manufacture
+a reviewer identity, raw report or additional review by release automation.
 
 ## Pin the review target
 
@@ -22,7 +24,7 @@ affected scope. A report referring only to a moving branch is insufficient.
 | MOVE authorization | `xdg_audit.py`: `commit_quarantine`, `_safe_rename_noreplace`; `xdg_sources.py` | Are package/provider inventories fresh and complete? Do protection, ownership, exact namespace and uncertain-consent checks precede mutation? Can a path substitution, mount or collision bypass them? |
 | Journals and inventory | `xdg_quarantine_lifecycle.py`: `_open_path`, `_load_manifest`, `read_manifest`, `_write_manifest`, `capture_inventory` | Check descriptor anchoring, symlink/hardlink refusal, regular-file/device/owner limits, FIFO opens, bounded reads, hashes and error cleanup. Examine durability claims separately from actual syscall guarantees. |
 | PURGE and recovery | `inspect_run`, `purge_run`, `_delete_entry`, `_delete_children`, `recover_manifest_temps` | Inspect complete preflight, untracked/changed content, final identity checks, partial deletion and interrupted journals. Verify outside sentinels and failed journal writes cannot silently authorize further deletion. |
-| RESTORE and legacy runs | `xdg_audit.py`: `restore_quarantine_run`; `xdg_quarantine_lifecycle.py`: `adopt_legacy_run` | Check no-overwrite behavior, v3 identity enforcement, interrupted-rename reconciliation and explicit limits of older formats. Current inventory adoption cannot invent historical proof. |
+| RESTORE and legacy runs | `xdg_audit.py`: `restore_quarantine_run`; `xdg_quarantine_legacy.py`; `xdg_quarantine_lifecycle.py`: `adopt_legacy_run` | Check no-overwrite behavior, v3 identity enforcement, complete namespace validation, interrupted-rename reconciliation and explicit limits of older formats. Current inventory adoption cannot invent historical proof or grant PURGE consent. |
 | Btrfs identity | `xdg_filesystem.py`; `device_revalidation_plan`, `revalidate_device` | Check FSID/subvolume ID/UUID binding, snapshot refusal, exact inventory equality, preview-token freshness, the atomic receipt and explicit legacy limitations. Inode equality alone is insufficient. |
 | Permissions and retention | `xdg_access.py`, `xdg_retention.py`, `xdg_quarantine_history.py`; CLI automatic-purge path | Check narrowly scoped owner permission repair, foreign-data refusal, default-off policy, age calculation, completed-history checks and refusal of automatic PURGE after REVALIDATE. |
 | Confirmation UI | `xdg_gui_gtk.py`, `xdg_gui_qt.py`, `xdg_gui_tk.py`, `xdg_gui_dialogs.py` | Verify exact tokens, empty/incorrect input, cancellation, Return/keypad Enter and one operation per confirmation. ACCESS/ADOPT/REVALIDATE do not grant subsequent PURGE consent. Multiline Settings Enter must remain a newline. |
@@ -51,7 +53,7 @@ Record commands, environment, failures and exact CI job/artifact links.
 Synthetic inventory and GTK headless-Wayland activation coverage must retain
 their documented limitations.
 
-## Required reviewer record
+## Reviewer record for subsequent reviews
 
 | Field | Required content |
 |---|---|
@@ -62,6 +64,8 @@ their documented limitations.
 | Disposition | Fix/PR/SHA, regression evidence, retest result or explicit unresolved limitation |
 | Decision | Approval or remaining blockers, with an accessible report/review link |
 
-Close the checklist item only after this record exists and unresolved findings
-capable of unapproved data loss or trust bypass are addressed. A signed-off
-report does not substitute for the separate desktop and publication evidence.
+For subsequent reviews, retain this record and resolve findings capable of
+unapproved data loss or trust bypass. The current P0 closure follows the
+owner's explicit acceptance; this future-report template does not reopen it.
+Security acceptance does not substitute for successful production signing
+and final artifact/publication checks.

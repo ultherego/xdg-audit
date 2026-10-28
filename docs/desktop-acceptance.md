@@ -2,10 +2,12 @@
 
 [Release checklist](release-readiness.md) · [Automated GUI scope](gui-lifecycle-testing.md)
 
-**Status: GNOME, KDE Plasma and Xfce acceptance remains pending.** The owner's
-previously accepted GUI environment remains accepted and need not repeat its
-completed tests. This protocol concerns additional, separately identified
-desktop sessions and their integration with the system theme and input.
+**Current status: GNOME, KDE Plasma and Xfce accepted by the owner (2026-10-28).**
+The owner confirmed all additional keyboard/theme checks were satisfactory.
+The [acceptance record](owner-acceptance-2026-10-28.md) records that report
+without inventing desktop versions or raw per-session results. The previously
+accepted GUI environment also remains accepted. The protocol below is reusable
+for future application changes and does not require repeating accepted tests.
 
 | Session | Backend | Required evidence |
 |---|---|---|
@@ -25,7 +27,10 @@ and private D-Bus session. An ordinary desktop autostart entry launches the
 fixture inside that session. The check requires the session manager, desktop
 shell/window manager and settings services, verifies their actual D-Bus owner
 PIDs/executables/profile, and checks they survive the entire GUI lifecycle.
-Xfce also requires its panel, desktop and settings daemon. The existing GUI
+Xfce also requires its panel, desktop and settings daemon. D-Bus service PIDs
+must remain unchanged; at least one original instance of each required extra
+component must survive. An exiting duplicate startup helper does not imply a
+restart, but replacing every original instance fails. The existing GUI
 harness then verifies GTK4/Qt6 native Wayland or Tk native X11, explicit token
 confirmation/cancellation, hashes, sentinels, REVALIDATE and selected history
 removal. The application cannot fall back to XWayland in Wayland cases.
@@ -43,14 +48,19 @@ Each job retains `session.json`, `lifecycle.json` and diagnostic logs, including
 the exact desktop package versions and commit. A failed session cannot produce
 release archives. This provides automated desktop integration coverage, while
 physical keyboard input, system-theme/palette inspection and the acceptance
-record below remain required. Do not mark the manual matrix complete from a
-CI pass alone. All three session jobs passed in
+record below are separate from CI. The current manual closure follows the
+owner's explicit confirmation, not a CI pass alone. All three session jobs passed in
 [PR #42 validation](https://github.com/ultherego/xdg-audit/actions/runs/40711792031).
 The [retained original reports](verification-data/2026-10-28/desktop-sessions.md)
 pin exact versions, service identities, ten lifecycle assertions per session,
 keyboard-event scope and SHA-256 evidence. Calendar, audio, networking, portals
 and other optional desktop features are outside this check; diagnostic
 warnings remain in the original log artifacts.
+
+After stopping the private fixture session, teardown detaches only its exact
+current-user FUSE portal mounts under the new temporary runtime directory,
+then checks the kernel mount table before removing the profile. It never
+addresses a host-session portal. Each job also retains `teardown.json`.
 
 ## Record the environment
 
@@ -130,7 +140,7 @@ directory. Do not reuse this protocol with an existing user HOME/quarantine.
 
 ## Completion record
 
-For each session attach the environment record, automated report, manual
-case results, before/after hashes and screenshots. Mark the corresponding
-release-checklist row complete only after those results are reviewed and
-linked. Keep skipped keyboard/theme/backend cases visible as limitations.
+For future acceptance runs, attach the environment record, automated report,
+manual case results, before/after hashes and screenshots. Keep skipped
+keyboard/theme/backend cases visible as limitations. The current accepted
+application baseline is covered by the owner's linked confirmation above.

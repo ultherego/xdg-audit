@@ -4,9 +4,13 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: Exact source version without v (for example 1.7.0-rc2)
+        description: Exact approved source version without v (for example 1.7.0-rc2)
         required: true
         type: string
+  workflow_run:
+    workflows: [Test and build]
+    types: [completed]
+    branches: [main]
 
 permissions:
   contents: read
@@ -16,41 +20,111 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  prepare:
+    if: >-
+      github.repository == 'ultherego/xdg-audit' && github.ref == 'refs/heads/main' &&
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event_name == 'workflow_run' &&
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.event == 'push' &&
+        github.event.workflow_run.head_branch == 'main' &&
+        github.event.workflow_run.head_repository.full_name == github.repository))
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      actions: read
+    env:
+      RELEASE_COMMIT: ${{ github.event.workflow_run.head_sha || github.sha }}
+    outputs:
+      version: ${{ steps.request.outputs.version }}
+      commit: ${{ steps.request.outputs.commit }}
+      create_tag: ${{ steps.existing.outputs.create_tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_COMMIT }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Resolve the committed owner release request
+        id: request
+        env:
+          REQUESTED_VERSION: ${{ github.event.inputs.version || '' }}
+        run: |
+          python3 -B packaging/release_preflight.py request \
+            --commit "$RELEASE_COMMIT" --requested-version "$REQUESTED_VERSION" \
+            --github-output "$GITHUB_OUTPUT"
+      - name: Preserve existing immutable tags
+        id: existing
+        if: steps.request.outputs.requested == 'true'
+        env:
+          RELEASE_VERSION: ${{ steps.request.outputs.version }}
+          MANUAL: ${{ github.event_name == 'workflow_dispatch' }}
+        run: |
+          if git ls-remote --exit-code --tags origin "refs/tags/v$RELEASE_VERSION" >/dev/null; then
+            if [[ "$MANUAL" == true ]]; then
+              echo 'This version tag already exists; rerun its failed release jobs instead.' >&2
+              exit 1
+            fi
+            echo 'create_tag=false' >> "$GITHUB_OUTPUT"
+          else
+            result=$?
+            if [[ "$result" != 2 ]]; then
+              echo 'Cannot verify remote release tags.' >&2
+              exit 1
+            fi
+            echo 'create_tag=true' >> "$GITHUB_OUTPUT"
+          fi
+      - name: Verify accepted application bytes and successful current main CI
+        if: steps.existing.outputs.create_tag == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 -B packaging/release_preflight.py runtime --commit "$RELEASE_COMMIT"
+          actual=$(gh api repos/ultherego/xdg-audit/git/ref/heads/main --jq '.object.sha')
+          test "$actual" = "$RELEASE_COMMIT"
+          result=$(gh run list --workflow tests.yml --branch main --commit "$RELEASE_COMMIT" --event push --limit 1 --json conclusion --jq '.[0].conclusion')
+          test "$result" = success
+
   tag:
-    if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    needs: [prepare]
+    if: needs.prepare.outputs.create_tag == 'true'
+    runs-on: ubuntu-24.04
+    environment: package-signing
     permissions:
       contents: write
       actions: write
+    env:
+      RELEASE_COMMIT: ${{ needs.prepare.outputs.commit }}
+      RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
     steps:
       - uses: actions/checkout@v4
-      - name: Validate source, signing configuration and main CI
+        with:
+          ref: ${{ env.RELEASE_COMMIT }}
+          fetch-depth: 0
+      - name: Recheck accepted source before using the signer
+        run: python3 -B packaging/release_preflight.py runtime --commit "$RELEASE_COMMIT"
+      - name: Verify the configured key can make an unattended signature
         env:
-          RELEASE_VERSION: ${{ inputs.version }}
-          SIGNING_FINGERPRINT: ${{ vars.PACKAGES_SIGNING_FINGERPRINT }}
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          python3 - <<'PY'
-          import os, sys
-          from pathlib import Path
-          sys.path.insert(0, 'packaging')
-          from check_version import check
-          check(Path('.'), 'v' + os.environ['RELEASE_VERSION'])
-          if not os.environ['SIGNING_FINGERPRINT']:
-              raise SystemExit('Configure package signing before creating a release tag')
-          PY
-          result=$(gh run list --workflow tests.yml --branch main --commit "$GITHUB_SHA" --event push --limit 1 --json conclusion --jq '.[0].conclusion')
-          test "$result" = success
+          PACKAGES_SIGNING_KEY: ${{ secrets.PACKAGES_SIGNING_KEY }}
+          PACKAGES_SIGNING_FINGERPRINT: ${{ vars.PACKAGES_SIGNING_FINGERPRINT }}
+        run: python3 -B packaging/release_preflight.py signing --report "$RUNNER_TEMP/xdg-release-preflight.json"
       - name: Create an immutable annotated tag and start its release pipeline
         env:
-          RELEASE_VERSION: ${{ inputs.version }}
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="v$RELEASE_VERSION"
+          actual=$(gh api repos/ultherego/xdg-audit/git/ref/heads/main --jq '.object.sha')
+          test "$actual" = "$RELEASE_COMMIT"
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git tag -a "$tag" -m "xdg-audit $tag" "$GITHUB_SHA"
+          tag="v$RELEASE_VERSION"
+          git tag -a "$tag" -m "xdg-audit $tag" "$RELEASE_COMMIT"
           git push origin "refs/tags/$tag"
-          # GITHUB_TOKEN pushes do not trigger push workflows. Dispatch the
-          # complete test/release workflow explicitly for the newly created tag.
+          # GITHUB_TOKEN tag pushes do not trigger the tag workflow themselves.
           gh workflow run tests.yml --ref "$tag"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: release-preflight-${{ env.RELEASE_COMMIT }}
+          path: ${{ runner.temp }}/xdg-release-preflight.json
+          if-no-files-found: ignore
+          retention-days: 30

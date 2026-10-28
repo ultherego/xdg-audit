@@ -2,6 +2,14 @@
 
 ## 1.7.0-rc2 (unreleased)
 
+- Record the owner's acceptance of old-quarantine recovery, independent
+  second-person security review and GNOME/KDE/Xfce keyboard/theme checks.
+  Pin the accepted application runtime and process a committed RC2 request
+  after green main CI. Probe an existing signer before creating the immutable
+  tag; refuse missing/unusable signing configuration without exposing key data.
+- Detach only current-user portal mounts in the disposable desktop fixture
+  before removing its profile. Require original desktop services/components to
+  survive without treating an exiting duplicate startup helper as a restart.
 - Distinguish purging expired data from clearing empty history in all GUIs.
   Support separately approved current-content adoption of known partial v2
   journals, preserving the original journal and blocking automatic deletion.

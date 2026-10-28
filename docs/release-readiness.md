@@ -2,7 +2,10 @@
 
 **Status:** stabilization on `main` (source version `1.7.0-rc2`).
 The latest published tag/release is `v1.7.0-rc1`.
-Publishing a new release or stable tag requires a separate release decision.
+The owner authorized the remaining release work on 2026-10-28. The three manual
+P0 gates are accepted in the [owner confirmation](owner-acceptance-2026-10-28.md).
+RC2 publication still requires successful signing and artifact checks; stable
+publication follows RC acceptance.
 
 Evidence needed to close open items is defined in the
 [P0/P1 validation protocol](release-verification-evidence.md).
@@ -27,14 +30,14 @@ Current priorities: [project roadmap](project-roadmap.md).
   `SIGKILL`, with synthetic data only, followed by restart recovery —
   [results and scope](verification-2026-10-26.md).
   This covers process termination, not power loss or kernel failure.
-- [ ] Independent security review of the latest changes by a second person —
-  [review map and required report](security-review-guide.md).
-- [ ] Investigate the reported device-number change in an existing quarantine
-  run. The inode and type match, but identity verification still refuses PURGE.
-  Read-only filesystem diagnostics, persistent Btrfs bindings and explicit
-  exact-inventory `REVALIDATE` are implemented with an actual-remount CI gate.
-  The owner's specific filesystem/cause and affected run remain unverified.
-  [Recovery contract](quarantine-device-identity.md); independent review remains open.
+- [x] Independent security review by a second person — completed and accepted
+  according to the [owner report](owner-acceptance-2026-10-28.md).
+  The [review guide](security-review-guide.md) remains available for future changes.
+- [x] Confirm the affected old quarantines and device-identity recovery work —
+  [owner-reported resolution](owner-acceptance-2026-10-28.md).
+  No raw diagnostics were supplied, so the exact original filesystem cause is
+  not inferred. The [recovery contract](quarantine-device-identity.md), persistent
+  Btrfs bindings and actual-remount CI remain in force.
 
 ## 2. CI and main protection (P0)
 
@@ -53,7 +56,7 @@ the disposable repository-publication rehearsal.
   Xfce 4.18/X11 integration with actual session/shell/settings processes,
   native GUI lifecycle and unchanged hashes/sentinels —
   [exact target and retained reports](verification-data/2026-10-28/desktop-sessions.md).
-  This does not close the physical-keyboard/manual-theme acceptance below.
+  Physical-keyboard/manual-theme acceptance is recorded separately below.
 - [x] Isolated MOVE → RESTORE lifecycle and safety-failure tests.
 - GUI lifecycle automation also exercises real row controls, confirmation
   dialogs and production file operations with synthetic installed inventory:
@@ -81,10 +84,11 @@ The following matrix concerns additional, separately identified environments.
   [Exact-commit CI and visual screenshot results](verification-2026-10-28.md);
   the [automated scope](gui-lifecycle-testing.md) retains the separate physical
   keyboard/full-desktop limits.
-- [ ] GNOME/Wayland — complete scan, restore and PURGE workflow.
-- [ ] KDE Plasma/Wayland — the same workflow with system-theme integration.
-- [ ] Xfce/X11 — startup and workflow through Tk/GTK.
-  [Prepared session protocol and evidence requirements](desktop-acceptance.md).
+- [x] GNOME/Wayland — workflow, keyboard and theme accepted by the owner.
+- [x] KDE Plasma/Wayland — workflow, keyboard and system-theme integration accepted.
+- [x] Xfce/X11 — startup, workflow, keyboard and theme accepted.
+  [Owner report and scope](owner-acceptance-2026-10-28.md);
+  [reusable session protocol](desktop-acceptance.md).
 - [x] Native pacman, APT/dpkg and RPM: MOVE verifies the OS's own database.
   Arch/Ubuntu/Fedora native protection and lifecycle tests are mandatory before
   CI can build archives. Arch validates the package-manager family used by
@@ -117,7 +121,11 @@ The following matrix concerns additional, separately identified environments.
   Production publication requires the dedicated signing key/fingerprint; AUR
   additionally needs its account key and verified SSH host key.
 - [ ] Configure production package signing and optionally AUR publication.
-- [ ] Publish a **new RC** after acceptance, then consider a stable release.
+- [x] Owner decision to proceed with remaining release work —
+  [2026-10-28 authorization](owner-acceptance-2026-10-28.md).
+- [ ] Verify the exact release source/native artifacts and publish **RC2**
+  through the gated tag/signing workflows.
+- [ ] Record RC acceptance, then publish stable.
 
 ## 5. Application installation sources
 
