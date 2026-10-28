@@ -1,6 +1,8 @@
 # v1.7.0 release verification — P0/P1 evidence ledger
 
-This document is a **verification protocol**, not a claim that the checks passed.
+This document separates the reusable **verification protocol** from linked
+results. The owner accepted all three remaining P0 gates on 2026-10-28:
+[confirmation and scope](owner-acceptance-2026-10-28.md).
 Use only disposable fixture data. Do not run xdg-audit under `sudo` or test
 destructive actions against your real XDG directories.
 
@@ -9,8 +11,10 @@ destructive actions against your real XDG directories.
 For every manual run, record: UTC timestamp, commit SHA, distribution/version,
 session type, GUI backend, Python version, exact command, expected/actual result,
 and a redacted log or screenshot. A checked box in the readiness checklist needs
-a linked artifact (CI run, test output, or peer review). A failed or skipped
-test is **not** a pass.
+a linked result (CI run, test output, peer review or explicit owner attestation).
+Owner-reported acceptance is identified as such; it does not imply that raw
+reports were uploaded or that release automation performed those checks.
+A failed or skipped test is **not** a pass.
 
 ## P0 — reproducible checks
 
@@ -49,14 +53,15 @@ durability. An interactive rehearsal remains optional additional evidence.
 
 | Environment | Scan | Inspect | Quarantine | Restore | PURGE | Theme / error UI | Evidence |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| GNOME / Wayland / GTK | pending | pending | pending | pending | pending | pending | — |
-| KDE Plasma / Wayland / Qt | pending | pending | pending | pending | pending | pending | — |
-| Xfce / X11 / Tk or GTK | pending | pending | pending | pending | pending | pending | — |
+| GNOME / Wayland / GTK | accepted | accepted | accepted | accepted | accepted | accepted | [Owner report](owner-acceptance-2026-10-28.md) |
+| KDE Plasma / Wayland / Qt | accepted | accepted | accepted | accepted | accepted | accepted | [Owner report](owner-acceptance-2026-10-28.md) |
+| Xfce / X11 / Tk or GTK | accepted | accepted | accepted | accepted | accepted | accepted | [Owner report](owner-acceptance-2026-10-28.md) |
 
 The owner confirmed all tested GUI functions work on 2026-10-26. This closes
-acceptance for the tested owner environment; do not request the same tests
-again. The matrix records additional environments, not a retraction of that
-acceptance.
+acceptance for the tested owner environment. On 2026-10-28 the owner also
+accepted the additional named sessions, including keyboard and themes. The
+matrix records that attestation; no separate desktop versions or raw manual
+reports were supplied. Do not request the same accepted tests again.
 
 Use the [desktop acceptance protocol](desktop-acceptance.md) for disposable
 fixtures, physical keyboard checks and the required per-session record.
@@ -97,8 +102,10 @@ TOCTOU boundaries, anchored filesystem operations, SHA-256 and inode
 validation, interrupted journal recovery, confirmation UX, and retention
 policy. Record name/handle, reviewed commit, findings, disposition and link.
 Author self-review cannot satisfy this P0 gate.
-The [review map and report template](security-review-guide.md) prepare this
-handoff without claiming the independent review has occurred.
+The owner subsequently confirmed completion and acceptance of this independent
+review: [owner report](owner-acceptance-2026-10-28.md). The
+[review map and report template](security-review-guide.md) remain available for
+future changes; release automation does not claim to be the independent reviewer.
 
 ## P1 — publication checks
 
@@ -115,18 +122,23 @@ handoff without claiming the independent review has occurred.
    explicit owner approval, and passing required CI. A released RC precedes
    the stable tag.
 
-## Not automatically closeable from repository changes
+## Acceptance authority and remaining external configuration
 
-- Real GNOME/KDE/Xfce sessions and independent
-  second-person review require external verified evidence.
-- License selection was authorized and MIT was added. Release publication still requires the owner decision.
+- Real GNOME/KDE/Xfce sessions, independent second-person review and the affected
+  old quarantines were accepted by explicit owner report. Repository tests alone
+  do not supply those attestations.
+- License selection was authorized and MIT was added. The owner also authorized
+  the remaining release work; actual signing/publication results remain separate.
+- Production signing keys must be configured from a trusted owner computer.
+  Missing configuration blocks the tag workflow before an immutable tag exists.
 - GitHub branch ruleset changes require a separate verified admin action;
   direct CI dependencies already provide the current functional gate.
 
 ## Acceptance
 
-Only change a `pending` to `PASS` after a concrete, accessible evidence link
-is added next to the corresponding case. If no evidence exists, leave it open.
+Only close an item after linking its concrete result or explicit owner
+attestation, with the evidence type and limits stated. Production publication
+requires real workflow/assets evidence rather than a statement of intent.
 
 Executed checks and findings: [2026-10-26 verification](verification-2026-10-26.md).
 Latest safety and GUI evidence: [2026-10-28 verification](verification-2026-10-28.md).

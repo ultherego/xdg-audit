@@ -2,9 +2,11 @@
 
 [Release checklist](release-readiness.md) · [Roadmap](project-roadmap.md) · [Evidence protocol](release-verification-evidence.md)
 
-This is an author-run automated and visual verification record. It does not
-claim independent security approval, diagnosis of the owner's affected run,
-full GNOME/Plasma/Xfce acceptance or production publication.
+The PR #40 sections below are an author-run automated and visual verification
+record. Those checks do not supply independent security approval, diagnosis of
+the owner's affected run, manual desktop acceptance or production publication.
+Subsequent PR #43 results and the owner's separate P0 acceptance are recorded
+at the end, with their own targets and evidence types.
 
 ## Exact target and CI
 
@@ -101,16 +103,39 @@ scope of what the fixtures demonstrate.
 Real Btrfs CI concerns disposable filesystems. It does not diagnose the owner's
 existing quarantine or infer filesystem UUIDs absent from older journals.
 
-## Open evidence
+## Subsequent application baseline and owner acceptance
 
 Complete software-rendered desktop integration was subsequently added in
 [PR #42](https://github.com/ultherego/xdg-audit/pull/42): GNOME 46/GTK4 and
 Plasma 5.27/Qt6 on native Wayland, plus Xfce 4.18/Tk on native X11.
 [Its exact target, verified artifacts and retained original reports](verification-data/2026-10-28/desktop-sessions.md)
-are separate from the PR #40 results above. This does not close manual
-theme/palette or physical-keyboard acceptance.
+are separate from the PR #40 results above and do not by themselves establish
+manual theme/palette or physical-keyboard acceptance.
 
-The owner's read-only device diagnostics, [independent reviewer report](security-review-guide.md),
-[additional desktop sessions](desktop-acceptance.md), production signing setup
-and RC/stable release decisions remain open. The latest published prerelease
-is still `v1.7.0-rc1`; `1.7.0-rc2` is the development source version.
+[PR #43](https://github.com/ultherego/xdg-audit/pull/43) subsequently merged as
+`6f86e1994515febf1722befcf96c9e61bd858357`, tree
+`de4828012de5da7bc472ec1d1fa44653367cac13`.
+[PR CI](https://github.com/ultherego/xdg-audit/actions/runs/40734824714) and
+[main CI](https://github.com/ultherego/xdg-audit/actions/runs/40736967093) passed
+all 22 build/test jobs with 440 regressions per supported Python. Both source
+archives contained exactly 160 allowlisted files matching that tree. All nine
+source/native/GUI/desktop artifact ZIPs passed their published SHA-256 and ZIP
+integrity checks; source/native inner checksums also passed. All 24 DEB runtime
+modules matched the checkout. Nine GUI combinations passed 13 lifecycle
+assertions and 15 confirmation events, including partial-v2 ADOPT and bulk
+removal of independently verified empty history. These use disposable data.
+
+The owner then confirmed the affected old quarantines/device-identity issue,
+independent review by a second person and all additional GNOME/KDE/Xfce
+keyboard/theme acceptance were complete and satisfactory. The
+[owner acceptance record](owner-acceptance-2026-10-28.md) closes those P0 gates
+and records authorization to proceed with the remaining release work. No raw
+external review, manual-session reports or forensic diagnostics were supplied;
+the maintainer does not invent them.
+
+## Remaining publication evidence
+
+The dedicated production signing configuration, final release artifacts,
+actual RC2 publication, subsequent RC acceptance and stable publication still
+require operational evidence. The latest published prerelease is still
+`v1.7.0-rc1`; `1.7.0-rc2` is the release-preparation source version.
