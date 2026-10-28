@@ -30,6 +30,21 @@ Each run verifies:
 5. Confirming PURGE deletes only the selected payload and records PURGED,
    retaining the earlier RESTORED history. Protected session data and an
    unrelated sentinel retain their original bytes throughout the run.
+6. Empty/incorrect PURGE and HISTORY tokens submitted with Enter leave bytes
+   and journals unchanged. Cancelling a correctly typed HISTORY also preserves
+   it. Confirmed HISTORY removes only the selected completed journal and keeps
+   the other RESTORED run intact.
+
+Token confirmation alternates Return and keypad Enter. GTK X11 uses real XTest
+key events through `xdotool`; Qt uses QTest key events and Tk dispatches native
+widget key bindings. Headless Weston has no physical keyboard seat: GTK Wayland
+therefore exercises the same Entry activation signal while X11 proves its key
+delivery. JSON reports identify the exercised input events. Question dialogs
+and cancellation still use their separate controls and consent stages.
+
+The layout checks also verify that Enter inserts a newline in multiline
+Settings editors and cancellation writes no preferences. GTK light/dark
+screenshots include empty, focused and scrolled editor frames for corner review.
 
 The harness never replaces a dialog with an automatically accepted result.
 It enters tokens and presses buttons on the real widgets. Unexpected dialogs,

@@ -68,6 +68,11 @@ is complete and does not require repeating the same tests.
 The following matrix concerns additional, separately identified environments.
 
 - [x] Functional GUI tests in the owner's environment — owner confirmation.
+- [ ] Requested dialog polish: complete Settings editor corners in light/dark
+  themes, including focus/scroll states; Return/keypad Enter token confirmation,
+  rejection of empty/incorrect PURGE/HISTORY and unchanged multiline newlines.
+  [Automated verification scope](gui-lifecycle-testing.md); exact-commit CI and
+  visual screenshot review are required before completion.
 - [ ] GNOME/Wayland — complete scan, restore and PURGE workflow.
 - [ ] KDE Plasma/Wayland — the same workflow with system-theme integration.
 - [ ] Xfce/X11 — startup and workflow through Tk/GTK.

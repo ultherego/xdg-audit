@@ -14,6 +14,8 @@ import faulthandler
 import json
 import os
 from pathlib import Path
+import re
+import subprocess
 import sys
 import tempfile
 import time
@@ -29,6 +31,22 @@ import xdg_audit as engine
 def require(condition, message):
     if not condition:
         raise AssertionError(message)
+
+
+def send_x11_key(title, key):
+    """Send a real XTest key to the exact visible fixture dialog."""
+    windows = subprocess.check_output(
+        ['xdotool', 'search', '--onlyvisible', '--name', '^' + re.escape(title) + '$'],
+        text=True, timeout=5).splitlines()
+    require(len(windows) == 1, 'Expected exactly one keyboard target: ' + title)
+    subprocess.run(['xdotool', 'windowfocus', '--sync', windows[0]], check=True, timeout=5)
+    subprocess.run(['xdotool', 'key', '--clearmodifiers', key], check=True, timeout=5)
+
+
+def next_enter(ui):
+    key = 'Return' if sum(ui.key_events.values()) % 2 == 0 else 'KP_Enter'
+    ui.key_events[key] = ui.key_events.get(key, 0) + 1
+    return key
 
 
 def snapshot(root):
@@ -91,16 +109,18 @@ class Cycle:
         self.events.append(event)
         print(self.ui.backend + ': PASS ' + event, flush=True)
 
-    def start(self, operation, phase, *, cancel=False):
+    def start(self, operation, phase, *, cancel=False, reject=None):
         click = self.ui.action(operation, self.source, self.run_id)
         if click is None:
             return
-        token = {'move': 'MOVE', 'restore': 'RESTORE', 'purge': 'PURGE'}[operation]
+        token = {'move': 'MOVE', 'restore': 'RESTORE', 'purge': 'PURGE', 'history': 'HISTORY'}[operation]
         responses = [] if self.ui.backend.startswith('gtk') else [('yes', '')]
         if operation == 'move':
             responses.append(('token', 'UNCERTAIN'))
-        responses.append(('cancel' if cancel else 'token', token))
-        if not cancel and not self.ui.backend.startswith('gtk'):
+        responses.append((reject or ('cancel' if cancel else 'token'), token))
+        if reject and self.ui.backend.startswith('gtk'):
+            responses.append(('cancel', token))
+        if not cancel and not reject and operation != 'history' and not self.ui.backend.startswith('gtk'):
             responses.append(('ok', ''))
         self.pending.extend(responses)
         self.phase = phase
@@ -209,6 +229,15 @@ class Cycle:
                 require(self.manifest.read_bytes() == self.manifest_before_cancel,
                         'cancelled PURGE preview modified its journal')
                 self.record('typed PURGE then Cancel preserves quarantined bytes and journal')
+                self.start('purge', 'empty_purge', reject='empty')
+            elif self.phase == 'empty_purge':
+                require(snapshot(self.destination) == self.expected, 'empty PURGE token deleted data')
+                require(self.manifest.read_bytes() == self.manifest_before_cancel, 'empty PURGE token changed journal')
+                self.start('purge', 'invalid_purge', reject='invalid')
+            elif self.phase == 'invalid_purge':
+                require(snapshot(self.destination) == self.expected, 'invalid PURGE token deleted data')
+                require(self.manifest.read_bytes() == self.manifest_before_cancel, 'invalid PURGE token changed journal')
+                self.record('Enter with empty or incorrect PURGE token preserves exact bytes and journal')
                 self.start('purge', 'purged')
             elif self.phase == 'purged':
                 runs = {run['run_id']: run for run in engine.quarantine_runs(self.home, self.roots)}
@@ -217,6 +246,29 @@ class Cycle:
                 require(not self.destination.exists() and not self.source.exists(), 'PURGE retained fixture payload')
                 self.guard()
                 self.record('PURGE removes only the selected payload; completed history and sentinels preserved')
+                self.manifest_before_cancel = self.manifest.read_bytes()
+                self.other_manifest = engine.quarantine_dir(self.home, self.roots) / self.restored_id / 'manifest.json'
+                self.other_manifest_before = self.other_manifest.read_bytes()
+                self.start('history', 'empty_history', reject='empty')
+            elif self.phase in ('empty_history', 'invalid_history', 'cancelled_history'):
+                require(self.manifest.read_bytes() == self.manifest_before_cancel,
+                        'empty/incorrect/cancelled HISTORY changed the journal')
+                require(self.other_manifest.read_bytes() == self.other_manifest_before,
+                        'history preflight changed a different run')
+                if self.phase == 'empty_history':
+                    self.start('history', 'invalid_history', reject='invalid')
+                elif self.phase == 'invalid_history':
+                    self.start('history', 'cancelled_history', cancel=True)
+                else:
+                    self.record('empty/incorrect HISTORY plus Enter and typed HISTORY plus Cancel preserve history')
+                    self.start('history', 'history_removed')
+            elif self.phase == 'history_removed':
+                require(not self.manifest.parent.exists(), 'confirmed HISTORY retained selected journal')
+                require(self.other_manifest.read_bytes() == self.other_manifest_before,
+                        'HISTORY changed a different run')
+                require(not self.source.exists() and not self.destination.exists(), 'HISTORY recreated deleted payload')
+                self.guard()
+                self.record('HISTORY plus Enter removes only the selected completed journal')
                 self.done = True
                 self.ui.quit()
                 return False
@@ -235,6 +287,7 @@ class GtkUI:
         from gi.repository import Gtk, GLib, Gio, Gdk
         self.Gtk, self.GLib, self.Gio, self.Gdk = Gtk, GLib, Gio, Gdk
         self.backend, self.session, self.controller = backend, session, None
+        self.key_events = {}
 
     def walk(self, widget):
         yield widget
@@ -280,9 +333,19 @@ class GtkUI:
     def respond(self, dialog, response, token):
         widgets = list(self.walk(dialog))
         entries = [widget for widget in widgets if isinstance(widget, self.Gtk.Entry)]
-        require(response in ('token', 'cancel') and len(entries) == 1, 'unexpected GTK confirmation shape')
+        require(response in ('token', 'cancel', 'empty', 'invalid') and len(entries) == 1, 'unexpected GTK confirmation shape')
         require(token in entries[0].get_placeholder_text(), 'GTK confirmation token differs from expected')
-        entries[0].set_text(token)
+        entries[0].set_text('' if response == 'empty' else 'WRONG' if response == 'invalid' else token)
+        if response != 'cancel':
+            entries[0].grab_focus()
+            if self.session == 'x11':
+                send_x11_key(self.title(dialog), next_enter(self))
+            else:
+                # Headless Weston has no physical keyboard seat. X11 covers
+                # actual Return/KP_Enter delivery; Wayland covers its GTK signal.
+                self.key_events['gtk_entry_activate'] = self.key_events.get('gtk_entry_activate', 0) + 1
+                entries[0].emit('activate')
+            return
         button = next(widget for widget in widgets if isinstance(widget, self.Gtk.Button)
                       and widget.get_label() == ('Cancel' if response == 'cancel' else 'Confirm'))
         button.emit('clicked')
@@ -313,7 +376,7 @@ class GtkUI:
             widgets = list(self.walk(row))
             if not any(isinstance(widget, self.Gtk.Label) and run_id in widget.get_text() for widget in widgets):
                 continue
-            caption = 'Restore…' if operation == 'restore' else 'Purge permanently…'
+            caption = {'restore': 'Restore…', 'purge': 'Purge permanently…', 'history': 'Clear history…'}[operation]
             for widget in widgets:
                 if isinstance(widget, self.Gtk.Button) and widget.get_label() == caption and widget.get_mapped():
                     return lambda button=widget: button.emit('clicked')
@@ -338,6 +401,9 @@ class QtUI:
         from xdg_gui_qt import import_qt
         self.Core, _, self.Widgets, _ = import_qt()
         self.backend, self.session, self.controller = backend, session, None
+        self.key_events = {}
+        import importlib
+        self.Test = importlib.import_module(self.Widgets.__name__.split('.')[0] + '.QtTest').QTest
         self.app = self.Widgets.QApplication.instance() or self.Widgets.QApplication([])
 
     def ready(self):
@@ -365,11 +431,16 @@ class QtUI:
 
     def respond(self, dialog, response, token):
         entries = dialog.findChildren(self.Widgets.QLineEdit)
-        if response in ('token', 'cancel'):
+        if response in ('token', 'cancel', 'empty', 'invalid'):
             require(len(entries) == 1, 'expected one Qt token input')
             require(any(token in label.text() for label in dialog.findChildren(self.Widgets.QLabel)),
                     'Qt confirmation token differs from expected')
-            entries[0].setText(token)
+            entries[0].setText('' if response == 'empty' else 'WRONG' if response == 'invalid' else token)
+            if response != 'cancel':
+                key = self.Core.Qt.Key.Key_Return if next_enter(self) == 'Return' else self.Core.Qt.Key.Key_Enter
+                entries[0].setFocus()
+                self.Test.keyClick(entries[0], key)
+                return
         else:
             require(not entries, 'expected a Qt question/notification, found a token input')
         caption = {'yes': 'Yes', 'ok': 'OK', 'token': 'OK', 'cancel': 'Cancel'}[response]
@@ -397,7 +468,7 @@ class QtUI:
                 break
         else:
             return None
-        caption = 'Restore selected…' if operation == 'restore' else 'Purge selected…'
+        caption = {'restore': 'Restore selected…', 'purge': 'Purge selected…', 'history': 'Clear history…'}[operation]
         button = next(widget for widget in current.findChildren(self.Widgets.QPushButton)
                       if widget.text() == caption)
         return button.click if button.isVisible() and button.isEnabled() else None
@@ -426,6 +497,7 @@ class TkUI:
         from tkinter import ttk
         self.tk, self.ttk = tk, ttk
         self.backend, self.session, self.controller, self.root = backend, session, None, None
+        self.key_events = {}
 
     def walk(self, widget):
         yield widget
@@ -451,12 +523,16 @@ class TkUI:
     def respond(self, dialog, response, token):
         widgets = list(self.walk(dialog))
         entries = [widget for widget in widgets if isinstance(widget, self.ttk.Entry)]
-        if response in ('token', 'cancel'):
+        if response in ('token', 'cancel', 'empty', 'invalid'):
             require(len(entries) == 1, 'expected one Tk token input')
             require(any(token in str(widget.cget('text')) for widget in widgets
                         if isinstance(widget, self.ttk.Label)), 'Tk confirmation token differs from expected')
             entries[0].delete(0, 'end')
-            entries[0].insert(0, token)
+            entries[0].insert(0, '' if response == 'empty' else 'WRONG' if response == 'invalid' else token)
+            if response != 'cancel':
+                entries[0].focus_force()
+                entries[0].event_generate('<KeyPress-' + next_enter(self) + '>')
+                return
         else:
             require(not entries, 'expected a Tk question/notification, found a token input')
         caption = {'yes': 'Yes', 'ok': 'OK', 'token': 'OK', 'cancel': 'Cancel'}[response]
@@ -484,7 +560,7 @@ class TkUI:
             return None
         current.qtree.selection_set(run_id)
         current.qtree.focus(run_id)
-        caption = 'Restore operation…' if operation == 'restore' else 'Purge permanently…'
+        caption = {'restore': 'Restore operation…', 'purge': 'Purge permanently…', 'history': 'Clear history…'}[operation]
         button = next(widget for widget in self.walk(self.root) if isinstance(widget, self.ttk.Button)
                       and widget.cget('text') == caption)
         return button.invoke if button.winfo_viewable() else None
@@ -548,11 +624,15 @@ def run(backend, session, output=None, device_revalidation=False):
                        'available': [backend], 'wm': 'test'}
             ui.run(cycle, home, args, runtime)
             require(cycle.done and not cycle.errors, '\n'.join(cycle.errors) or 'GUI exited before completing lifecycle')
-            require(cycle.phase == 'purged', 'GUI did not complete every lifecycle stage')
+            require(cycle.phase == 'history_removed', 'GUI did not complete every lifecycle stage')
+            if not (backend.startswith('gtk') and session == 'wayland'):
+                require(all(ui.key_events.get(key, 0) > 0 for key in ('Return', 'KP_Enter')),
+                        'Both Enter keys must be exercised')
             report = {'backend': backend, 'native_session': session, 'inventory': 'synthetic',
                       'filesystem_evidence': 'synthetic Btrfs metadata and device transition' if device_revalidation else 'native',
                       'version': engine.VERSION, 'commit': os.environ.get('GITHUB_SHA'),
-                      'checks': cycle.events, 'result': 'PASS', 'fixture_hashes': cycle.expected}
+                      'checks': cycle.events, 'confirmation_key_events': ui.key_events,
+                      'result': 'PASS', 'fixture_hashes': cycle.expected}
     if output:
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(json.dumps(report, indent=2) + '\n', encoding='utf-8')

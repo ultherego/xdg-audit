@@ -546,9 +546,13 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
             append(box,show)
             section(tr('Zachowaj — nazwy katalogów, jedna w linii'))
             def frame_editor(scroll, view):
-                # Empty editors still need a visible boundary in flat themes.
-                style=scroll.get_style_context()
+                # Keep opaque text/scroll backgrounds inside the rounded frame.
+                frame=Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+                style=frame.get_style_context()
                 style.add_class('xdg-settings-editor')
+                for side in ('top','bottom','start','end'):
+                    getattr(scroll,'set_margin_'+side)(3)
+                append(frame,scroll)
                 view.set_left_margin(10);view.set_right_margin(10)
                 view.set_top_margin(8);view.set_bottom_margin(8)
                 if GTK4:
@@ -559,18 +563,19 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                 else:
                     view.connect('focus-in-event',lambda *_:(style.add_class('xdg-editor-focused'),False)[1])
                     view.connect('focus-out-event',lambda *_:(style.remove_class('xdg-editor-focused'),False)[1])
+                return frame
             keep_text=Gtk.TextView()
             keep_text.set_monospace(True)
             keep_text.get_buffer().set_text('\n'.join(self.prefs['keep']))
             keepsc=Gtk.ScrolledWindow();keepsc.set_min_content_height(95)
-            frame_editor(keepsc,keep_text)
-            set_child(keepsc,keep_text);append(box,keepsc)
+            keep_frame=frame_editor(keepsc,keep_text)
+            set_child(keepsc,keep_text);append(box,keep_frame)
             section(tr('Alias pakietu — katalog=wzorzec, jedna para w linii'))
             alias_text=Gtk.TextView();alias_text.set_monospace(True)
             alias_text.get_buffer().set_text(format_aliases(self.prefs['aliases']))
             asc=Gtk.ScrolledWindow();asc.set_min_content_height(100)
-            frame_editor(asc,alias_text)
-            set_child(asc,alias_text);append(box,asc)
+            alias_frame=frame_editor(asc,alias_text)
+            set_child(asc,alias_text);append(box,alias_frame)
             source_views={}
             for key, title in (('appimage_dirs', 'Dodatkowe katalogi AppImage — jedna ścieżka w linii'),
                                ('binary_dirs', 'Dodatkowe katalogi binarek — jedna ścieżka w linii')):
@@ -578,8 +583,8 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                 view=Gtk.TextView();view.set_monospace(True)
                 view.get_buffer().set_text('\n'.join(self.prefs.get(key, [])))
                 scroll=Gtk.ScrolledWindow();scroll.set_min_content_height(65)
-                frame_editor(scroll,view)
-                set_child(scroll,view);append(box,scroll)
+                editor_frame=frame_editor(scroll,view)
+                set_child(scroll,view);append(box,editor_frame)
                 source_views[key]=view
             hint=label(tr('Ścieżki bezwzględne lub ~/; odczyt bez uruchamiania plików.'))
             wrap_label(hint);append(box,hint)
@@ -1115,6 +1120,7 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
                 dialog.destroy()
                 callback()
             confirm.connect('clicked',accept)
+            entry.connect('activate',accept)
             append(actions,confirm)
             configure_gtk_dialog(dialog,outer,Gtk,Gdk,Pango)
             # Set GTK window-local focus before mapping the transient modal;

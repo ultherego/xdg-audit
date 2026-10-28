@@ -5,6 +5,10 @@
 
 ## New since v1.7.0-rc1
 
+- Complete Settings editor frames and keyboard confirmation with Return or
+  keypad Enter. Exact confirmation tokens remain required; Enter in multiline
+  settings inserts a newline. GUI lifecycle checks include HISTORY cleanup,
+  empty/incorrect tokens and cancelled confirmations.
 - Descriptor-bound filesystem diagnosis and separately confirmed device-only
   `REVALIDATE` after exact full-inventory/hash verification. Legacy journals
   explicitly approve current contents without inventing historical UUID proof;

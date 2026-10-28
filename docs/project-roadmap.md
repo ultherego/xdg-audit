@@ -3,7 +3,7 @@
 [Back to README](../README.md) · [Testing and release status](testing-and-release-status.md)
 
 The current priority is stabilizing **1.7.0**, with source version
-`1.7.0-rc2`. This is the current work list as of **2026-10-27**; the detailed
+`1.7.0-rc2`. This is the current work list as of **2026-10-28**; the detailed
 acceptance criteria live in the [release-readiness checklist](release-readiness.md).
 
 ## Remaining work, in order
@@ -20,16 +20,23 @@ acceptance criteria live in the [release-readiness checklist](release-readiness.
 2. **Obtain an independent security review** of the latest quarantine and
    publication changes by a second person. Automated regression results do
    not close this item.
-3. **Complete additional desktop-session acceptance** on GNOME/Wayland,
+3. **Verify the requested dialog polish.** Settings text editors must retain
+   complete visible borders/corners with focus and scrolling in light/dark
+   themes. Return and keypad Enter must submit typed confirmation tokens through
+   the existing validation; empty/incorrect tokens and cancellation must remain
+   harmless. Multiline Settings editors keep newline input. Implementation and
+   [real-widget verification](gui-lifecycle-testing.md) need exact-commit CI and
+   visual evidence before this item is closed.
+4. **Complete additional desktop-session acceptance** on GNOME/Wayland,
    KDE Plasma/Wayland and Xfce/X11. The owner's already accepted environment
    does not need to repeat its completed tests. Headless CI coverage has a
    separate scope from full desktop-session acceptance.
-4. **Configure production publication credentials.** The build, tag and signed
+5. **Configure production publication credentials.** The build, tag and signed
    repository pipelines are implemented and rehearsed. The owner must supply
    the dedicated package-signing key and fingerprint; AUR publication is
    optional and requires its own SSH credential and verified host key.
    Follow [Native packages](native-packages.md).
-5. **Publish and accept a new release candidate**, then decide on the stable
+6. **Publish and accept a new release candidate**, then decide on the stable
    release. The latest published prerelease is still `v1.7.0-rc1`; current CI
    artifacts are not a newly published RC or production package repository.
 
