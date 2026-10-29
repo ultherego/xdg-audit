@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import stat
 from pathlib import Path
 import tempfile
 import unittest
@@ -149,6 +150,46 @@ class SourceProviderTests(unittest.TestCase):
                 home / ".local/opt", anchor=home)
             self.assertEqual(state, "unsafe")
             self.assertFalse(names)
+
+    def test_appimage_skips_unreadable_root_owned_opt_service_child(self):
+        with tempfile.TemporaryDirectory() as temp:
+            home = Path(temp)
+            opt = Path('/opt')
+            service = opt / 'containerd'
+            original_status = sources._source_directory_status
+            original_iterdir = Path.iterdir
+            original_lstat = Path.lstat
+            original_access = sources.os.access
+
+            def status(anchor, path):
+                if path == opt:
+                    return 'ok'
+                if path == service:
+                    raise AssertionError('restricted service directory must not be scanned')
+                return original_status(anchor, path)
+
+            def iterdir(path):
+                if path == opt:
+                    return iter((service,))
+                return original_iterdir(path)
+
+            def lstat(path):
+                if path == service:
+                    return os.stat_result((stat.S_IFDIR | 0o711, 0, 0, 1, 0, 0, 0, 0, 0, 0))
+                return original_lstat(path)
+
+            def access(path, mode):
+                if path == service and mode == os.R_OK:
+                    return False
+                return original_access(path, mode)
+
+            with patch.object(sources, '_source_directory_status', side_effect=status), \
+                    patch.object(Path, 'iterdir', iterdir), \
+                    patch.object(Path, 'lstat', lstat), \
+                    patch.object(sources.os, 'access', side_effect=access):
+                result = sources.user_appimages(home)
+            self.assertEqual(result.status, 'ok')
+            self.assertNotIn('containerd', result.names)
 
     def test_appimage_probe_stops_after_directory_entry_limit(self):
         with tempfile.TemporaryDirectory() as temp:

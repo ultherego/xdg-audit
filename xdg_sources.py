@@ -471,6 +471,14 @@ def _shallow_source_folders(home: Path, bases) -> tuple[list[Path], bool]:
                 if stat.S_ISLNK(info.st_mode):
                     continue
                 if stat.S_ISDIR(info.st_mode) and info.st_uid in (0, os.getuid()):
+                    # /opt also contains service/runtime trees, not just AppImages.
+                    # An unreadable root-owned child is not proof of an AppImage;
+                    # do not turn an unrelated restricted service directory into
+                    # a global MOVE failure. Explicit launcher targets still fail
+                    # closed via _safe_appimage when their path is uninspectable.
+                    if (base == Path('/opt') and info.st_uid == 0
+                            and not os.access(entry, os.R_OK)):
+                        continue
                     children.append(entry)
             if len(children) > 64:
                 failed = True
