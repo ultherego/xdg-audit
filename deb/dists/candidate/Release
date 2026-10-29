@@ -1,0 +1,37 @@
+Acquire-By-Hash: yes
+Architectures: amd64 arm64 all
+Codename: candidate
+Components: main
+Date: Thu, 29 Oct 2026 16:04:38 +0000
+Description: Signed xdg-audit packages
+Label: xdg-audit
+Origin: xdg-audit
+Suite: candidate
+MD5Sum:
+ 9846427e9aebe3e82a776e0696f424bb             1033 main/binary-all/Packages
+ 52d3f9f9609cdffc3be7928e23d9d3c7              700 main/binary-all/Packages.gz
+ 9846427e9aebe3e82a776e0696f424bb             1033 main/binary-amd64/Packages
+ 52d3f9f9609cdffc3be7928e23d9d3c7              700 main/binary-amd64/Packages.gz
+ 9846427e9aebe3e82a776e0696f424bb             1033 main/binary-arm64/Packages
+ 52d3f9f9609cdffc3be7928e23d9d3c7              700 main/binary-arm64/Packages.gz
+SHA1:
+ f1f019f8f35b9e50db1ba369ea0c7a3b8703b06c             1033 main/binary-all/Packages
+ 862dc5356b0e9fa8941da1d6e864de1c27e9531d              700 main/binary-all/Packages.gz
+ f1f019f8f35b9e50db1ba369ea0c7a3b8703b06c             1033 main/binary-amd64/Packages
+ 862dc5356b0e9fa8941da1d6e864de1c27e9531d              700 main/binary-amd64/Packages.gz
+ f1f019f8f35b9e50db1ba369ea0c7a3b8703b06c             1033 main/binary-arm64/Packages
+ 862dc5356b0e9fa8941da1d6e864de1c27e9531d              700 main/binary-arm64/Packages.gz
+SHA256:
+ c1c395abdbbb9499db20a03331aee318c95d81680e3df0c7d2293a2cb808d137             1033 main/binary-all/Packages
+ c9ec7ac5a3459da284544ced8b28d94c0a31323d1160b6ddd9505e92f64875d1              700 main/binary-all/Packages.gz
+ c1c395abdbbb9499db20a03331aee318c95d81680e3df0c7d2293a2cb808d137             1033 main/binary-amd64/Packages
+ c9ec7ac5a3459da284544ced8b28d94c0a31323d1160b6ddd9505e92f64875d1              700 main/binary-amd64/Packages.gz
+ c1c395abdbbb9499db20a03331aee318c95d81680e3df0c7d2293a2cb808d137             1033 main/binary-arm64/Packages
+ c9ec7ac5a3459da284544ced8b28d94c0a31323d1160b6ddd9505e92f64875d1              700 main/binary-arm64/Packages.gz
+SHA512:
+ 17fb6e9211e7825411886bc9db01b9f744e01d10b2a08b80353694121b24176d261a31d82035472b2fdfb27ac8a18b32d3bb486ea5544d26f48417f90b407b91             1033 main/binary-all/Packages
+ aa3f5fc2d09ae6f0a755d5a53bfb26a1be48360fa9ec6b2fbf0c783398f9aac0eeb8f447aaba1a17c529ffa3e11a1c66d7c108084766797417747ac194bf7ab2              700 main/binary-all/Packages.gz
+ 17fb6e9211e7825411886bc9db01b9f744e01d10b2a08b80353694121b24176d261a31d82035472b2fdfb27ac8a18b32d3bb486ea5544d26f48417f90b407b91             1033 main/binary-amd64/Packages
+ aa3f5fc2d09ae6f0a755d5a53bfb26a1be48360fa9ec6b2fbf0c783398f9aac0eeb8f447aaba1a17c529ffa3e11a1c66d7c108084766797417747ac194bf7ab2              700 main/binary-amd64/Packages.gz
+ 17fb6e9211e7825411886bc9db01b9f744e01d10b2a08b80353694121b24176d261a31d82035472b2fdfb27ac8a18b32d3bb486ea5544d26f48417f90b407b91             1033 main/binary-arm64/Packages
+ aa3f5fc2d09ae6f0a755d5a53bfb26a1be48360fa9ec6b2fbf0c783398f9aac0eeb8f447aaba1a17c529ffa3e11a1c66d7c108084766797417747ac194bf7ab2              700 main/binary-arm64/Packages.gz

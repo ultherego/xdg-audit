@@ -1,0 +1,12 @@
+{
+  "commit": "9d43b1643e76162e59e34a400a66030d4f4a6b05",
+  "inputs": {
+    "xdg-audit-1.7.0-rc2.tar.gz": "1792196d3393fe42e00f18600c361ea33798454c7d436a93ecbdff7bc654034c",
+    "xdg-audit-1.7.0-rc2.zip": "6b47e71a6d379efbc27ac5e7be896d95b087710c2f0c8826121694253bf609bd",
+    "xdg-audit-1.7.0rc2-1-any.pkg.tar.zst": "97f34efa1e7fef453ff688adc00b92aab52d1342c958a1643e07de03cfae3b2d",
+    "xdg-audit-1.7.0~rc2-1.fc43.noarch.rpm": "29fc451aef5004df02d321fd06d2a49bf9029d07a44fdbdbd469f1c196e03bac",
+    "xdg-audit-aur.zip": "b33e8547bd1533e3a7fe523f33e5780577b6f0d545e7475c8b9734cc6233efbe",
+    "xdg-audit_1.7.0~rc2-1_all.deb": "906ca4dba91d322f70874c90a4236140990771bca9dd59678dc6bbe429aa1e3e"
+  },
+  "tag": "v1.7.0-rc2"
+}
