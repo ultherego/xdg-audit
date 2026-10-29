@@ -60,6 +60,12 @@ desktop versions or a forensic explanation of the old device change.
 - [PR #46](https://github.com/ultherego/xdg-audit/pull/46) moved GTK/Qt quarantine commits off the GUI thread with activity dialogs. [PR CI](https://github.com/ultherego/xdg-audit/actions/runs/40896756722) passed and the owner confirmed the progress UI works.
 - The [RC2 tag attempt](https://github.com/ultherego/xdg-audit/actions/runs/40896316642) was correctly rejected because the release request still pins the previously accepted application SHA 6f86e1994515febf1722befcf96c9e61bd858357, while xdg_sources.py changed afterward.
 - Successful PR CI and owner testing of one GUI feature do not automatically replace acceptance of the complete release baseline. Verify current main CI, inspect and approve its exact application tree, then update the pinned release request with recorded owner approval before retrying RC2.
+- [Main CI and artifact verification](rc2-candidate-2026-10-29.md) identify
+  `ed7129f41c5270cfcd195e05b607d3ce9ccf4c81` as the accepted RC2 application baseline:
+  22 successful build/test jobs, 460 regressions and exact source/native bytes.
+  The owner accepted this exact baseline on 2026-10-29 and instructed release
+  work to continue. PR #48 updates the pinned request and records that decision;
+  final CI and production signing/publication checks remain required.
 
 ## Remaining release gates
 

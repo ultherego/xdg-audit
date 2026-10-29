@@ -16,11 +16,18 @@ Results from 2026-10-26: [verification record](verification-2026-10-26.md).
 Latest safety/GUI results: [2026-10-28 verification](verification-2026-10-28.md).
 Current priorities: [project roadmap](project-roadmap.md).
 
-## RC2 release preflight blocker (2026-10-29)
+## RC2 application baseline update (2026-10-29)
 
 The [release tag workflow](https://github.com/ultherego/xdg-audit/actions/runs/40896316642) correctly refused the pinned RC2 request: xdg_sources.py no longer matched the previously owner-accepted application tree. Do not bypass the runtime SHA check.
 
 PRs [#45](https://github.com/ultherego/xdg-audit/pull/45) and [#46](https://github.com/ultherego/xdg-audit/pull/46) are merged. The owner verified AppImage probe health and the new GUI activity dialog. Before publication, verify exact-main CI, review its artifacts, establish and record an updated owner-accepted application baseline, and explicitly update .github/release-request.json. Production signing and final artifact verification remain independent gates.
+
+The owner accepted application baseline
+`ed7129f41c5270cfcd195e05b607d3ce9ccf4c81` on 2026-10-29:
+[acceptance and verified artifacts](rc2-candidate-2026-10-29.md). PR #48 updates
+the request to that exact baseline. The packaged application remains unchanged
+from it; final PR/main CI, runtime comparison and production signing preflight
+remain required before publication.
 
 ## 1. Safety (P0)
 
