@@ -1144,14 +1144,22 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict, runtime: dict,
             description=(tf('Plan: {count}, {size}.',count=entries_count(len(selected),_language), size=engine.human(sum(x.bytes for x in selected)))+'\n'+details+'\n\n'+tr('Dane zostaną PRZENIESIONE, nie usunięte.'))
             def commit():
                 output=[]
-                try:
-                    result=engine.commit_quarantine(selected,self.roots,home,allow_uncertain=bool(uncertain),emit=output.append,extra_aliases=aliases,keep_names=args.keep)
-                    self.status.set_text(tf('Kwarantanna: {run_id}, przeniesiono {count}.',run_id=result['run_id'],count=entries_count(len(result['moved']),_language)))
-                    self.start_scan()
-                    if any('purge inventory unavailable' in line for line in output):
-                        self._quarantine_notice(
-                            tr('Pliki przeniesiono, ale nie można było sprawdzić całej zawartości. Przed PURGE użyj „Sprawdź dostęp…”, następnie osobno „Zatwierdź stan…” (ADOPT).'))
-                except (ValueError,OSError,SystemExit) as exc:self.status.set_text(tf('Błąd przenoszenia: {error}',error=exc))
+                def operation():
+                    return engine.commit_quarantine(
+                        selected,self.roots,home,allow_uncertain=bool(uncertain),
+                        emit=output.append,extra_aliases=aliases,keep_names=args.keep)
+                def completed(ok, outcome):
+                    if ok:
+                        self.status.set_text(tf('Kwarantanna: {run_id}, przeniesiono {count}.',
+                            run_id=outcome['run_id'],count=entries_count(len(outcome['moved']),_language)))
+                        self.start_scan()
+                        if any('purge inventory unavailable' in line for line in output):
+                            self._quarantine_notice(
+                                tr('Pliki przeniesiono, ale nie można było sprawdzić całej zawartości. Przed PURGE użyj „Sprawdź dostęp…”, następnie osobno „Zatwierdź stan…” (ADOPT).'))
+                    else:
+                        self.status.set_text(tf('Błąd przenoszenia: {error}',error=outcome))
+                        self._quarantine_notice(str(outcome),tr('Błąd przenoszenia'))
+                self._quarantine_job(operation,completed,'Trwa przenoszenie do kwarantanny…')
             def confirm_move():self.prompt(tr('Ostateczne potwierdzenie'),description+'\n'+tr('Zamknij powiązane aplikacje.'), 'MOVE', commit)
             if uncertain:
                 self.prompt(tr('Niepewne pozycje'),tf('UWAGA: {count} pozycji REVIEW/UNKNOWN może należeć do używanych programów.',count=len(uncertain)),
