@@ -54,6 +54,13 @@ The [record](owner-acceptance-2026-10-28.md) identifies the conversation's
 application baseline without inventing a reviewed SHA, reviewer identity,
 desktop versions or a forensic explanation of the old device change.
 
+## 2026-10-29 post-acceptance changes
+
+- [PR #45](https://github.com/ultherego/xdg-audit/pull/45) fixed the broad AppImage probe failing on unrelated root-owned /opt/containerd (mode 0711). The owner reported appimage: ok, zero discovered images and 460 passing local regressions.
+- [PR #46](https://github.com/ultherego/xdg-audit/pull/46) moved GTK/Qt quarantine commits off the GUI thread with activity dialogs. [PR CI](https://github.com/ultherego/xdg-audit/actions/runs/40896756722) passed and the owner confirmed the progress UI works.
+- The [RC2 tag attempt](https://github.com/ultherego/xdg-audit/actions/runs/40896316642) was correctly rejected because the release request still pins the previously accepted application SHA 6f86e1994515febf1722befcf96c9e61bd858357, while xdg_sources.py changed afterward.
+- Successful PR CI and owner testing of one GUI feature do not automatically replace acceptance of the complete release baseline. Verify current main CI, inspect and approve its exact application tree, then update the pinned release request with recorded owner approval before retrying RC2.
+
 ## Remaining release gates
 
 | ID | Work | Responsible party | Completion evidence |
