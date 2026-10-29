@@ -576,9 +576,9 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
                 if not ok:
                     messages.critical(self,tr('Historia'),str(outcome))
                     return
-                summary='\\n'.join(x['run_id']+' ('+x['status']+')' for x in outcome)
+                summary='\n'.join(x['run_id']+' ('+x['status']+')' for x in outcome)
                 if messages.question(self,tr('Usuń historię'),
-                        summary+'\\n\\n'+tr('Zostaną usunięte tylko zakończone dzienniki.'),
+                        summary+'\n\n'+tr('Zostaną usunięte tylko zakończone dzienniki.'),
                         QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No,
                         QtWidgets.QMessageBox.StandardButton.No) != QtWidgets.QMessageBox.StandardButton.Yes:
                     return
@@ -770,11 +770,11 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
                     if len(run_ids)==1 and engine.quarantine_access_recoverable_error(outcome):
                         self.access_diagnostics_dialog(run_ids[0], resume_purge=True)
                     return
-                description='\\n'.join(
+                description='\n'.join(
                     str(plan['run_id'])+': '+str(plan['objects'])+' entries / '+str(plan['bytes'])+' B'
                     for plan in outcome)
                 if messages.question(self,tr('Trwałe usuwanie'),
-                        description+'\\n\\n'+tr('Tej operacji nie da się cofnąć. Kontynuować?'),
+                        description+'\n\n'+tr('Tej operacji nie da się cofnąć. Kontynuować?'),
                         QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No,
                         QtWidgets.QMessageBox.StandardButton.No) != QtWidgets.QMessageBox.StandardButton.Yes:
                     return
@@ -1231,19 +1231,42 @@ def launch_gui(engine: Any, home: Path, args: Any, aliases: dict[str, list[str]]
             if not ok or answer != "MOVE":
                 return
             output = []
-            try:
-                result = engine.commit_quarantine(chosen, self.roots, home,
-                        allow_uncertain=bool(uncertain), emit=output.append, extra_aliases=aliases,keep_names=args.keep)
-                text = "\n".join(output[-12:])
-                message=tf('Run ID: {run_id}',run_id=result['run_id'])+'\n'+tf('Przeniesiono {moved}/{total}.',moved=len(result['moved']),total=len(chosen))
-                if any('purge inventory unavailable' in line for line in output):
-                    messages.warning(self,tr('Kwarantanna'),message+'\n\n'+
-                        tr('Pliki przeniesiono, ale nie można było sprawdzić całej zawartości. Przed PURGE użyj „Sprawdź dostęp…”, następnie osobno „Zatwierdź stan…” (ADOPT).'))
+            progress = QtWidgets.QProgressDialog(
+                tr('Trwa przenoszenie do kwarantanny…'), '', 0, 0, self)
+            progress.setWindowTitle(tr('Kwarantanna'))
+            progress.setCancelButton(None)
+            progress.setMinimumDuration(0)
+            progress.setWindowModality(QtCore.Qt.WindowModality.WindowModal)
+            progress.setAutoClose(False)
+            progress.setAutoReset(False)
+            self._move_progress = progress
+
+            def operation():
+                return engine.commit_quarantine(chosen, self.roots, home,
+                    allow_uncertain=bool(uncertain), emit=output.append,
+                    extra_aliases=aliases, keep_names=args.keep)
+
+            def completed(ok, outcome):
+                progress.close()
+                self._move_progress = None
+                if ok:
+                    message = tf('Run ID: {run_id}',run_id=outcome['run_id'])+'\n'+tf(
+                        'Przeniesiono {moved}/{total}.',moved=len(outcome['moved']),total=len(chosen))
+                    if any('purge inventory unavailable' in line for line in output):
+                        messages.warning(self,tr('Kwarantanna'),message+'\n\n'+
+                            tr('Pliki przeniesiono, ale nie można było sprawdzić całej zawartości. Przed PURGE użyj „Sprawdź dostęp…”, następnie osobno „Zatwierdź stan…” (ADOPT).'))
+                    else:
+                        messages.information(self,tr('Kwarantanna'),message)
                 else:
-                    messages.information(self,tr('Kwarantanna'),message)
-            except Exception as exc:
-                messages.critical(self, tr('Błąd'), tf('Nie udało się przeprowadzić operacji:\n{error}',error=exc))
-            self.scan_async()
+                    messages.critical(self,tr('Błąd'),tf('Nie udało się przeprowadzić operacji:\n{error}',error=outcome))
+                self.scan_async()
+
+            self._quarantine_job(operation, completed, 'Trwa przenoszenie do kwarantanny…')
+            if self._quarantine_job_busy:
+                progress.show()
+            else:
+                progress.close()
+                self._move_progress = None
 
         def apply_system_theme(self, force=False):
             appearance = detect_appearance(home)

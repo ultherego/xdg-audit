@@ -97,6 +97,8 @@ EN = {
     'Błąd operacji kwarantanny: {error}': 'Quarantine operation failed: {error}',
     'Sprawdzanie kwarantanny…': 'Verifying quarantine…',
     'Trwałe usuwanie z kwarantanny…': 'Permanently deleting quarantined data…',
+    'Trwa przenoszenie do kwarantanny…': 'Moving to quarantine…',
+    'Błąd przenoszenia': 'Move failed',
     'Sprawdzanie historii…': 'Verifying history…',
     'Usuwanie historii…': 'Removing history records…',
     'Ta operacja jest zakończona. Użyj opcji Usuń historię.': 'This run is complete. Use Clear history instead.',
