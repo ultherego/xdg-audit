@@ -22,6 +22,12 @@ The [release tag workflow](https://github.com/ultherego/xdg-audit/actions/runs/4
 
 PRs [#45](https://github.com/ultherego/xdg-audit/pull/45) and [#46](https://github.com/ultherego/xdg-audit/pull/46) are merged. The owner verified AppImage probe health and the new GUI activity dialog. Before publication, verify exact-main CI, review its artifacts, establish and record an updated owner-accepted application baseline, and explicitly update .github/release-request.json. Production signing and final artifact verification remain independent gates.
 
+The [2026-10-29 candidate record](rc2-candidate-2026-10-29.md) pins the proposed
+application baseline `ed7129f41c5270cfcd195e05b607d3ce9ccf4c81`. Its main CI and
+source/native/GUI artifacts are verified. The proposed request update remains
+in a draft PR pending owner acceptance; the application's runtime and release
+safeguards are unchanged by that proposal.
+
 ## 1. Safety (P0)
 
 - [x] Descriptor-based access to quarantine, manifests and child directories,
