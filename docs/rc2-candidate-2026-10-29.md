@@ -1,13 +1,14 @@
-# RC2 application baseline proposal — 2026-10-29
+# RC2 application baseline acceptance — 2026-10-29
 
 [Release checklist](release-readiness.md) · [Roadmap](project-roadmap.md)
 
-**Status: proposed; awaiting explicit owner acceptance of this application
-baseline.** This document records completed verification and the exact proposed
-release pin. It is not a new owner approval, independent security review or
-manual desktop report. The owner's latest statement confirmed green CI.
+**Status: accepted by the owner on 2026-10-29.** After being asked whether
+`ed7129f` was approved as the exact RC2 application baseline, the owner instructed
+the maintainer to continue. This records acceptance of the full target below
+and authorization to finish RC2 publication. It does not invent a new
+independent security review, manual desktop report or production signing result.
 
-## Proposed application target
+## Accepted application target
 
 - Commit: `ed7129f41c5270cfcd195e05b607d3ce9ccf4c81`.
 - Tree: `3a40f650e376e1e3c23250b27af6e81f12845f07`.
@@ -24,9 +25,8 @@ authorization and confirmation tokens are unchanged by these PRs.
 
 The [roadmap](project-roadmap.md) records the owner's AppImage and new progress
 UI acceptance. The earlier [P0 owner confirmation](owner-acceptance-2026-10-28.md)
-remains recorded and does not need repeating. Neither that earlier acceptance
-nor the latest green-CI acknowledgement is represented here as fresh approval
-of a different complete release baseline.
+remains recorded and does not need repeating. The green-CI acknowledgement
+preceded this separate acceptance of the exact updated application baseline.
 
 ## Completed verification of this exact commit
 
@@ -49,19 +49,20 @@ has outer ZIP SHA-256
 These are application/build fixture results, not production signing or manual
 desktop checks performed by release automation.
 
-## Proposed release-request change
+## Release-request update
 
-Update `accepted_application_sha` from
+PR #48 updates `accepted_application_sha` from
 `6f86e1994515febf1722befcf96c9e61bd858357` to the full target SHA above and
-point `owner_acceptance` to this record. The accompanying PR changes only
+points `owner_acceptance` to this record. The PR changes only
 release records and documentation; its packaged application must remain
-identical to the proposed target.
+identical to the accepted target.
 
 The [latest tag attempt](https://github.com/ultherego/xdg-audit/actions/runs/40898867902)
 correctly refused the old pin before reaching the signer. Its result does not
 establish the current availability of production signing credentials.
 
-Before merging this proposal, record the owner's explicit acceptance of the
-proposed application baseline in this document. Keep the runtime comparison,
-production signing preflight and final artifact checks enabled. Stable
-publication still follows actual RC publication and acceptance.
+Owner acceptance is now recorded. The final PR/main CI, runtime comparison,
+production signing preflight and final artifact checks remain required.
+Successful signing and publication need their own operational evidence; this
+acceptance does not assert that production credentials are already available.
+Stable publication follows actual RC publication and acceptance.
