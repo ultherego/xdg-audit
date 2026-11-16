@@ -5,7 +5,7 @@ Acquire-By-Hash: yes
 Architectures: amd64 arm64 all
 Codename: candidate
 Components: main
-Date: Mon, 09 Nov 2026 06:34:56 +0000
+Date: Mon, 16 Nov 2026 06:40:39 +0000
 Description: Signed xdg-audit packages
 Label: xdg-audit
 Origin: xdg-audit
@@ -40,15 +40,15 @@ SHA512:
  aa3f5fc2d09ae6f0a755d5a53bfb26a1be48360fa9ec6b2fbf0c783398f9aac0eeb8f447aaba1a17c529ffa3e11a1c66d7c108084766797417747ac194bf7ab2              700 main/binary-arm64/Packages.gz
 -----BEGIN PGP SIGNATURE-----
 
-iQGzBAEBCAAdFiEEiKg4TmLMuX60FD0cTo44Rb6sDU0FAmrxaZEACgkQTo44Rb6s
-DU2RCwv/Ud3WTx99qATk/Ax9GG+1itBTS7g4M4sewDnp9DHMw5ZiqArxbPdOU45E
-DOu3kblovBjvdBiaYndYm6FntdEAWF1xdqJYOqd2Nc3+SfwINiUZpwDnneyVz/O7
-ULLc1hIXZG0pMjPTJJdXUQR7tfa8FQkDzQziwPFSiBVBOhbklbcug/wouF5LeHx4
-lPpBQ87V+SckeJgQRYoJu/6/6ItmUCAwHFuHhYdh2OPAyjxM1jf3gV2NzSbzHHiN
-9Mzn35k161mPrCJKM9b0Cbdedorvg5ZaIiIIu2R/FuVvK56cNOtoEYCEYo3ZiSJJ
-JgmSmubS+aVJhIswW/pBMymcUFmHfcJlA3WhJmSD36AeajZhAN7jlpIBJqhV9Pzr
-UMZ6po+8a4GvYRnx8lMyD9e9Yv+/r8YEYXseNnj6IufOhd9JQ5V9vBLfUmk3OizF
-VYF8Hxkl5IE4GkckqaKeEZAo81ZkP67oHZ1YSno0kJYezZ/I6+WlNeE6bkxGzhYz
-LJvzKC/q
-=awb3
+iQGzBAEBCAAdFiEEiKg4TmLMuX60FD0cTo44Rb6sDU0FAmr6pWcACgkQTo44Rb6s
+DU03JAv9GK2jTn1AFGyx+xcg1kzgJ1w6v0MI3yPiNIsOLHtY/5hHVhXVHQ9wVFGH
+9fx08xj+SfUQiuSjwJI43UhGroYIRY1vnHu/xqm2vlVP2kJaNvHCyPYQng7gEcZ0
+H2NTEKmsS1nDi6FBVMUDcyDxe2lYQT+4ehcUcaXckK78dUj09CkeV3OqwLZF5MbF
+AKpz1cDNIPWZsUsphfmW4ZQPTyJZrYqufrdP7GGKtPpYveyuFbCdlFPxrEDG4ifn
+ryRmhDp5BdExNW/e9kxLu3xRuQleLXGo20PXjb56iliQpTRuFRqg2rkbH7U1xV5n
+Bz5wU3Xi5TmNEYfmDKuR4iHtpMfRdVi6bAVymsOw7cgiZTlvWM/4CMvj54cAwYlO
+LAYebGUcl72qe+gpEc7PUyt7uPCTqFKeQKvk7v9bdMcQZVqmmF0JF0MSbezYk79/
+ubGWe8IdNSEVgCeiaizlctMj9LxFkgccvTWYo/b5PrzcbyL+z9Ck0R4aaDiXu8e+
+4BUyKZBN
+=xiUP
 -----END PGP SIGNATURE-----
