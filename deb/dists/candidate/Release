@@ -2,7 +2,7 @@ Acquire-By-Hash: yes
 Architectures: amd64 arm64 all
 Codename: candidate
 Components: main
-Date: Mon, 16 Nov 2026 06:40:39 +0000
+Date: Mon, 23 Nov 2026 06:36:39 +0000
 Description: Signed xdg-audit packages
 Label: xdg-audit
 Origin: xdg-audit
